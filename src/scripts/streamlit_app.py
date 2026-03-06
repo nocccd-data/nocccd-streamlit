@@ -17,12 +17,13 @@ st.sidebar.markdown("---")
 # Title
 st.title("Ad-Hoc Visualization Board")
 
-# Tabs
-if len(TABS) == 1:
-    # Single tab — no need for tab UI
-    TABS[0][1]()
-else:
-    tab_objects = st.tabs([label for label, _ in TABS])
-    for tab_obj, (_, render_fn) in zip(tab_objects, TABS):
-        with tab_obj:
-            render_fn()
+# Navigation
+labels = [label for label, _ in TABS]
+selected = st.sidebar.selectbox("Project", labels)
+st.sidebar.markdown("---")
+
+# Render selected tab
+for label, render_fn in TABS:
+    if label == selected:
+        render_fn()
+        break
