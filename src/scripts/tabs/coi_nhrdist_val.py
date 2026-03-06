@@ -96,18 +96,28 @@ def render():
         default=_DEFAULT_TERMS,
         key="coi_terms",
     )
+    query_btn = st.sidebar.button("Query", key="coi_query_btn")
 
-    if not selected_terms:
-        st.warning("Select at least one term.")
+    if query_btn:
+        if not selected_terms:
+            st.warning("Select at least one term.")
+            return
+        df = _fetch_data(_SQL_FILE, tuple(sorted(selected_terms)))
+        if df.empty:
+            st.warning("No data returned for the selected terms.")
+            return
+        agg, summary, grand = _process(df)
+        st.session_state["coi_agg"] = agg
+        st.session_state["coi_summary"] = summary
+        st.session_state["coi_grand"] = grand
+
+    if "coi_agg" not in st.session_state:
+        st.info("Select Term IDs and press **Query** to load data.")
         return
 
-    # --- Fetch & process ---
-    df = _fetch_data(_SQL_FILE, tuple(sorted(selected_terms)))
-    if df.empty:
-        st.info("No data returned for the selected terms.")
-        return
-
-    agg, summary, grand = _process(df)
+    agg = st.session_state["coi_agg"]
+    summary = st.session_state["coi_summary"]
+    grand = st.session_state["coi_grand"]
 
     # --- Legend ---
     st.caption(
