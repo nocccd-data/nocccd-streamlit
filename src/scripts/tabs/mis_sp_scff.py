@@ -16,6 +16,7 @@ from libs.sql import get_engine
 _SQL_DIR = Path(__file__).resolve().parents[4] / "nocccd-scff" / "sql"
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
 _DEFAULT_TERMS = ["220", "230", "240", "250"]
+_MATCH_ORDER = ["Matched", "SP Only - Not in SCFF", "SCFF Only - Not in SP"]
 
 
 @st.cache_data(ttl=600, show_spinner="Querying Oracle...")
@@ -49,7 +50,7 @@ def _derive_funding_status(df: pd.DataFrame, ccpg_col: str, pell_col: str) -> pd
     return df
 
 
-def _ordered_crosstab(df, row_col, col_col, count_col, sort_cols=True):
+def _ordered_crosstab(df, row_col, col_col, count_col, sort_cols=True, col_order=None):
     ct = pd.crosstab(
         df[row_col], df[col_col],
         values=df[count_col], aggfunc="count",
@@ -60,15 +61,15 @@ def _ordered_crosstab(df, row_col, col_col, count_col, sort_cols=True):
     ordered_idx = [x for x in _AWARD_ORDER if x in ct.index] + ["Total"]
     ct = ct.reindex(ordered_idx)
     if sort_cols:
-        data_cols = [c for c in ct.columns if c != "Total"]
-        ct = ct[sorted(data_cols) + ["Total"]] if sort_cols == "sort" else ct
+        data_cols = [c for c in col_order if c in ct.columns] if col_order else sorted(c for c in ct.columns if c != "Total")
+        ct = ct[data_cols + ["Total"]]
     return ct
 
 
 def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_col, detail_col, title):
     uid = "xt_" + hashlib.md5(title.encode()).hexdigest()[:8]
     data_cols = [c for c in summary_ct.columns if c != "Total"]
-    all_cols = data_cols + ["Total"]
+    all_cols = data_cols + (["Total"] if "Total" in summary_ct.columns else [])
     n_cols = len(all_cols)
     grid_tpl = f"minmax(180px, 2fr) repeat({n_cols}, minmax(60px, 1fr))"
 
@@ -91,8 +92,9 @@ def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_co
         font-weight: bold;
         border-top: 2px solid var(--text-color, #888);
     }}
-    .{uid} .grid-row span {{ text-align: right; }}
+    .{uid} .grid-row span {{ text-align: right; padding-right: 8px; }}
     .{uid} .grid-row span:first-child {{ text-align: left; }}
+    .{uid} .grid-row span + span {{ border-left: 1px solid var(--text-color, #444); padding-left: 8px; }}
     .{uid} details {{ border-bottom: 1px solid var(--text-color, #444); }}
     .{uid} details summary {{ cursor: pointer; list-style: disclosure-closed; }}
     .{uid} details[open] summary {{ list-style: disclosure-open; }}
@@ -175,7 +177,7 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
         st.info(f"No SCFF data for term {term}.")
 
     if not df2_term.empty:
-        table2 = _ordered_crosstab(df2_term, "award_type", "match_status", "sb00")
+        table2 = _ordered_crosstab(df2_term, "award_type", "match_status", "sb00", col_order=_MATCH_ORDER)
         st.markdown(
             _build_expandable_crosstab(
                 table2, df2_term, "award_type", "match_status", "sb00",
@@ -184,23 +186,47 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
             unsafe_allow_html=True,
         )
 
-        table3 = pd.crosstab(
-            df2_term["award_type"], df2_term["dicd_code"],
-            values=df2_term["sb00"], aggfunc="count",
-            margins=True, margins_name="Total",
-        ).fillna(0).astype(int)
-        table3 = table3[sorted(c for c in table3.columns if c != "Total") + ["Total"]]
-        table3.columns.name = "award_type"
-        table3.index.name = None
-        ordered_idx = [x for x in _AWARD_ORDER if x in table3.index] + ["Total"]
-        table3 = table3.reindex(ordered_idx)
-        st.markdown(
-            _build_expandable_crosstab(
-                table3, df2_term, "award_type", "dicd_code", "sb00",
-                "funding_status", f"Counts by Award Type and DICD Code — Term {term}",
-            ),
-            unsafe_allow_html=True,
+        dicd_filter = st.radio(
+            "DICD Filter",
+            ["All", "Matched", "SP Only", "SCFF Only"],
+            horizontal=True,
+            key=f"dicd_filter_{term}",
         )
+        filter_map = {
+            "Matched": "Matched",
+            "SP Only": "SP Only - Not in SCFF",
+            "SCFF Only": "SCFF Only - Not in SP",
+        }
+        df2_dicd = (
+            df2_term[df2_term["match_status"] == filter_map[dicd_filter]]
+            if dicd_filter != "All"
+            else df2_term
+        )
+        df2_dicd = df2_dicd.copy()
+        df2_dicd["dicd_code"] = df2_dicd["dicd_code"].fillna("N/A")
+        if df2_dicd.empty:
+            st.info(f"No records for filter '{dicd_filter}' - Term {term}.")
+        else:
+            table3 = pd.crosstab(
+                df2_dicd["award_type"], df2_dicd["dicd_code"],
+                values=df2_dicd["sb00"], aggfunc="count",
+                margins=True, margins_name="Total",
+            ).fillna(0).astype(int)
+            sorted_cols = sorted(c for c in table3.columns if c != "Total")
+            if "Total" in table3.columns:
+                sorted_cols += ["Total"]
+            table3 = table3[sorted_cols]
+            table3.columns.name = "award_type"
+            table3.index.name = None
+            ordered_idx = [x for x in _AWARD_ORDER if x in table3.index] + ["Total"]
+            table3 = table3.reindex(ordered_idx)
+            st.markdown(
+                _build_expandable_crosstab(
+                    table3, df2_dicd, "award_type", "dicd_code", "sb00",
+                    "funding_status", f"Counts by Award Type and DICD Code — Term {term}",
+                ),
+                unsafe_allow_html=True,
+            )
     else:
         st.info(f"No SP submitted data for term {term}.")
 
