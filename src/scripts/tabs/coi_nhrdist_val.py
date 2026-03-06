@@ -1,17 +1,11 @@
-import sys
 from pathlib import Path
 
 import streamlit as st
 import pandas as pd
 
-# Add nocccd-sql/district to sys.path so we can import libs.sql
-_DISTRICT_DIR = Path(__file__).resolve().parents[4] / "nocccd-sql" / "district"
-if str(_DISTRICT_DIR) not in sys.path:
-    sys.path.insert(0, str(_DISTRICT_DIR))
-
 from libs.sql import get_engine
 
-_QUERIES_DIR = _DISTRICT_DIR / "queries"
+_QUERIES_DIR = Path(__file__).resolve().parents[2] / "sql" / "district"
 _DEFAULT_TERMS = ["245", "247", "253", "255", "257"]
 
 _SQL_FILE = "coi_nhrdist_val.sql"
