@@ -1,13 +1,19 @@
 import hashlib
 import re
+import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+# Add nocccd-sql/district to sys.path so we can import libs.sql
+_DISTRICT_DIR = Path(__file__).resolve().parents[4] / "nocccd-sql" / "district"
+if str(_DISTRICT_DIR) not in sys.path:
+    sys.path.insert(0, str(_DISTRICT_DIR))
+
 from libs.sql import get_engine
 
-_SQL_DIR = Path(__file__).resolve().parents[2] / "sql" / "scff"
+_SQL_DIR = Path(__file__).resolve().parents[4] / "nocccd-scff" / "sql"
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
 _DEFAULT_TERMS = ["220", "230", "240", "250"]
 _MATCH_ORDER = ["Matched", "SP Only - Not in SCFF", "SCFF Only - Not in SP"]
