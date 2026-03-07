@@ -12,16 +12,16 @@ if str(_DISTRICT_DIR) not in sys.path:
 from libs.sql import get_engine
 
 _QUERIES_DIR = _DISTRICT_DIR / "queries"
-_DEFAULT_TERMS = ["245", "247", "253", "255", "257"]
+_DEFAULT_TERMS = ["243", "245", "247", "253", "255", "257"]
 
 _SQL_FILE = "coi_nhrdist_val.sql"
 
 
 def _build_sql(base_sql: str, n_terms: int) -> str:
-    """Replace the fixed IN (:t1, :t2, :t3, :t4, :t5) with the right number of bind params."""
+    """Replace the fixed IN (:t1, :t2, :t3, :t4, :t5, :t6) with the right number of bind params."""
     placeholders = ", ".join(f":t{i}" for i in range(1, n_terms + 1))
     return base_sql.replace(
-        "IN (:t1, :t2, :t3, :t4, :t5)",
+        "IN (:t1, :t2, :t3, :t4, :t5, :t6)",
         f"IN ({placeholders})",
     )
 
