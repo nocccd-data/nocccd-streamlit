@@ -43,7 +43,7 @@ def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     df["diff"] = df["est_term_sal"] - df["payamt"]
 
     agg = (
-        df.groupby(["mis_term_id", "pidm", "posn"])
+        df.groupby(["mis_term_id", "pidm", "posn", "match_status"])
         .agg(
             est_term_sal=("est_term_sal", "sum"),
             payamt=("payamt", "sum"),
@@ -92,7 +92,7 @@ def _fmt_pct(x):
 
 
 def render():
-    st.header("COI vs NHRDIST Validation")
+    st.header("COI vs Paid Validation")
 
     # --- Sidebar controls ---
     selected_terms = st.sidebar.multiselect(
@@ -111,24 +111,53 @@ def render():
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return
-        agg, summary, grand = _process(df)
+        agg, _, _ = _process(df)
         st.session_state["coi_agg"] = agg
-        st.session_state["coi_summary"] = summary
-        st.session_state["coi_grand"] = grand
 
     if "coi_agg" not in st.session_state:
         st.info("Select Term IDs and press **Query** to load data.")
         return
 
     agg = st.session_state["coi_agg"]
-    summary = st.session_state["coi_summary"]
-    grand = st.session_state["coi_grand"]
 
     # --- Legend ---
     st.caption(
         "(+) diff = Estimated term salary **overstated** vs payment amount  \n"
         "(-) diff = Estimated term salary **understated** vs payment amount"
     )
+
+    # --- Match status filter ---
+    match_filter = st.radio(
+        "Match Status",
+        options=["All COI", "Matched", "Not Matched"],
+        horizontal=True,
+        key="coi_match_filter",
+    )
+    if match_filter != "All COI":
+        agg = agg[agg["match_status"] == match_filter]
+
+    # Re-derive summary and grand from filtered agg
+    summary = (
+        agg.groupby("mis_term_id")
+        .agg(
+            total_est=("est_term_sal", "sum"),
+            total_pay=("payamt", "sum"),
+            total_diff=("diff", "sum"),
+        )
+        .reset_index()
+        .set_index("mis_term_id")
+    )
+    summary["total_diff"] = (summary["total_est"] - summary["total_pay"]).round(2)
+    summary["pct_diff"] = summary["total_diff"] / summary["total_est"]
+
+    grand_est = round(agg["est_term_sal"].sum(), 2)
+    grand_pay = round(agg["payamt"].sum(), 2)
+    grand = {
+        "total_est": grand_est,
+        "total_pay": grand_pay,
+        "total_diff": round(grand_est - grand_pay, 2),
+        "pct_diff": (grand_est - grand_pay) / grand_est if grand_est != 0 else 0,
+    }
 
     # --- Summary table ---
     summary_display = summary.copy()
