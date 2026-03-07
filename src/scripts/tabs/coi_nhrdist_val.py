@@ -39,6 +39,9 @@ def _fetch_data(sql_filename: str, terms: tuple[str, ...]) -> pd.DataFrame:
 
 def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Filter, aggregate, and summarize — mirrors notebook Cell 2 logic."""
+    df["payamt"] = df["payamt"].fillna(0)
+    df["diff"] = df["est_term_sal"] - df["payamt"]
+
     agg = (
         df.groupby(["mis_term_id", "pidm", "posn"])
         .agg(
@@ -61,14 +64,16 @@ def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         .reset_index()
         .set_index("mis_term_id")
     )
-    summary["total_diff"] = summary["total_diff"].round(2)
+    summary["total_diff"] = (summary["total_est"] - summary["total_pay"]).round(2)
     summary["pct_diff"] = summary["total_diff"] / summary["total_est"]
 
+    grand_est = round(agg["est_term_sal"].sum(), 2)
+    grand_pay = round(agg["payamt"].sum(), 2)
     grand = {
-        "total_est": round(agg["est_term_sal"].sum(), 2),
-        "total_pay": round(agg["payamt"].sum(), 2),
-        "total_diff": round(agg["diff"].sum(), 2),
-        "pct_diff": agg["diff"].sum() / agg["est_term_sal"].sum() if agg["est_term_sal"].sum() != 0 else 0,
+        "total_est": grand_est,
+        "total_pay": grand_pay,
+        "total_diff": round(grand_est - grand_pay, 2),
+        "pct_diff": (grand_est - grand_pay) / grand_est if grand_est != 0 else 0,
     }
 
     return agg, summary, grand
