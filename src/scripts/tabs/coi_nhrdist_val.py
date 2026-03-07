@@ -151,7 +151,7 @@ def render():
                 "pct_diff": "{:+.1%}",
             }
         ),
-        use_container_width=True,
+        width="stretch",
     )
 
     # --- Metrics ---
@@ -185,6 +185,6 @@ def render():
                         "pct_diff": "{:+.1%}",
                     }
                 ),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )

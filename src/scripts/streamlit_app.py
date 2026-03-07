@@ -9,7 +9,7 @@ st.set_page_config(
 )
 
 # Sidebar
-st.sidebar.image("src/static/NOCCCD Logo.jpg", use_container_width=True)
+st.sidebar.image("src/static/NOCCCD Logo.jpg", width="stretch")
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Author:** Jihoon Ahn <jahn@nocccd.edu>")
 st.sidebar.markdown("---")
