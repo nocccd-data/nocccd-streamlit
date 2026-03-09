@@ -1,40 +1,9 @@
-import sys
-from pathlib import Path
-
 import streamlit as st
 import pandas as pd
 
-# Add nocccd-sql/district to sys.path so we can import libs.sql
-_DISTRICT_DIR = Path(__file__).resolve().parents[4] / "nocccd-sql" / "district"
-if str(_DISTRICT_DIR) not in sys.path:
-    sys.path.insert(0, str(_DISTRICT_DIR))
+from src.scripts.data_provider import fetch_coi_nhrdist
 
-from libs.sql import get_engine
-
-_QUERIES_DIR = _DISTRICT_DIR / "queries"
 _DEFAULT_TERMS = ["243", "245", "247", "253", "255", "257"]
-
-_SQL_FILE = "coi_nhrdist_val.sql"
-
-
-def _build_sql(base_sql: str, n_terms: int) -> str:
-    """Replace the fixed IN (:t1, :t2, :t3, :t4, :t5, :t6) with the right number of bind params."""
-    placeholders = ", ".join(f":t{i}" for i in range(1, n_terms + 1))
-    return base_sql.replace(
-        "IN (:t1, :t2, :t3, :t4, :t5, :t6)",
-        f"IN ({placeholders})",
-    )
-
-
-@st.cache_data(ttl=600, show_spinner="Querying Oracle...")
-def _fetch_data(sql_filename: str, terms: tuple[str, ...]) -> pd.DataFrame:
-    sql_path = _QUERIES_DIR / sql_filename
-    base_sql = sql_path.read_text(encoding="utf-8")
-    sql = _build_sql(base_sql, len(terms))
-    params = {f"t{i}": t for i, t in enumerate(terms, 1)}
-    engine = get_engine(section="dwh")
-    with engine.connect() as conn:
-        return pd.read_sql(sql, conn, params=params)
 
 
 def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -107,7 +76,7 @@ def render():
         if not selected_terms:
             st.warning("Select at least one term.")
             return
-        df = _fetch_data(_SQL_FILE, tuple(sorted(selected_terms)))
+        df = fetch_coi_nhrdist(tuple(sorted(selected_terms)))
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return

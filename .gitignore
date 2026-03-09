@@ -5,3 +5,7 @@ __pycache__/
 .DS_Store
 config.ini
 .streamlit/secrets.toml
+src/pipeline/hyper/
+*.hyper
+src/pipeline/sql/
+*.sql

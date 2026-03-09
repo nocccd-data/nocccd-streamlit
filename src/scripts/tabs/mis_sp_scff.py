@@ -1,38 +1,13 @@
 import hashlib
-import re
-import sys
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Add nocccd-sql/district to sys.path so we can import libs.sql
-_DISTRICT_DIR = Path(__file__).resolve().parents[4] / "nocccd-sql" / "district"
-if str(_DISTRICT_DIR) not in sys.path:
-    sys.path.insert(0, str(_DISTRICT_DIR))
+from src.scripts.data_provider import fetch_deg_scff, fetch_deg_sp_submitted
 
-from libs.sql import get_engine
-
-_SQL_DIR = Path(__file__).resolve().parents[4] / "nocccd-scff" / "sql"
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
 _DEFAULT_TERMS = ["220", "230", "240", "250"]
 _MATCH_ORDER = ["Matched", "SP Only - Not in SCFF", "SCFF Only - Not in SP"]
-
-
-@st.cache_data(ttl=600, show_spinner="Querying Oracle...")
-def _fetch_data(mis_term_ids: tuple[str, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    sql1 = (_SQL_DIR / "deg_scff.sql").read_text(encoding="utf-8")
-    sql2 = (_SQL_DIR / "deg_sp_submitted.sql").read_text(encoding="utf-8")
-    # Rewrite the IN clause to match the number of term IDs
-    placeholders = ", ".join(f":t{i+1}" for i in range(len(mis_term_ids)))
-    sql1 = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", sql1)
-    sql2 = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", sql2)
-    params = {f"t{i+1}": v for i, v in enumerate(mis_term_ids)}
-    engine = get_engine(section="dwh")
-    with engine.connect() as conn:
-        df1 = pd.read_sql(sql1, conn, params=params, dtype_backend="numpy_nullable")
-        df2 = pd.read_sql(sql2, conn, params=params, dtype_backend="numpy_nullable")
-    return df1, df2
 
 
 def _derive_funding_status(df: pd.DataFrame, ccpg_col: str, pell_col: str) -> pd.DataFrame:
@@ -247,7 +222,8 @@ def render():
             st.warning("Select at least one MIS Term ID.")
             return
         term_ids = tuple(sorted(selected_terms))
-        df1, df2 = _fetch_data(term_ids)
+        df1 = fetch_deg_scff(term_ids)
+        df2 = fetch_deg_sp_submitted(term_ids)
         # Derive funding_status
         df1 = _derive_funding_status(df1, "ccpg", "pell")
         df2["sb00"] = df2["sp_sb00"].fillna(df2["scff_sb00"])

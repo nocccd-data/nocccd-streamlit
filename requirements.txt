@@ -6,3 +6,5 @@ plotly
 altair
 oracledb
 sqlalchemy
+pantab
+tableauserverclient
