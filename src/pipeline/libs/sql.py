@@ -1,9 +1,9 @@
 import logging
 from sqlalchemy import create_engine
-from .oracle_db_connector_dwh import read_config, init_oracle_client
+from .oracle_db_connector import read_config, init_oracle_client
 
 
-def get_engine(section: str = "dwh", **engine_kwargs):
+def get_engine(section: str = "dwhdb", **engine_kwargs):
     """Create and return a SQLAlchemy engine for the given config section."""
     user, password, dsn = read_config(section)
     init_oracle_client()

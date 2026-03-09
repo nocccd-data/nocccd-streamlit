@@ -30,7 +30,7 @@ def _query_oracle(sql_path: Path, terms: tuple[str, ...]) -> pd.DataFrame:
     sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
     params = {f"t{i}": t for i, t in enumerate(terms, 1)}
 
-    engine = get_engine(section="dwh")
+    engine = get_engine(section="dwhdb")
     with engine.connect() as conn:
         return pd.read_sql(sql, conn, params=params)
 

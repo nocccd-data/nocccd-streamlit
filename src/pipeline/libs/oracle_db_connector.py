@@ -56,7 +56,7 @@ def get_oracle_client_path():
 
 ORACLE_CLIENT_PATH = get_oracle_client_path()
 
-def read_config(section="dwh"):
+def read_config(section="dwhdb"):
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
     if section not in config:
@@ -96,7 +96,7 @@ def init_oracle_client():
         else:
             logging.warning(f"Running in Thin Mode. Error: {e}")
 
-def get_connection(section="dwh", use_pool=False, pool_min=1, pool_max=5, pool_inc=1):
+def get_connection(section="dwhdb", use_pool=False, pool_min=1, pool_max=5, pool_inc=1):
     """Get a direct connection or a pooled connection to Oracle using config.ini."""
     user, password, dsn = read_config(section)
     init_oracle_client()

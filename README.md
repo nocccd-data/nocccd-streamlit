@@ -28,7 +28,7 @@ nocccd-streamlit/
 │   │   ├── hyper/                # Generated .hyper files (gitignored)
 │   │   └── libs/
 │   │       ├── sql.py            # SQLAlchemy engine factory
-│   │       ├── oracle_db_connector_dwh.py  # Oracle thick/thin client init
+│   │       ├── oracle_db_connector.py      # Oracle thick/thin client init
 │   │       ├── config.ini        # Oracle credentials (gitignored)
 │   │       └── config.ini.template
 │   ├── scripts/                  # Streamlit app
