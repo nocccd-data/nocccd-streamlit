@@ -1,5 +1,6 @@
 """Dual-mode data access: Oracle (local) or Tableau Cloud (Streamlit Cloud)."""
 
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -12,6 +13,8 @@ _CONFIG_INI = Path(__file__).resolve().parents[1] / "pipeline" / "libs" / "confi
 
 def _is_cloud() -> bool:
     """Return True when running on Streamlit Cloud (no Oracle access)."""
+    if os.environ.get("FORCE_CLOUD", "").lower() in ("1", "true"):
+        return True
     return not _CONFIG_INI.exists()
 
 
