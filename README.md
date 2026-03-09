@@ -85,6 +85,11 @@ Edit `config.ini`:
 username = YOUR_USERNAME
 password = YOUR_PASSWORD
 dsn = YOUR_DSN
+
+[rept]
+username = YOUR_USERNAME
+password = YOUR_PASSWORD
+dsn = YOUR_DSN
 ```
 
 ### Configure Tableau Cloud credentials
