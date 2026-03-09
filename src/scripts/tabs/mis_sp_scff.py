@@ -221,6 +221,8 @@ def render():
         if not selected_terms:
             st.warning("Select at least one MIS Term ID.")
             return
+        fetch_deg_scff.clear()
+        fetch_deg_sp_submitted.clear()
         term_ids = tuple(sorted(selected_terms))
         df1 = fetch_deg_scff(term_ids)
         df2 = fetch_deg_sp_submitted(term_ids)

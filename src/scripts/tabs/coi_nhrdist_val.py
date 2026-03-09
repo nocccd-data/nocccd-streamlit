@@ -76,6 +76,7 @@ def render():
         if not selected_terms:
             st.warning("Select at least one term.")
             return
+        fetch_coi_nhrdist.clear()
         df = fetch_coi_nhrdist(tuple(sorted(selected_terms)))
         if df.empty:
             st.warning("No data returned for the selected terms.")
