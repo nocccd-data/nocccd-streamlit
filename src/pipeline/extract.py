@@ -20,13 +20,22 @@ def extract_dataset(name: str) -> Path:
     terms = cfg["terms"]
 
     base_sql = sql_path.read_text(encoding="utf-8")
-    placeholders = ", ".join(f":t{i}" for i in range(1, len(terms) + 1))
-    sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
-    params = {f"t{i}": t for i, t in enumerate(terms, 1)}
+    engine = get_engine(section=cfg.get("db_section", "dwhdb"))
 
-    engine = get_engine(section="dwh")
-    with engine.connect() as conn:
-        df = pd.read_sql(sql, conn, params=params)
+    if re.search(r"IN\s*\(:t1", base_sql):
+        # Multi-term: expand IN clause
+        placeholders = ", ".join(f":t{i}" for i in range(1, len(terms) + 1))
+        sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
+        params = {f"t{i}": t for i, t in enumerate(terms, 1)}
+        with engine.connect() as conn:
+            df = pd.read_sql(sql, conn, params=params)
+    else:
+        # Single-term: execute once per term and concatenate
+        frames = []
+        with engine.connect() as conn:
+            for t in terms:
+                frames.append(pd.read_sql(base_sql, conn, params={"mis_term_id": t}))
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
     HYPER_DIR.mkdir(parents=True, exist_ok=True)
     hyper_path = HYPER_DIR / f"{name}.hyper"

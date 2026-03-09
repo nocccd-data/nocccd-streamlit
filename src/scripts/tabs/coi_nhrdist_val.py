@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 
+from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_coi_nhrdist
 
-_DEFAULT_TERMS = ["243", "245", "247", "253", "255", "257"]
+_DEFAULT_TERMS = DATASETS["coi_nhrdist_val"]["terms"]
 
 
 def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:

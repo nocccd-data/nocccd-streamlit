@@ -3,11 +3,12 @@ import hashlib
 import pandas as pd
 import streamlit as st
 
-from src.scripts.data_provider import fetch_deg_scff, fetch_deg_sp_submitted
+from src.pipeline.config import DATASETS
+from src.scripts.data_provider import fetch_deg_scff, fetch_deg_sp_current
 
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
-_DEFAULT_TERMS = ["220", "230", "240", "250"]
-_MATCH_ORDER = ["Matched", "SP Only - Not in SCFF", "SCFF Only - Not in SP"]
+_DEFAULT_TERMS = DATASETS["deg_sp_current"]["terms"]
+_MATCH_ORDER = ["Matched", "SP Only/SX Exists - Not in SCFF", "SP Only/SX Not Exists - Not in SCFF", "SCFF Only - Not in SP"]
 
 
 def _derive_funding_status(df: pd.DataFrame, ccpg_col: str, pell_col: str) -> pd.DataFrame:
@@ -136,7 +137,7 @@ def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_co
 
 
 def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: str):
-    """Render SCFF and SP tables for a single term."""
+    """Render SCFF and SP Current tables for a single term."""
     st.subheader(f"Term {term}")
 
     if not df1_term.empty:
@@ -156,20 +157,21 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
         st.markdown(
             _build_expandable_crosstab(
                 table2, df2_term, "award_type", "match_status", "sb00",
-                "funding_status", f"SP Submitted File Match Counts — Term {term}",
+                "funding_status", f"SP Current File Match Counts — Term {term}",
             ),
             unsafe_allow_html=True,
         )
 
         dicd_filter = st.radio(
             "DICD Filter",
-            ["All", "Matched", "SP Only", "SCFF Only"],
+            ["All", "Matched", "SP Only/SX Exists", "SP Only/SX Not Exists", "SCFF Only"],
             horizontal=True,
-            key=f"dicd_filter_{term}",
+            key=f"sp_current_dicd_filter_{term}",
         )
         filter_map = {
             "Matched": "Matched",
-            "SP Only": "SP Only - Not in SCFF",
+            "SP Only/SX Exists": "SP Only/SX Exists - Not in SCFF",
+            "SP Only/SX Not Exists": "SP Only/SX Not Exists - Not in SCFF",
             "SCFF Only": "SCFF Only - Not in SP",
         }
         df2_dicd = (
@@ -203,44 +205,44 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
                 unsafe_allow_html=True,
             )
     else:
-        st.info(f"No SP submitted data for term {term}.")
+        st.info(f"No SP current data for term {term}.")
 
 
 def render():
-    st.header("MIS SP Submitted vs. SCFF Files")
+    st.header("MIS SP Current vs. SCFF Files")
 
     selected_terms = st.sidebar.multiselect(
         "MIS Term IDs",
         options=_DEFAULT_TERMS,
         default=_DEFAULT_TERMS,
-        key="scff_term_ids",
+        key="sp_current_term_ids",
     )
-    query_btn = st.sidebar.button("Query", key="scff_query_btn")
+    query_btn = st.sidebar.button("Query", key="sp_current_query_btn")
 
     if query_btn:
         if not selected_terms:
             st.warning("Select at least one MIS Term ID.")
             return
         fetch_deg_scff.clear()
-        fetch_deg_sp_submitted.clear()
+        fetch_deg_sp_current.clear()
         term_ids = tuple(sorted(selected_terms))
         df1 = fetch_deg_scff(term_ids)
-        df2 = fetch_deg_sp_submitted(term_ids)
+        df2 = fetch_deg_sp_current(term_ids)
         # Derive funding_status
         df1 = _derive_funding_status(df1, "ccpg", "pell")
         df2["sb00"] = df2["sp_sb00"].fillna(df2["scff_sb00"])
         df2 = _derive_funding_status(df2, "scff_ccpg", "scff_pell")
-        st.session_state["scff_df1"] = df1
-        st.session_state["scff_df2"] = df2
-        st.session_state["scff_terms"] = term_ids
+        st.session_state["sp_current_df1"] = df1
+        st.session_state["sp_current_df2"] = df2
+        st.session_state["sp_current_terms"] = term_ids
 
-    if "scff_df1" not in st.session_state:
+    if "sp_current_df1" not in st.session_state:
         st.info("Enter MIS Term IDs and press **Query** to load data.")
         return
 
-    df1 = st.session_state["scff_df1"]
-    df2 = st.session_state["scff_df2"]
-    term_ids = st.session_state["scff_terms"]
+    df1 = st.session_state["sp_current_df1"]
+    df2 = st.session_state["sp_current_df2"]
+    term_ids = st.session_state["sp_current_terms"]
 
     for i, term in enumerate(term_ids):
         if i > 0:

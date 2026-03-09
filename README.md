@@ -37,7 +37,8 @@ nocccd-streamlit/
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
 │   │       ├── coi_nhrdist_val.py
-│   │       └── mis_sp_scff.py
+│   │       ├── mis_sp_submitted_scff.py
+│   │       └── mis_sp_current_scff.py
 │   └── static/
 │       └── NOCCCD Logo.jpg
 ├── .streamlit/
@@ -54,6 +55,7 @@ nocccd-streamlit/
 | `coi_nhrdist_val` | `coi_nhrdist_val.sql` | COI vs NHRDIST payroll validation |
 | `deg_scff` | `deg_scff.sql` | SCFF financial aid awards |
 | `deg_sp_submitted` | `deg_sp_submitted.sql` | Degree SP submitted vs SCFF match |
+| `deg_sp_current` | `deg_sp_current.sql` | Degree SP current vs SCFF match |
 
 ## Setup
 

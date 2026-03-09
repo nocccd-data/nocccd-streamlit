@@ -22,7 +22,7 @@ def _is_cloud() -> bool:
 # Local mode helpers (Oracle)
 # ---------------------------------------------------------------------------
 
-def _query_oracle(sql_path: Path, terms: tuple[str, ...]) -> pd.DataFrame:
+def _query_oracle(sql_path: Path, terms: tuple[str, ...], db_section: str = "dwhdb") -> pd.DataFrame:
     from src.pipeline.libs.sql import get_engine
 
     base_sql = sql_path.read_text(encoding="utf-8")
@@ -30,7 +30,7 @@ def _query_oracle(sql_path: Path, terms: tuple[str, ...]) -> pd.DataFrame:
     sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
     params = {f"t{i}": t for i, t in enumerate(terms, 1)}
 
-    engine = get_engine(section="dwhdb")
+    engine = get_engine(section=db_section)
     with engine.connect() as conn:
         return pd.read_sql(sql, conn, params=params)
 
@@ -91,3 +91,26 @@ def fetch_deg_sp_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("deg_sp_submitted", "term_id", terms)
     return _query_oracle(_SQL_DIR / "deg_sp_submitted.sql", terms)
+
+
+# ---------------------------------------------------------------------------
+# Single-term Oracle helper (for SQL with :mis_term_id instead of IN(:t1...))
+# ---------------------------------------------------------------------------
+
+def _query_oracle_single_term(sql_path: Path, terms: tuple[str, ...], param_name: str, db_section: str = "dwhdb") -> pd.DataFrame:
+    from src.pipeline.libs.sql import get_engine
+
+    base_sql = sql_path.read_text(encoding="utf-8")
+    engine = get_engine(section=db_section)
+    frames = []
+    with engine.connect() as conn:
+        for t in terms:
+            frames.append(pd.read_sql(base_sql, conn, params={param_name: t}))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_deg_sp_current(terms: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("deg_sp_current", "term_id", terms)
+    return _query_oracle_single_term(_SQL_DIR / "deg_sp_current.sql", terms, "mis_term_id", db_section="rept")
