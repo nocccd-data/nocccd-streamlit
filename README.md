@@ -34,8 +34,10 @@ nocccd-streamlit/
 │   ├── scripts/                  # Streamlit app
 │   │   ├── streamlit_app.py      # Main entry point
 │   │   ├── data_provider.py      # Dual-mode data access (Oracle / Cloud)
+│   │   ├── home_config.py        # Project card config (descriptions, due dates, milestones)
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
+│   │       ├── home.py           # Home landing page with project cards
 │   │       ├── coi_nhrdist_val.py
 │   │       ├── mis_sp_submitted_scff.py
 │   │       └── mis_sp_current_scff.py
