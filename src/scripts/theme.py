@@ -83,10 +83,40 @@ THEME_CSS = """\
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.2);
 }
+/* Selectbox dropdown menu (portaled outside sidebar — no ancestor scope) */
+[data-testid="stSelectboxVirtualDropdown"] li[role="option"],
+[data-testid="stSelectboxVirtualDropdown"] li[role="option"] div,
+[data-testid="stSelectboxVirtualDropdown"] li[role="option"] span {
+    color: light-dark(#000000, #FFFFFF) !important;
+}
 </style>"""
+
+
+# Propagate color-scheme from stApp to <html> so portaled elements
+# (e.g. selectbox dropdowns) inherit it and light-dark() resolves correctly.
+_COLOR_SCHEME_SYNC = """\
+<script>
+(function() {
+  if (window.__nocccdThemeObs) return;
+  function sync() {
+    var app = document.querySelector('[data-testid="stApp"]');
+    if (app) {
+      var cs = getComputedStyle(app).colorScheme;
+      if (cs && cs !== 'normal') document.documentElement.style.colorScheme = cs;
+    }
+  }
+  sync();
+  var app = document.querySelector('[data-testid="stApp"]');
+  if (app) new MutationObserver(sync).observe(app, {attributes: true, attributeFilter: ['class']});
+  window.__nocccdThemeObs = true;
+})();
+</script>"""
 
 
 def apply_theme():
     """Apply NOCCCD theme overrides. Uses light-dark() CSS function
-    which resolves automatically from Streamlit's color-scheme property."""
+    which resolves automatically from Streamlit's color-scheme property.
+    A small JS snippet propagates color-scheme to <html> so portaled
+    elements (selectbox dropdowns) also respond to light-dark()."""
     st.html(THEME_CSS)
+    st.html(_COLOR_SCHEME_SYNC, unsafe_allow_javascript=True)
