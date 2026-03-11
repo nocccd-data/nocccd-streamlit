@@ -83,6 +83,11 @@ THEME_CSS = """\
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.2);
 }
+/* Expander borders — darker in light mode */
+[data-testid="stExpander"] details {
+    border-color: light-dark(#AAAAAA, rgba(255, 255, 255, 0.2)) !important;
+}
+
 /* Selectbox dropdown menu (portaled outside sidebar — no ancestor scope) */
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"],
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"] div,
@@ -107,7 +112,9 @@ _COLOR_SCHEME_SYNC = """\
   }
   sync();
   var app = document.querySelector('[data-testid="stApp"]');
-  if (app) new MutationObserver(sync).observe(app, {attributes: true, attributeFilter: ['class']});
+  if (app) {
+    new MutationObserver(sync).observe(app, {attributes: true, attributeFilter: ['class']});
+  }
   window.__nocccdThemeObs = true;
 })();
 </script>"""

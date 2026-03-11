@@ -81,6 +81,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 - **`light-dark()` CSS function**: All custom colors use `light-dark(light-val, dark-val)`. Streamlit sets `color-scheme` on `[data-testid="stApp"]`, and the browser resolves `light-dark()` automatically.
 - **`_COLOR_SCHEME_SYNC` JS**: A MutationObserver watches `stApp` for class changes and copies the `color-scheme` value to `<html>`. This is needed because portaled elements (selectbox dropdowns) are rendered outside `stApp` and wouldn't otherwise inherit the scheme.
 - **`config.toml`**: Defines light/dark palette (backgrounds, text, sidebar) under `[theme.light]` / `[theme.dark]`. `primaryColor = "#003056"` (NOCCCD navy).
+- **Dataframe theming**: Streamlit 1.55 exposes `dataframeBorderColor` and `dataframeHeaderBackgroundColor` in `config.toml`. These feed directly into glide-data-grid's React props — CSS variable overrides or JS monkey-patches will NOT work because the canvas reads from React props, not CSS vars.
 
 ### Gotchas (Streamlit 1.55)
 
@@ -88,6 +89,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 - **Selector names**: `stVerticalBlockBorderWrapper` doesn't exist in 1.55. Use `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` for card styling.
 - **Progress bar fill**: The fill bar is `[data-testid="stProgress"] [role="progressbar"] > div > div > div` (triple-nested div). Targeting `[role="progressbar"]` itself only styles the container track.
 - **Sidebar text color**: Sidebar forces white text via `config.toml`. Selectbox widgets inside the sidebar inherit white, but the dropdown menu is portaled out, so it needs its own color rule.
+- **Dataframe canvas**: `st.dataframe()` uses glide-data-grid which renders to a `<canvas>` element. CSS cannot style canvas content. The only way to customize gridline color, header background, and text colors is through `config.toml` theme keys (`dataframeBorderColor`, `dataframeHeaderBackgroundColor`, `textColor`). Header text color and index column text color are derived from `textColor` at 60% and 80% opacity respectively — there is no independent control.
 
 ### Color palette reference
 
@@ -98,6 +100,8 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 | Card border | `#AAAAAA` | `#333333` |
 | Progress fill | `#003056` (navy) | `#3D9DF3` (bright blue) |
 | Body text | `#000000` | `#FFFFFF` |
+| Dataframe border | `#888888` | (default) |
+| Dataframe header bg | `#E8E8E8` | (default) |
 
 ### Adding themed elements
 

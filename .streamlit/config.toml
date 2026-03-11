@@ -4,7 +4,9 @@ primaryColor = "#003056"
 [theme.light]
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#E8E8E8"
-textColor = "#333333"
+textColor = "#000000"
+dataframeBorderColor = "#888888"
+dataframeHeaderBackgroundColor = "#E8E8E8"
 
 [theme.light.sidebar]
 backgroundColor = "#003056"
