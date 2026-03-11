@@ -94,6 +94,12 @@ THEME_CSS = """\
     border-color: light-dark(#AAAAAA, rgba(255, 255, 255, 0.2)) !important;
 }
 
+/* Expandable crosstab header text (MIS SP tabs) */
+.grid-row.header,
+.sub-table thead th {
+    color: #FFFFFF !important;
+}
+
 /* Selectbox dropdown menu (portaled outside sidebar — no ancestor scope) */
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"],
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"] div,
