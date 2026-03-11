@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
 from tabs import TABS
 from tabs.home import render as home_render
+from theme import apply_theme
 
 st.set_page_config(
     page_title="NOCCCD Ad-Hoc Visualization Board",
@@ -13,6 +14,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+apply_theme()
 
 def _go_home():
     st.session_state["project_selectbox"] = "Home"
