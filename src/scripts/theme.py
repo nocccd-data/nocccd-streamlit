@@ -15,7 +15,9 @@ THEME_CSS = """\
 /* Home card backgrounds & borders */
 [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
     background-color: light-dark(#E8E8E8, #000000) !important;
-    border-color: light-dark(#AAAAAA, #333333) !important;
+    border: 1px solid light-dark(#AAAAAA, rgba(255, 255, 255, 0.2)) !important;
+    border-radius: 0.5rem !important;
+    padding: 1rem !important;
 }
 
 /* Card text */
@@ -32,7 +34,7 @@ THEME_CSS = """\
 /* Expander inside cards */
 [data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] {
     background-color: light-dark(#E8E8E8, #000000) !important;
-    border-color: light-dark(#AAAAAA, #333333) !important;
+    border-color: light-dark(#AAAAAA, rgba(255, 255, 255, 0.2)) !important;
 }
 [data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] summary {
     background-color: light-dark(#D0D0D0, #111111) !important;
