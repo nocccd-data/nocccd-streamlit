@@ -107,6 +107,10 @@ THEME_CSS = """\
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"] span {
     color: light-dark(#000000, #FFFFFF) !important;
 }
+/* Separator after "Home" in project dropdown */
+[data-testid="stSelectboxVirtualDropdown"] li[role="option"]:first-child {
+    border-bottom: 1px solid light-dark(#444444, #AAAAAA) !important;
+}
 </style>"""
 
 
