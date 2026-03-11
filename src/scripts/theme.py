@@ -49,8 +49,8 @@ THEME_CSS = """\
 [data-testid="stProgress"] > div {
     background-color: light-dark(transparent, #000000) !important;
 }
-[data-testid="stProgress"] [role="progressbar"] {
-    background-color: light-dark(#003056, #FFFFFF) !important;
+[data-testid="stProgress"] [role="progressbar"] > div > div > div {
+    background-color: light-dark(#003056, #3D9DF3) !important;
 }
 
 /* Buttons inside cards */
