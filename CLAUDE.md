@@ -90,6 +90,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 - **Progress bar fill**: The fill bar is `[data-testid="stProgress"] [role="progressbar"] > div > div > div` (triple-nested div). Targeting `[role="progressbar"]` itself only styles the container track.
 - **Sidebar text color**: Sidebar forces white text via `config.toml`. Selectbox widgets inside the sidebar inherit white, but the dropdown menu is portaled out, so it needs its own color rule.
 - **Dataframe canvas**: `st.dataframe()` uses glide-data-grid which renders to a `<canvas>` element. CSS cannot style canvas content. The only way to customize gridline color, header background, and text colors is through `config.toml` theme keys (`dataframeBorderColor`, `dataframeHeaderBackgroundColor`, `textColor`). Header text color and index column text color are derived from `textColor` at 60% and 80% opacity respectively — there is no independent control.
+- **Card border scoping**: The `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` selector matches both Home page cards and tab metric columns. Home cards already get borders from `st.container(border=True)`, so adding `border` to this generic selector creates a double border. Use `:has([data-testid="stMetric"])` to scope border/padding/radius to metric columns only. Setting `border-color` alone is insufficient — `border-style` defaults to `none`, so use the full `border: 1px solid ...` shorthand.
 
 ### Color palette reference
 
@@ -97,7 +98,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 |---------|-------|------|
 | Headings | `#003056` (navy) | `#FFFFFF` |
 | Card bg | `#E8E8E8` | `#000000` |
-| Card border | `#AAAAAA` | `#333333` |
+| Card border (metrics) | `#AAAAAA` | `rgba(255,255,255,0.2)` |
 | Progress fill | `#003056` (navy) | `#3D9DF3` (bright blue) |
 | Body text | `#000000` | `#FFFFFF` |
 | Dataframe border | `#888888` | (default) |
