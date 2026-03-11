@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
 from tabs import TABS
 from tabs.home import render as home_render
-from theme import render_theme_toggle, apply_theme
+from theme import apply_theme
 
 st.set_page_config(
     page_title="NOCCCD Ad-Hoc Visualization Board",
@@ -33,7 +33,6 @@ st.sidebar.button("Home", on_click=_go_home, use_container_width=True)
 labels = ["Home"] + [label for label, _ in TABS]
 selected = st.sidebar.selectbox("Project", labels, key="project_selectbox")
 st.sidebar.markdown("---")
-render_theme_toggle()
 
 # Title
 st.title("Ad-Hoc Visualization Board")

@@ -1,121 +1,92 @@
 import streamlit as st
 
-# NOCCCD brand colors
 NAVY = "#003056"
-GOLD = "#F0AB00"
 
-LIGHT_CSS = f"""
+THEME_CSS = """\
 <style>
-/* ── Sidebar: NOCCCD dark navy ── */
-[data-testid="stSidebar"] {{ background-color: {NAVY}; }}
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {{ color: #FFFFFF; }}
-[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.2); }}
-[data-testid="stSidebar"] button[kind="secondary"] {{
-    background-color: rgba(255,255,255,0.1); color: #FFFFFF; border-color: rgba(255,255,255,0.3);
-}}
-[data-testid="stSidebar"] [data-baseweb="select"] {{ background-color: rgba(255,255,255,0.1); color: #FFFFFF; }}
-/* ── Main pane: white with dark text ── */
-[data-testid="stApp"] {{ background-color: #FFFFFF; color: #333333; }}
-[data-testid="stHeader"] {{ background-color: #FFFFFF; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] h1,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] h2,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] h3,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] h4 {{ color: {NAVY}; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] p,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] span,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] label,
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] .stMarkdown {{ color: #333333; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] .stCaption {{ color: #666666; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] [data-testid="stMetricLabel"] {{ color: #666666; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] [data-testid="stMetricValue"] {{ color: #333333; }}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] button[kind="secondary"] {{
-    background-color: {NAVY}; color: #FFFFFF !important; border-color: {NAVY};
-}}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] button[kind="secondary"] p {{
-    color: #FFFFFF !important;
-}}
-[data-testid="stApp"] [data-testid="stMainBlockContainer"] [data-testid="stProgress"] p {{ color: #666666; }}
-/* ── Home cards: light grey background ── */
-[data-testid="stColumn"] [data-testid="stVerticalBlock"] {{
-    background-color: #E8E8E8 !important; border-color: #D0D0D0 !important;
-}}
-</style>
-"""
-
-DARK_CSS = """
-<style>
-/* ── App shell ── */
-[data-testid="stApp"] { background-color: #000000; color: #FFFFFF; }
-[data-testid="stHeader"] { background-color: #000000; }
-[data-testid="stSidebar"] { background-color: #0A0A0A; color: #FFFFFF; }
-
-/* ── Text elements ── */
-[data-testid="stApp"] h1, h2, h3, h4, h5, h6,
-[data-testid="stApp"] p, span, label, .stMarkdown { color: #FFFFFF; }
-[data-testid="stApp"] .stCaption { color: #CCCCCC; }
-
-/* ── Inputs (selectbox, multiselect, text input, number input) ── */
-[data-testid="stApp"] [data-baseweb="select"],
-[data-testid="stApp"] [data-baseweb="input"] {
-    background-color: #111111; color: #FFFFFF;
-}
-[data-testid="stApp"] [data-baseweb="tag"] { background-color: #333333; }
-
-/* ── Buttons ── */
-[data-testid="stApp"] button[kind="secondary"] {
-    background-color: #111111; color: #FFFFFF; border-color: #555555;
+/* Main headings */
+[data-testid="stApp"] h1,
+[data-testid="stApp"] h2,
+[data-testid="stApp"] h3,
+[data-testid="stApp"] h4 {
+    color: light-dark(#003056, #FFFFFF) !important;
 }
 
-/* ── Radio ── */
-[data-testid="stApp"] [role="radiogroup"] label { color: #FFFFFF; }
-
-/* ── Dataframe ── */
-[data-testid="stApp"] [data-testid="stDataFrame"] {
-    background-color: #0A0A0A;
-}
-
-/* ── Metric ── */
-[data-testid="stApp"] [data-testid="stMetric"] {
-    background-color: #0A0A0A; border-radius: 0.5rem; padding: 0.75rem;
-}
-[data-testid="stApp"] [data-testid="stMetricLabel"] { color: #CCCCCC; }
-[data-testid="stApp"] [data-testid="stMetricValue"] { color: #FFFFFF; }
-
-/* ── Expander ── */
-[data-testid="stApp"] [data-testid="stExpander"] {
-    background-color: #0A0A0A; border-color: #333333;
-}
-
-/* ── Container with border (home cards) ── */
+/* Home card backgrounds & borders */
 [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
-    background-color: #0A0A0A !important; border-color: #333333 !important;
+    background-color: light-dark(#E8E8E8, #000000) !important;
+    border-color: light-dark(#AAAAAA, #333333) !important;
 }
 
-/* ── Alerts (info, warning) ── */
-[data-testid="stApp"] [data-testid="stAlert"] { color: #FFFFFF; }
+/* Card text */
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] p,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] span,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] label,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] h1,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] h2,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] h3,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] h4 {
+    color: light-dark(#000000, #FFFFFF) !important;
+}
 
-/* ── Divider ── */
-[data-testid="stApp"] hr { border-color: #333333; }
+/* Expander inside cards */
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] {
+    background-color: light-dark(#E8E8E8, #000000) !important;
+    border-color: light-dark(#AAAAAA, #333333) !important;
+}
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] summary {
+    background-color: light-dark(#D0D0D0, #111111) !important;
+    color: light-dark(#000000, #FFFFFF) !important;
+}
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] summary span,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] summary p,
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] [data-testid="stExpander"] summary svg {
+    color: light-dark(#000000, #FFFFFF) !important;
+    fill: light-dark(#000000, #FFFFFF) !important;
+}
 
-/* ── Progress bar ── */
-[data-testid="stApp"] [data-testid="stProgress"] p { color: #CCCCCC; }
-</style>
-"""
+/* Progress bar */
+[data-testid="stProgress"] > div {
+    background-color: light-dark(transparent, #000000) !important;
+}
+[data-testid="stProgress"] [role="progressbar"] {
+    background-color: light-dark(#003056, #FFFFFF) !important;
+}
 
+/* Buttons inside cards */
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] button[kind="secondary"] {
+    background-color: light-dark(#003056, #111111) !important;
+    color: #FFFFFF !important;
+    border-color: light-dark(#003056, #555555) !important;
+}
+[data-testid="stColumn"] [data-testid="stVerticalBlock"] button[kind="secondary"] p {
+    color: #FFFFFF !important;
+}
 
-def render_theme_toggle():
-    """Render the dark-mode toggle at the bottom of the sidebar."""
-    st.sidebar.toggle(":moon: Dark mode", key="_dark_mode")
+/* Sidebar widgets */
+[data-testid="stSidebar"] button[kind="secondary"] {
+    background-color: rgba(255,255,255,0.1);
+    color: #FFFFFF;
+    border-color: rgba(255,255,255,0.3);
+}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"],
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    background-color: light-dark(rgba(255,255,255,0.15), rgba(255,255,255,0.1)) !important;
+    border-color: rgba(255,255,255,0.3) !important;
+}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] span,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] div,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] svg {
+    color: #FFFFFF !important;
+    fill: #FFFFFF !important;
+}
+[data-testid="stSidebar"] hr {
+    border-color: rgba(255,255,255,0.2);
+}
+</style>"""
 
 
 def apply_theme():
-    """Apply NOCCCD light theme by default; layer dark CSS if toggled."""
-    if st.session_state.get("_dark_mode", False):
-        st.markdown(DARK_CSS, unsafe_allow_html=True)
-    else:
-        st.markdown(LIGHT_CSS, unsafe_allow_html=True)
+    """Apply NOCCCD theme overrides. Uses light-dark() CSS function
+    which resolves automatically from Streamlit's color-scheme property."""
+    st.html(THEME_CSS)
