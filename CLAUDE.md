@@ -91,6 +91,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 - **Sidebar text color**: Sidebar forces white text via `config.toml`. Selectbox widgets inside the sidebar inherit white, but the dropdown menu is portaled out, so it needs its own color rule.
 - **Dataframe canvas**: `st.dataframe()` uses glide-data-grid which renders to a `<canvas>` element. CSS cannot style canvas content. The only way to customize gridline color, header background, and text colors is through `config.toml` theme keys (`dataframeBorderColor`, `dataframeHeaderBackgroundColor`, `textColor`). Header text color and index column text color are derived from `textColor` at 60% and 80% opacity respectively — there is no independent control.
 - **Card border scoping**: The `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` selector matches both Home page cards and tab metric columns. Home cards already get borders from `st.container(border=True)`, so adding `border` to this generic selector creates a double border. Use `:has([data-testid="stMetric"])` to scope border/padding/radius to metric columns only. Setting `border-color` alone is insufficient — `border-style` defaults to `none`, so use the full `border: 1px solid ...` shorthand.
+- **Expanding crosstab tables**: The MIS SP tabs use `_build_expandable_crosstab()` which renders HTML tables via `st.markdown(unsafe_allow_html=True)`. Header styling uses `var(--secondary-background-color, #555)` but this CSS variable doesn't resolve inside `st.markdown()` HTML, so it falls back to `#555` (dark grey) in both modes. The `theme.py` overrides fix this — `.grid-row.header` and `.sub-table thead th` are globally targeted with `light-dark()` to set proper light/dark backgrounds and text colors. Reuse `_build_expandable_crosstab()` for future tabs that need expandable pivot tables.
 
 ### Color palette reference
 
@@ -103,6 +104,9 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 | Body text | `#000000` | `#FFFFFF` |
 | Dataframe border | `#888888` | (default) |
 | Dataframe header bg | `#E8E8E8` | (default) |
+| Crosstab header bg | `#E8E8E8` | `#555` |
+| Crosstab header text | `#000000` | `#FFFFFF` |
+| Dropdown separator | `#444444` | `#AAAAAA` |
 
 ### Adding themed elements
 
