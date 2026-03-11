@@ -35,6 +35,7 @@ nocccd-streamlit/
 │   │   ├── streamlit_app.py      # Main entry point
 │   │   ├── data_provider.py      # Dual-mode data access (Oracle / Cloud)
 │   │   ├── home_config.py        # Project card config (descriptions, due dates, milestones)
+│   │   ├── theme.py              # Light/dark theme CSS overrides
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
 │   │       ├── home.py           # Home landing page with project cards
@@ -44,6 +45,7 @@ nocccd-streamlit/
 │   └── static/
 │       └── NOCCCD Logo.jpg
 ├── .streamlit/
+│   ├── config.toml              # Theme color palette (light/dark)
 │   └── secrets.toml              # Tableau Cloud PAT credentials
 ├── requirements.txt
 ├── .python-version               # Pins Python 3.13 for Streamlit Cloud
@@ -178,6 +180,16 @@ python -m src.pipeline.run
 ```
 
 The Streamlit Cloud app caches data for 10 minutes (`ttl=600`), so changes appear within that window.
+
+## Theme
+
+The app supports light/dark mode via Streamlit 1.55's built-in theme toggle (visible in the app menu).
+
+- **`.streamlit/config.toml`** defines the color palette — backgrounds, text, sidebar, and dataframe styling for both light and dark modes
+- **`src/scripts/theme.py`** injects CSS overrides using the `light-dark()` CSS function, plus a JS `MutationObserver` that syncs the color scheme to portaled elements (e.g., selectbox dropdowns rendered outside the main app container)
+- `apply_theme()` is called once from `streamlit_app.py` — no per-tab setup needed
+
+See `CLAUDE.md` for detailed theme gotchas, color reference table, and guidance on adding new themed elements.
 
 ## Adding a New Tab
 
