@@ -10,6 +10,18 @@ Streamlit dashboards for NOCCCD (North Orange County Community College District)
 
 A pipeline (`src/pipeline/`) handles the ETL: Oracle → Hyper → Tableau Cloud.
 
+## Workflow: nocccd-scff → nocccd-streamlit
+
+New SCFF analyses start as Jupyter notebooks in **nocccd-scff**, where SQL queries and visualization logic are prototyped and validated with stakeholders. Once validated, the analysis is ported here as a production Streamlit tab.
+
+**What gets ported:**
+- **SQL queries**: `nocccd-scff/sql/` → `src/pipeline/sql/` (adapted for pipeline extraction with term placeholders)
+- **SQL parameterization**: `expand_in_clause()` originated in `nocccd-scff/libs/notebook_utils.py` — the same multi-term `IN (:t1...)` regex expansion is used in `data_provider.py` and `extract.py`
+- **Crosstab tables**: `build_expandable_crosstab()` in notebook_utils was ported to `_build_expandable_crosstab()` in tab modules for expandable HTML pivot tables
+- **Funding status categories**: `derive_funding_status()` (Pell/CCPG/Both/Neither) — same logic in both repos
+
+When starting a new analysis, prototype in nocccd-scff first, then follow the "Adding a new dataset + tab" checklist below.
+
 ## Commands
 
 ```bash
