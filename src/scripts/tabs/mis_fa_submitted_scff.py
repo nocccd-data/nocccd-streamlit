@@ -236,6 +236,6 @@ def render():
     for i, term in enumerate(term_ids):
         if i > 0:
             st.divider()
-        df1_term = df1[df1["mis_term_id"] == term]
+        df1_term = df1[df1["mis_acyr_id"] == term]
         df2_term = df2[df2["term_id"] == term]
         _render_term_tables(df1_term, df2_term, term)

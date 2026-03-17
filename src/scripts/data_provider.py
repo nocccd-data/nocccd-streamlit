@@ -82,7 +82,7 @@ def fetch_coi_nhrdist(terms: tuple[str, ...]) -> pd.DataFrame:
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_deg_scff(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_scff", "mis_term_id", terms)
+        return _download_and_read("deg_scff", "mis_acyr_id", terms)
     return _query_oracle(_SQL_DIR / "deg_scff.sql", terms)
 
 
@@ -94,7 +94,7 @@ def fetch_deg_sp_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Single-term Oracle helper (for SQL with :mis_term_id instead of IN(:t1...))
+# Single-term Oracle helper (for SQL with :mis_acyr_id instead of IN(:t1...))
 # ---------------------------------------------------------------------------
 
 def _query_oracle_single_term(sql_path: Path, terms: tuple[str, ...], param_name: str, db_section: str = "dwhdb") -> pd.DataFrame:
@@ -112,7 +112,7 @@ def _query_oracle_single_term(sql_path: Path, terms: tuple[str, ...], param_name
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_deg_fa_scff(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_fa_scff", "mis_term_id", terms)
+        return _download_and_read("deg_fa_scff", "mis_acyr_id", terms)
     return _query_oracle(_SQL_DIR / "deg_fa_scff.sql", terms)
 
 
@@ -127,4 +127,4 @@ def fetch_deg_fa_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
 def fetch_deg_sp_current(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("deg_sp_current", "term_id", terms)
-    return _query_oracle_single_term(_SQL_DIR / "deg_sp_current.sql", terms, "mis_term_id", db_section="rept")
+    return _query_oracle_single_term(_SQL_DIR / "deg_sp_current.sql", terms, "mis_acyr_id", db_section="rept")

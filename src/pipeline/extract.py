@@ -34,7 +34,7 @@ def extract_dataset(name: str) -> Path:
         frames = []
         with engine.connect() as conn:
             for t in terms:
-                frames.append(pd.read_sql(base_sql, conn, params={"mis_term_id": t}))
+                frames.append(pd.read_sql(base_sql, conn, params={"mis_acyr_id": t}))
         df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
     HYPER_DIR.mkdir(parents=True, exist_ok=True)
