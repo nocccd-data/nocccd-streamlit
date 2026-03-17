@@ -21,6 +21,16 @@ DATASETS = {
         "terms": ["240"],
         "db_section": "rept",
     },
+    "deg_fa_scff": {
+        "sql_file": "deg_fa_scff.sql",
+        "terms": ["220", "230", "240", "250"],
+        "db_section": "dwhdb",
+    },
+    "deg_fa_submitted": {
+        "sql_file": "deg_fa_submitted.sql",
+        "terms": ["220", "230", "240", "250"],
+        "db_section": "dwhdb",
+    },
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"

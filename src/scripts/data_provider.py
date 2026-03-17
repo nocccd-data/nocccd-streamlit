@@ -110,6 +110,20 @@ def _query_oracle_single_term(sql_path: Path, terms: tuple[str, ...], param_name
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_deg_fa_scff(terms: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("deg_fa_scff", "mis_term_id", terms)
+    return _query_oracle(_SQL_DIR / "deg_fa_scff.sql", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_deg_fa_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("deg_fa_submitted", "term_id", terms)
+    return _query_oracle(_SQL_DIR / "deg_fa_submitted.sql", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_deg_sp_current(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("deg_sp_current", "term_id", terms)
