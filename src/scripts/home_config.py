@@ -41,4 +41,16 @@ PROJECTS = [
             {"label": "Stakeholder review complete", "done": False},
         ],
     },
+    {
+        "tab_label": "MIS FA Submitted vs. SCFF",
+        "description": "Compares MIS FA Submitted records against SCFF financial-aid awards.",
+        "due_date": "",
+        "milestones": [
+            {"label": "Create deg_fa_scff.sql base SCFF counts", "done": True},
+            {"label": "Create deg_fa_submitted.sql comparison query", "done": True},
+            {"label": "Metrics and table exploration via Jupyter", "done": True},
+            {"label": "Import tables to Streamlit", "done": True},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
 ]
