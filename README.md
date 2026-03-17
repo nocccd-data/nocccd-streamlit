@@ -20,7 +20,7 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 nocccd-streamlit/
 ├── src/
 │   ├── pipeline/                 # ETL: Oracle → Hyper → Tableau Cloud
-│   │   ├── config.py             # Dataset definitions and terms
+│   │   ├── config.py             # Dataset definitions and acyrs
 │   │   ├── extract.py            # Query Oracle, write .hyper files
 │   │   ├── publish.py            # Upload/download Hyper to/from Tableau Cloud
 │   │   ├── run.py                # CLI entry point for pipeline
@@ -210,23 +210,23 @@ See `CLAUDE.md` for detailed theme gotchas, color reference table, and guidance 
 ## Adding a New Dataset
 
 1. Add the SQL query to `src/pipeline/sql/your_dataset.sql`
-   - Use `:t1, :t2, ...` placeholders for term filtering: `WHERE term_id IN (:t1)`
+   - Use `:t1, :t2, ...` placeholders for acyr filtering: `WHERE acyr_id IN (:t1)`
 2. Register in `src/pipeline/config.py`:
    ```python
    DATASETS = {
        ...
        "your_dataset": {
            "sql_file": "your_dataset.sql",
-           "terms": ["220", "230", "240", "250"],
+           "acyrs": ["220", "230", "240", "250"],
        },
    }
    ```
 3. Add a fetch function in `data_provider.py`:
    ```python
    @st.cache_data(ttl=600, show_spinner="Loading data...")
-   def fetch_your_dataset(terms: tuple[str, ...]) -> pd.DataFrame:
+   def fetch_your_dataset(acyrs: tuple[str, ...]) -> pd.DataFrame:
        if _is_cloud():
-           return _download_and_read("your_dataset", "term_id", terms)
-       return _query_oracle(_SQL_DIR / "your_dataset.sql", terms)
+           return _download_and_read("your_dataset", "acyr_id", acyrs)
+       return _query_oracle(_SQL_DIR / "your_dataset.sql", acyrs)
    ```
 4. Run `python -m src.pipeline.run your_dataset` to extract and publish

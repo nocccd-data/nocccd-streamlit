@@ -7,7 +7,7 @@ from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_deg_scff, fetch_deg_sp_submitted
 
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
-_DEFAULT_TERMS = DATASETS["deg_sp_submitted"]["terms"]
+_DEFAULT_ACYRS = DATASETS["deg_sp_submitted"]["acyrs"]
 _MATCH_ORDER = ["Matched", "SP Only/SX Exists - Not in SCFF", "SP Only/SX Not Exists - Not in SCFF", "SCFF Only - Not in SP"]
 
 
@@ -136,28 +136,28 @@ def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_co
     )
 
 
-def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: str):
-    """Render SCFF and SP tables for a single term."""
-    st.subheader(f"Term {term}")
+def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: str):
+    """Render SCFF and SP tables for a single acyr."""
+    st.subheader(f"ACYR {acyr}")
 
-    if not df1_term.empty:
-        table1 = _ordered_crosstab(df1_term, "award_type", "funding_status", "sb00")
+    if not df1_acyr.empty:
+        table1 = _ordered_crosstab(df1_acyr, "award_type", "funding_status", "sb00")
         st.markdown(
             _build_expandable_crosstab(
-                table1, df1_term, "award_type", "funding_status", "sb00",
-                "funding_status", f"SCFF File Counts — Term {term}",
+                table1, df1_acyr, "award_type", "funding_status", "sb00",
+                "funding_status", f"SCFF File Counts — ACYR {acyr}",
             ),
             unsafe_allow_html=True,
         )
     else:
-        st.info(f"No SCFF data for term {term}.")
+        st.info(f"No SCFF data for ACYR {acyr}.")
 
-    if not df2_term.empty:
-        table2 = _ordered_crosstab(df2_term, "award_type", "match_status", "sb00", col_order=_MATCH_ORDER)
+    if not df2_acyr.empty:
+        table2 = _ordered_crosstab(df2_acyr, "award_type", "match_status", "sb00", col_order=_MATCH_ORDER)
         st.markdown(
             _build_expandable_crosstab(
-                table2, df2_term, "award_type", "match_status", "sb00",
-                "funding_status", f"SP Submitted File Match Counts — Term {term}",
+                table2, df2_acyr, "award_type", "match_status", "sb00",
+                "funding_status", f"SP Submitted File Match Counts — ACYR {acyr}",
             ),
             unsafe_allow_html=True,
         )
@@ -166,7 +166,7 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
             "DICD Filter",
             ["All", "Matched", "SP Only/SX Exists", "SP Only/SX Not Exists", "SCFF Only"],
             horizontal=True,
-            key=f"dicd_filter_{term}",
+            key=f"dicd_filter_{acyr}",
         )
         filter_map = {
             "Matched": "Matched",
@@ -175,14 +175,14 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
             "SCFF Only": "SCFF Only - Not in SP",
         }
         df2_dicd = (
-            df2_term[df2_term["match_status"] == filter_map[dicd_filter]]
+            df2_acyr[df2_acyr["match_status"] == filter_map[dicd_filter]]
             if dicd_filter != "All"
-            else df2_term
+            else df2_acyr
         )
         df2_dicd = df2_dicd.copy()
         df2_dicd["dicd_code"] = df2_dicd["dicd_code"].fillna("N/A")
         if df2_dicd.empty:
-            st.info(f"No records for filter '{dicd_filter}' - Term {term}.")
+            st.info(f"No records for filter '{dicd_filter}' - ACYR {acyr}.")
         else:
             table3 = pd.crosstab(
                 df2_dicd["award_type"], df2_dicd["dicd_code"],
@@ -200,53 +200,53 @@ def _render_term_tables(df1_term: pd.DataFrame, df2_term: pd.DataFrame, term: st
             st.markdown(
                 _build_expandable_crosstab(
                     table3, df2_dicd, "award_type", "dicd_code", "sb00",
-                    "funding_status", f"Counts by Award Type and DICD Code — Term {term}",
+                    "funding_status", f"Counts by Award Type and DICD Code — ACYR {acyr}",
                 ),
                 unsafe_allow_html=True,
             )
     else:
-        st.info(f"No SP submitted data for term {term}.")
+        st.info(f"No SP submitted data for ACYR {acyr}.")
 
 
 def render():
     st.header("MIS SP Submitted vs. SCFF Files")
 
-    selected_terms = st.sidebar.multiselect(
-        "MIS Term IDs",
-        options=_DEFAULT_TERMS,
-        default=_DEFAULT_TERMS,
-        key="scff_term_ids",
+    selected_acyrs = st.sidebar.multiselect(
+        "MIS ACYR IDs",
+        options=_DEFAULT_ACYRS,
+        default=_DEFAULT_ACYRS,
+        key="scff_acyr_ids",
     )
     query_btn = st.sidebar.button("Query", key="scff_query_btn")
 
     if query_btn:
-        if not selected_terms:
-            st.warning("Select at least one MIS Term ID.")
+        if not selected_acyrs:
+            st.warning("Select at least one MIS ACYR ID.")
             return
         fetch_deg_scff.clear()
         fetch_deg_sp_submitted.clear()
-        term_ids = tuple(sorted(selected_terms))
-        df1 = fetch_deg_scff(term_ids)
-        df2 = fetch_deg_sp_submitted(term_ids)
+        acyr_ids = tuple(sorted(selected_acyrs))
+        df1 = fetch_deg_scff(acyr_ids)
+        df2 = fetch_deg_sp_submitted(acyr_ids)
         # Derive funding_status
         df1 = _derive_funding_status(df1, "ccpg", "pell")
         df2["sb00"] = df2["sp_sb00"].fillna(df2["scff_sb00"])
         df2 = _derive_funding_status(df2, "scff_ccpg", "scff_pell")
         st.session_state["scff_df1"] = df1
         st.session_state["scff_df2"] = df2
-        st.session_state["scff_terms"] = term_ids
+        st.session_state["scff_acyrs"] = acyr_ids
 
     if "scff_df1" not in st.session_state:
-        st.info("Enter MIS Term IDs and press **Query** to load data.")
+        st.info("Enter MIS ACYR IDs and press **Query** to load data.")
         return
 
     df1 = st.session_state["scff_df1"]
     df2 = st.session_state["scff_df2"]
-    term_ids = st.session_state["scff_terms"]
+    acyr_ids = st.session_state["scff_acyrs"]
 
-    for i, term in enumerate(term_ids):
+    for i, acyr in enumerate(acyr_ids):
         if i > 0:
             st.divider()
-        df1_term = df1[df1["mis_acyr_id"] == term]
-        df2_term = df2[df2["term_id"] == term]
-        _render_term_tables(df1_term, df2_term, term)
+        df1_acyr = df1[df1["mis_acyr_id"] == acyr]
+        df2_acyr = df2[df2["acyr_id"] == acyr]
+        _render_acyr_tables(df1_acyr, df2_acyr, acyr)

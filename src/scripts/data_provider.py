@@ -22,13 +22,13 @@ def _is_cloud() -> bool:
 # Local mode helpers (Oracle)
 # ---------------------------------------------------------------------------
 
-def _query_oracle(sql_path: Path, terms: tuple[str, ...], db_section: str = "dwhdb") -> pd.DataFrame:
+def _query_oracle(sql_path: Path, acyrs: tuple[str, ...], db_section: str = "dwhdb") -> pd.DataFrame:
     from src.pipeline.libs.sql import get_engine
 
     base_sql = sql_path.read_text(encoding="utf-8")
-    placeholders = ", ".join(f":t{i}" for i in range(1, len(terms) + 1))
+    placeholders = ", ".join(f":t{i}" for i in range(1, len(acyrs) + 1))
     sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
-    params = {f"t{i}": t for i, t in enumerate(terms, 1)}
+    params = {f"t{i}": t for i, t in enumerate(acyrs, 1)}
 
     engine = get_engine(section=db_section)
     with engine.connect() as conn:
@@ -39,7 +39,7 @@ def _query_oracle(sql_path: Path, terms: tuple[str, ...], db_section: str = "dwh
 # Cloud mode helpers (Tableau Cloud → Hyper)
 # ---------------------------------------------------------------------------
 
-def _download_and_read(dataset_name: str, term_col: str, terms: tuple[str, ...]) -> pd.DataFrame:
+def _download_and_read(dataset_name: str, acyr_col: str, acyrs: tuple[str, ...]) -> pd.DataFrame:
     import pantab
     from src.pipeline.publish import download_hyper
 
@@ -55,9 +55,9 @@ def _download_and_read(dataset_name: str, term_col: str, terms: tuple[str, ...])
         )
         df = pantab.frame_from_hyper(hyper_path, table="Extract")
 
-    # Filter to requested terms
-    if term_col in df.columns:
-        df = df[df[term_col].astype(str).isin(terms)]
+    # Filter to requested acyrs
+    if acyr_col in df.columns:
+        df = df[df[acyr_col].astype(str).isin(acyrs)]
     return df
 
 
@@ -73,58 +73,58 @@ _SQL_DIR = Path(__file__).resolve().parents[1] / "pipeline" / "sql"
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_coi_nhrdist(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_coi_nhrdist(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("coi_nhrdist_val", "mis_term_id", terms)
-    return _query_oracle(_SQL_DIR / "coi_nhrdist_val.sql", terms)
+        return _download_and_read("coi_nhrdist_val", "mis_term_id", acyrs)
+    return _query_oracle(_SQL_DIR / "coi_nhrdist_val.sql", acyrs)
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_deg_scff(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_deg_scff(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_scff", "mis_acyr_id", terms)
-    return _query_oracle(_SQL_DIR / "deg_scff.sql", terms)
+        return _download_and_read("deg_scff", "mis_acyr_id", acyrs)
+    return _query_oracle(_SQL_DIR / "deg_scff.sql", acyrs)
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_deg_sp_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_deg_sp_submitted(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_sp_submitted", "term_id", terms)
-    return _query_oracle(_SQL_DIR / "deg_sp_submitted.sql", terms)
+        return _download_and_read("deg_sp_submitted", "acyr_id", acyrs)
+    return _query_oracle(_SQL_DIR / "deg_sp_submitted.sql", acyrs)
 
 
 # ---------------------------------------------------------------------------
-# Single-term Oracle helper (for SQL with :mis_acyr_id instead of IN(:t1...))
+# Single-acyr Oracle helper (for SQL with :mis_acyr_id instead of IN(:t1...))
 # ---------------------------------------------------------------------------
 
-def _query_oracle_single_term(sql_path: Path, terms: tuple[str, ...], param_name: str, db_section: str = "dwhdb") -> pd.DataFrame:
+def _query_oracle_single_acyr(sql_path: Path, acyrs: tuple[str, ...], param_name: str, db_section: str = "dwhdb") -> pd.DataFrame:
     from src.pipeline.libs.sql import get_engine
 
     base_sql = sql_path.read_text(encoding="utf-8")
     engine = get_engine(section=db_section)
     frames = []
     with engine.connect() as conn:
-        for t in terms:
+        for t in acyrs:
             frames.append(pd.read_sql(base_sql, conn, params={param_name: t}))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_deg_fa_scff(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_deg_fa_scff(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_fa_scff", "mis_acyr_id", terms)
-    return _query_oracle(_SQL_DIR / "deg_fa_scff.sql", terms)
+        return _download_and_read("deg_fa_scff", "mis_acyr_id", acyrs)
+    return _query_oracle(_SQL_DIR / "deg_fa_scff.sql", acyrs)
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_deg_fa_submitted(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_deg_fa_submitted(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_fa_submitted", "term_id", terms)
-    return _query_oracle(_SQL_DIR / "deg_fa_submitted.sql", terms)
+        return _download_and_read("deg_fa_submitted", "acyr_id", acyrs)
+    return _query_oracle(_SQL_DIR / "deg_fa_submitted.sql", acyrs)
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_deg_sp_current(terms: tuple[str, ...]) -> pd.DataFrame:
+def fetch_deg_sp_current(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
-        return _download_and_read("deg_sp_current", "term_id", terms)
-    return _query_oracle_single_term(_SQL_DIR / "deg_sp_current.sql", terms, "mis_acyr_id", db_section="rept")
+        return _download_and_read("deg_sp_current", "acyr_id", acyrs)
+    return _query_oracle_single_acyr(_SQL_DIR / "deg_sp_current.sql", acyrs, "mis_acyr_id", db_section="rept")

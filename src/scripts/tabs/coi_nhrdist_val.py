@@ -4,7 +4,7 @@ import pandas as pd
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_coi_nhrdist
 
-_DEFAULT_TERMS = DATASETS["coi_nhrdist_val"]["terms"]
+_DEFAULT_TERMS = DATASETS["coi_nhrdist_val"]["acyrs"]
 
 
 def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:

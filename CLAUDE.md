@@ -15,8 +15,8 @@ A pipeline (`src/pipeline/`) handles the ETL: Oracle → Hyper → Tableau Cloud
 New SCFF analyses start as Jupyter notebooks in **nocccd-scff**, where SQL queries and visualization logic are prototyped and validated with stakeholders. Once validated, the analysis is ported here as a production Streamlit tab.
 
 **What gets ported:**
-- **SQL queries**: `nocccd-scff/sql/` → `src/pipeline/sql/` (adapted for pipeline extraction with term placeholders)
-- **SQL parameterization**: `expand_in_clause()` originated in `nocccd-scff/libs/notebook_utils.py` — the same multi-term `IN (:t1...)` regex expansion is used in `data_provider.py` and `extract.py`
+- **SQL queries**: `nocccd-scff/sql/` → `src/pipeline/sql/` (adapted for pipeline extraction with acyr placeholders)
+- **SQL parameterization**: `expand_in_clause()` originated in `nocccd-scff/libs/notebook_utils.py` — the same multi-acyr `IN (:t1...)` regex expansion is used in `data_provider.py` and `extract.py`
 - **Crosstab tables**: `build_expandable_crosstab()` in notebook_utils was ported to `_build_expandable_crosstab()` in tab modules for expandable HTML pivot tables
 - **Funding status categories**: `derive_funding_status()` (Pell/CCPG/Both/Neither) — same logic in both repos
 
@@ -59,8 +59,8 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 
 ### Pipeline flow (`src/pipeline/`)
 
-1. **`config.py`** — defines datasets: name → SQL file + term list + `db_section` (which `config.ini` section to connect to, e.g. `"dwhdb"` or `"rept"`)
-2. **`extract.py`** — reads SQL, substitutes `:t1, :t2, ...` term placeholders, queries Oracle, writes `.hyper` via `pantab.frame_to_hyper()`
+1. **`config.py`** — defines datasets: name → SQL file + acyr list + `db_section` (which `config.ini` section to connect to, e.g. `"dwhdb"` or `"rept"`)
+2. **`extract.py`** — reads SQL, substitutes `:t1, :t2, ...` acyr placeholders, queries Oracle, writes `.hyper` via `pantab.frame_to_hyper()`
 3. **`publish.py`** — uploads `.hyper` to "Streamlit Data" project on Tableau Cloud; also has `download_hyper()` which downloads `.tdsx`, extracts `.hyper` from the ZIP
 4. **`run.py`** — CLI orchestrator, reads Tableau credentials from `.streamlit/secrets.toml`
 
@@ -70,10 +70,10 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 
 **Adding a new dataset + tab (full checklist):**
 1. Add SQL file to `src/pipeline/sql/`
-2. Register dataset in `src/pipeline/config.py` (name, sql_file, terms, db_section)
-3. Add a `fetch_*()` function in `data_provider.py` — use `_query_oracle()` for multi-term SQL or `_query_oracle_single_term()` for single-term SQL. Pass `db_section=` matching the config entry.
+2. Register dataset in `src/pipeline/config.py` (name, sql_file, acyrs, db_section)
+3. Add a `fetch_*()` function in `data_provider.py` — use `_query_oracle()` for multi-acyr SQL or `_query_oracle_single_acyr()` for single-acyr SQL. Pass `db_section=` matching the config entry.
 4. Create tab module in `src/scripts/tabs/` with a `render()` function
-5. **Default terms**: Import from `config.py` (`from src.pipeline.config import DATASETS`) — never hardcode term lists in tab files. Example: `_DEFAULT_TERMS = DATASETS["your_dataset"]["terms"]`
+5. **Default acyrs**: Import from `config.py` (`from src.pipeline.config import DATASETS`) — never hardcode acyr lists in tab files. Example: `_DEFAULT_ACYRS = DATASETS["your_dataset"]["acyrs"]`
 6. **Widget keys**: Use a unique prefix for all `st.session_state` keys and widget `key=` params to avoid collisions between tabs
 7. Register in `tabs/__init__.py`
 8. Update `README.md` file tree
@@ -81,8 +81,8 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 ### SQL parameterization
 
 Two patterns are supported:
-- **Multi-term**: SQL uses `IN (:t1...)`. Both `extract.py` and `data_provider.py` dynamically expand the placeholder list to match the number of terms via regex substitution. Use `_query_oracle()` in `data_provider.py`.
-- **Single-term**: SQL uses a single named bind like `:mis_term_id`. `extract.py` detects this (no `IN` expansion match) and loops over each term, concatenating results. Use `_query_oracle_single_term()` in `data_provider.py`.
+- **Multi-acyr**: SQL uses `IN (:t1...)`. Both `extract.py` and `data_provider.py` dynamically expand the placeholder list to match the number of acyrs via regex substitution. Use `_query_oracle()` in `data_provider.py`.
+- **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. `extract.py` detects this (no `IN` expansion match) and loops over each acyr, concatenating results. Use `_query_oracle_single_acyr()` in `data_provider.py`.
 
 ## Theme System
 
