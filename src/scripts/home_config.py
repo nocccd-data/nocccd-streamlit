@@ -7,6 +7,18 @@ Set ``due_date`` to ``None`` for projects with no due date.
 
 PROJECTS = [
     {
+        "tab_label": "Fast Facts",
+        "description": "Student and employee demographics snapshot for the current academic year.",
+        "due_date": None,
+        "milestones": [
+            {"label": "Create fast_facts_stu.sql and fast_facts_emp.sql", "done": True},
+            {"label": "Register datasets in config.py", "done": True},
+            {"label": "Build Fast Facts Streamlit tab", "done": True},
+            {"label": "Add PDF export", "done": True},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "due_date": "",

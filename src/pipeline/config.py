@@ -1,34 +1,52 @@
 from pathlib import Path
 
 DATASETS = {
+    "fast_facts_emp": {
+        "sql_file": "fast_facts_emp.sql",
+        "fisc_year": ["2025"],
+        "param_name": "fisc_year",
+        "db_section": "rept",
+    },
+    "fast_facts_stu": {
+        "sql_file": "fast_facts_stu.sql",
+        "acyr_code": ["2024"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
+    },
     "coi_nhrdist_val": {
         "sql_file": "coi_nhrdist_val.sql",
-        "acyrs": ["243", "245", "247", "253", "255", "257"],
+        "mis_term_id": ["243", "245", "247", "253", "255", "257"],
+        "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
     "deg_scff": {
         "sql_file": "deg_scff.sql",
-        "acyrs": ["220", "230", "240", "250"],
+        "mis_acyr_id": ["220", "230", "240", "250"],
+        "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
     "deg_sp_submitted": {
         "sql_file": "deg_sp_submitted.sql",
-        "acyrs": ["220", "230", "240", "250"],
+        "mis_acyr_id": ["220", "230", "240", "250"],
+        "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
     "deg_sp_current": {
         "sql_file": "deg_sp_current.sql",
-        "acyrs": ["240", "250"],
+        "mis_acyr_id": ["240", "250"],
+        "param_name": "mis_acyr_id",
         "db_section": "rept",
     },
     "deg_fa_scff": {
         "sql_file": "deg_fa_scff.sql",
-        "acyrs": ["220", "230", "240", "250"],
+        "mis_acyr_id": ["220", "230", "240", "250"],
+        "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
     "deg_fa_submitted": {
         "sql_file": "deg_fa_submitted.sql",
-        "acyrs": ["220", "230", "240", "250"],
+        "mis_acyr_id": ["220", "230", "240", "250"],
+        "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
 }

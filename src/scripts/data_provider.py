@@ -128,3 +128,19 @@ def fetch_deg_sp_current(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("deg_sp_current", "acyr_id", acyrs)
     return _query_oracle_single_acyr(_SQL_DIR / "deg_sp_current.sql", acyrs, "mis_acyr_id", db_section="rept")
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_fast_facts_stu(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("fast_facts_stu", "acyr_code", acyr_codes)
+    return _query_oracle_single_acyr(
+        _SQL_DIR / "fast_facts_stu.sql", acyr_codes, "acyr_code", db_section="rept")
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_fast_facts_emp(fisc_years: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("fast_facts_emp", "fisc_year", fisc_years)
+    return _query_oracle_single_acyr(
+        _SQL_DIR / "fast_facts_emp.sql", fisc_years, "fisc_year", db_section="rept")

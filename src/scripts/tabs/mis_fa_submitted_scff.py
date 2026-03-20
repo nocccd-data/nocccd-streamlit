@@ -7,7 +7,7 @@ from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_deg_fa_scff, fetch_deg_fa_submitted
 
 _AWARD_ORDER = ["ccpg", "pell", "other"]
-_DEFAULT_ACYRS = DATASETS["deg_fa_submitted"]["acyrs"]
+_DEFAULT_ACYRS = DATASETS["deg_fa_submitted"]["mis_acyr_id"]
 _MATCH_ORDER = ["Matched", "FA Only - Not in SCFF", "SCFF Only - Not in FA"]
 
 

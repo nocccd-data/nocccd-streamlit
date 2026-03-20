@@ -4,7 +4,7 @@ import pandas as pd
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_coi_nhrdist
 
-_DEFAULT_TERMS = DATASETS["coi_nhrdist_val"]["acyrs"]
+_DEFAULT_TERMS = DATASETS["coi_nhrdist_val"]["mis_term_id"]
 
 
 def _process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -66,7 +66,7 @@ def render():
 
     # --- Sidebar controls ---
     selected_terms = st.sidebar.multiselect(
-        "Term IDs",
+        "MIS Term IDs",
         options=_DEFAULT_TERMS,
         default=_DEFAULT_TERMS,
         key="coi_terms",

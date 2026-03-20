@@ -7,7 +7,7 @@ from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_deg_scff, fetch_deg_sp_current
 
 _AWARD_ORDER = ["adt", "aaas", "babs", "cred_cert", "noncred_cert"]
-_DEFAULT_ACYRS = DATASETS["deg_sp_current"]["acyrs"]
+_DEFAULT_ACYRS = DATASETS["deg_sp_current"]["mis_acyr_id"]
 _MATCH_ORDER = ["Matched", "SP Only/SX Exists - Not in SCFF", "SP Only/SX Not Exists - Not in SCFF", "SCFF Only - Not in SP"]
 
 
