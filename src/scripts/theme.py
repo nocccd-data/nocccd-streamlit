@@ -101,6 +101,11 @@ THEME_CSS = """\
     color: light-dark(#000000, #FFFFFF) !important;
 }
 
+/* Ensure dropdown shows all options without scrolling */
+[data-testid="stSelectboxVirtualDropdown"] {
+    max-height: 500px !important;
+}
+
 /* Selectbox dropdown menu (portaled outside sidebar — no ancestor scope) */
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"],
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"] div,

@@ -49,6 +49,18 @@ DATASETS = {
         "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
+    "cte_scff": {
+        "sql_file": "cte_scff.sql",
+        "mis_acyr_id": ["230", "240", "250"],
+        "param_name": "mis_acyr_id",
+        "db_section": "dwhdb",
+    },
+    "cte_sx_submitted": {
+        "sql_file": "cte_sx_submitted.sql",
+        "mis_acyr_id": ["230", "240", "250"],
+        "param_name": "mis_acyr_id",
+        "db_section": "dwhdb",
+    },
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
