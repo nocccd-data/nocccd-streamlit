@@ -76,13 +76,33 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 5. **Default values**: Import from `config.py` (`from src.pipeline.config import DATASETS`) — never hardcode value lists in tab files. Look up via the dataset's `param_name`. Example: `cfg = DATASETS["your_dataset"]; _DEFAULT_VALS = cfg[cfg["param_name"]]`
 6. **Widget keys**: Use a unique prefix for all `st.session_state` keys and widget `key=` params to avoid collisions between tabs
 7. Register in `tabs/__init__.py`
-8. Update `README.md` file tree
+8. Add a project card in `home_config.py` — `tab_label` must exactly match the label string in `tabs.TABS` or the Home "Open" button won't navigate correctly
+9. Update `README.md` file tree
 
 ### SQL parameterization
 
 Two patterns are supported:
-- **Multi-acyr**: SQL uses `IN (:t1...)`. Both `extract.py` and `data_provider.py` dynamically expand the placeholder list to match the number of acyrs via regex substitution. Use `_query_oracle()` in `data_provider.py`.
+- **Multi-acyr**: SQL uses `IN (:t1...)`. Both `extract.py` and `data_provider.py` dynamically expand the placeholder list to match the number of acyrs via case-insensitive regex substitution (`re.IGNORECASE`). Use `_query_oracle()` in `data_provider.py`. SQL files may use uppercase `IN` or lowercase `in` — both work.
 - **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. `extract.py` detects this (no `IN` expansion match) and loops over each acyr, concatenating results. Use `_query_oracle_single_acyr()` in `data_provider.py`.
+
+### Sidebar PDF export
+
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap) use `st.sidebar.download_button()` to offer a PDF download.
+
+**Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
+
+```python
+# CORRECT — PDF block after query block
+query_btn = st.sidebar.button("Query", key="xx_query_btn")
+
+if query_btn:
+    # ... fetch data, store in st.session_state["xx_data"] ...
+
+if "xx_data" in st.session_state:
+    st.sidebar.download_button("Download PDF", data=..., key="xx_pdf_btn")
+```
+
+**PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. See `fast_facts.py` (`_generate_pdf`) and `class_schedule_heatmap.py` (`_generate_pdf` + `_mpl_heatmap`) for examples.
 
 ## Theme System
 
