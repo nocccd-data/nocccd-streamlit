@@ -112,8 +112,8 @@ THEME_CSS = """\
 [data-testid="stSelectboxVirtualDropdown"] li[role="option"] span {
     color: light-dark(#000000, #FFFFFF) !important;
 }
-/* Separator after "Home" in project dropdown */
-[data-testid="stSelectboxVirtualDropdown"] li[role="option"]:first-child {
+/* Separator after "Home" in project dropdown (applied via JS) */
+.project-dropdown-sep {
     border-bottom: 1px solid light-dark(#444444, #AAAAAA) !important;
 }
 </style>"""
@@ -138,6 +138,16 @@ _COLOR_SCHEME_SYNC = """\
     new MutationObserver(sync).observe(app, {attributes: true, attributeFilter: ['class']});
   }
   window.__nocccdThemeObs = true;
+
+  // Add separator only to the project dropdown (first option = "Home")
+  new MutationObserver(function() {
+    document.querySelectorAll('[data-testid="stSelectboxVirtualDropdown"]').forEach(function(dd) {
+      var first = dd.querySelector('li[role="option"]:first-child');
+      if (first && first.textContent.trim() === 'Home') {
+        first.classList.add('project-dropdown-sep');
+      }
+    });
+  }).observe(document.body, {childList: true, subtree: true});
 })();
 </script>"""
 
