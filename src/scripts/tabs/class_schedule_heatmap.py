@@ -74,7 +74,7 @@ def _build_day_heatmap_fig(df: pd.DataFrame, term: str):
 
     fig = px.imshow(
         pivot,
-        text_auto=True,
+        text_auto=",.0f",
         color_continuous_scale="YlOrRd",
         labels={"x": "Day", "y": "Campus", "color": "Enrollment"},
         title=f"{term} — Student Enrollment by Day of Week",
@@ -115,7 +115,7 @@ def _build_time_heatmap_fig(df: pd.DataFrame, term: str, campus: str):
 
     fig = px.imshow(
         pivot,
-        text_auto=True,
+        text_auto=",.0f",
         color_continuous_scale="YlOrRd",
         labels={"x": "Day", "y": "Start Time", "color": "Enrollment"},
         title=f"{term} — {campus} — Enrollment by Time & Day",
