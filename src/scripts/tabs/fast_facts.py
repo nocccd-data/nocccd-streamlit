@@ -226,17 +226,6 @@ def render():
     )
     query_btn = st.sidebar.button("Query", key="ff_query_btn")
 
-    # --- PDF download in sidebar (only when data is loaded) ---
-    if "ff_data" in st.session_state:
-        pdf_bytes = _generate_pdf(st.session_state["ff_data"])
-        st.sidebar.download_button(
-            "Download PDF",
-            data=pdf_bytes,
-            file_name="fast_facts.pdf",
-            mime="application/pdf",
-            key="ff_pdf_btn",
-        )
-
     if query_btn:
         fetch_fast_facts_stu.clear()
         fetch_fast_facts_emp.clear()
@@ -251,6 +240,17 @@ def render():
             return
 
         st.session_state["ff_data"] = _process(df_stu, df_emp, fisc_year)
+
+    # --- PDF download in sidebar (only when data is loaded) ---
+    if "ff_data" in st.session_state:
+        pdf_bytes = _generate_pdf(st.session_state["ff_data"])
+        st.sidebar.download_button(
+            "Download PDF",
+            data=pdf_bytes,
+            file_name="fast_facts.pdf",
+            mime="application/pdf",
+            key="ff_pdf_btn",
+        )
 
     if "ff_data" not in st.session_state:
         st.info("Select Academic Year / Fiscal Year and press **Query** to load data.")
