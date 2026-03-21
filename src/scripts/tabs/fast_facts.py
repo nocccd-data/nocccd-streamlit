@@ -139,6 +139,15 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
     df9["pct"] = (df9["headcount"] * 100.0 / df9["headcount"].sum()).round(2)
     df9 = df9.sort_values("pct", ascending=False)
 
+    # Format all numeric columns with thousands commas
+    all_dfs = [df1, df1b, df2, df3, df4, df5, df6, df7, df8, df9]
+    for d in all_dfs:
+        for col in d.columns:
+            if pd.api.types.is_integer_dtype(d[col]):
+                d[col] = d[col].map("{:,}".format)
+            elif pd.api.types.is_float_dtype(d[col]):
+                d[col] = d[col].map("{:,.2f}".format)
+
     return [
         (df1, f"{acyr} Districtwide Headcount (Unduplicated)"),
         (df1b, f"{acyr} Campus Headcount (Unduplicated)"),
