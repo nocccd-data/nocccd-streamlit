@@ -67,6 +67,12 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    "persistence_by_styp": {
+        "sql_file": "persistence_by_styp.sql",
+        "mis_term_id": ["207", "217", "227", "237", "247", "257"],
+        "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"

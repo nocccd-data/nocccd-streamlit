@@ -30,6 +30,17 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "Persistence by Student Type",
+        "description": "Fall-to-spring and fall-to-fall persistence rates by campus and student type.",
+        "due_date": None,
+        "milestones": [
+            {"label": "Create persistence_by_styp.sql", "done": True},
+            {"label": "Register dataset in config.py", "done": True},
+            {"label": "Build Streamlit tab", "done": False},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "due_date": "",

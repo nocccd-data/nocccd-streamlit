@@ -165,3 +165,10 @@ def fetch_class_schedule_heatmap(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("class_schedule_heatmap", "mis_term_id", terms)
     return _query_oracle(_SQL_DIR / "class_schedule_heatmap.sql", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_persistence_by_styp(terms: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("persistence_by_styp", "mis_term_id", terms)
+    return _query_oracle(_SQL_DIR / "persistence_by_styp.sql", terms)
