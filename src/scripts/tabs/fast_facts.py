@@ -141,6 +141,16 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
     ]
 
 
+_PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
+_PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
+
+
+def _add_pdf_footer(fig):
+    """Add URL (left) and author (right) footer to a matplotlib figure."""
+    fig.text(0.06, 0.02, _PDF_FOOTER_LEFT, fontsize=7, color="grey", ha="left")
+    fig.text(0.94, 0.02, _PDF_FOOTER_RIGHT, fontsize=7, color="grey", ha="right")
+
+
 def _generate_pdf(datasets: list[tuple[pd.DataFrame, str]]) -> bytes:
     """Render all tables into an in-memory PDF and return raw bytes."""
     matplotlib.rcParams.update({
@@ -164,12 +174,14 @@ def _generate_pdf(datasets: list[tuple[pd.DataFrame, str]]) -> bytes:
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
-        cursor = PAGE_H - MARGIN_TOP
+        fig.suptitle("Fast Facts", fontsize=16, fontweight="bold", color="black", y=0.97)
+        cursor = PAGE_H - MARGIN_TOP - 0.35
 
         for df, label in datasets:
             h = table_inches(df)
 
             if cursor - h < MARGIN_BOT:
+                _add_pdf_footer(fig)
                 pdf.savefig(fig)
                 plt.close(fig)
                 fig = plt.figure(figsize=(PAGE_W, PAGE_H))
@@ -202,6 +214,7 @@ def _generate_pdf(datasets: list[tuple[pd.DataFrame, str]]) -> bytes:
 
             cursor -= h
 
+        _add_pdf_footer(fig)
         pdf.savefig(fig)
         plt.close(fig)
 

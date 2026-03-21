@@ -175,6 +175,16 @@ def _mpl_heatmap(ax, pivot: pd.DataFrame, title: str):
     return im
 
 
+_PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
+_PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
+
+
+def _add_pdf_footer(fig):
+    """Add URL (left) and author (right) footer to a matplotlib figure."""
+    fig.text(0.06, 0.02, _PDF_FOOTER_LEFT, fontsize=7, color="grey", ha="left")
+    fig.text(0.94, 0.02, _PDF_FOOTER_RIGHT, fontsize=7, color="grey", ha="right")
+
+
 def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
     """Render heatmaps for a term into an in-memory PDF using matplotlib."""
     matplotlib.rcParams.update({
@@ -184,9 +194,11 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
         "savefig.facecolor": "white",
     })
 
+    PAGE_W, PAGE_H = 11.0, 8.5  # landscape letter
+
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
-        # --- Day heatmap ---
+        # --- Day heatmap (first page — include tab title) ---
         df_term = df_heatmap[df_heatmap["academic_term"] == term]
         df_day = df_term.drop_duplicates(subset=["crn", "campus_description", "day_name"])
         day_campus = df_day.groupby(
@@ -197,9 +209,11 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
         )
         pivot_day = pivot_day.reindex(columns=DAY_ORDER)
 
-        fig, ax = plt.subplots(figsize=(10, 3.5))
+        fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
+        fig.suptitle("Class Schedule Heatmap", fontsize=16, fontweight="bold", y=0.96)
+        fig.subplots_adjust(left=0.10, right=0.92, top=0.85, bottom=0.10)
         _mpl_heatmap(ax, pivot_day, f"{term} — Student Enrollment by Day of Week")
-        fig.tight_layout()
+        _add_pdf_footer(fig)
         pdf.savefig(fig)
         plt.close(fig)
 
@@ -220,10 +234,10 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
             pivot_time = pivot_time.reindex(columns=DAY_ORDER)
             pivot_time.index = pivot_time.index.droplevel(0)
 
-            n_rows = len(pivot_time)
-            fig, ax = plt.subplots(figsize=(10, max(4, n_rows * 0.45)))
+            fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
+            fig.subplots_adjust(left=0.10, right=0.92, top=0.90, bottom=0.10)
             _mpl_heatmap(ax, pivot_time, f"{term} — {campus} — Enrollment by Time & Day")
-            fig.tight_layout()
+            _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
 
