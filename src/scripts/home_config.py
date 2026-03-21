@@ -25,7 +25,7 @@ PROJECTS = [
         "milestones": [
             {"label": "Create class_schedule_heatmap.sql", "done": True},
             {"label": "Register dataset in config.py", "done": True},
-            {"label": "Build Streamlit tab", "done": False},
+            {"label": "Build Streamlit tab", "done": True},
             {"label": "Stakeholder review complete", "done": False},
         ],
     },
