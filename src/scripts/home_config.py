@@ -19,6 +19,17 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "Class Schedule Heatmap",
+        "description": "Heatmap visualization of class schedule enrollment by day of week and time of day.",
+        "due_date": None,
+        "milestones": [
+            {"label": "Create class_schedule_heatmap.sql", "done": True},
+            {"label": "Register dataset in config.py", "done": True},
+            {"label": "Build Streamlit tab", "done": False},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "due_date": "",
@@ -31,7 +42,7 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "MIS SP Submitted vs. SCFF",
+        "tab_label": "SCFF Degrees - MIS SP Submitted",
         "description": "Compares MIS SP Submitted records against SCFF financial-aid awards.",
         "due_date": "",
         "milestones": [
@@ -43,7 +54,7 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "MIS SP Current vs. SCFF",
+        "tab_label": "SCFF Degrees - MIS SP Current",
         "description": "Compares MIS SP Current records against SCFF financial-aid awards.",
         "due_date": "",
         "milestones": [
@@ -54,7 +65,7 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "MIS FA Submitted vs. SCFF",
+        "tab_label": "SCFF Awards - MIS FA Submitted",
         "description": "Compares MIS FA Submitted records against SCFF financial-aid awards.",
         "due_date": "",
         "milestones": [

@@ -23,10 +23,10 @@ def extract_dataset(name: str) -> Path:
     base_sql = sql_path.read_text(encoding="utf-8")
     engine = get_engine(section=cfg.get("db_section", "dwhdb"))
 
-    if re.search(r"IN\s*\(:t1", base_sql):
+    if re.search(r"IN\s*\(:t1", base_sql, re.IGNORECASE):
         # Multi-acyr: expand IN clause
         placeholders = ", ".join(f":t{i}" for i in range(1, len(values) + 1))
-        sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
+        sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql, flags=re.IGNORECASE)
         params = {f"t{i}": t for i, t in enumerate(values, 1)}
         with engine.connect() as conn:
             df = pd.read_sql(sql, conn, params=params)

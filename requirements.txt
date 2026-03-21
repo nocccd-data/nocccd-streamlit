@@ -8,3 +8,5 @@ oracledb
 sqlalchemy
 pantab==5.2.2
 tableauserverclient
+nbformat
+ipywidgets

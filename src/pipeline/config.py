@@ -61,6 +61,12 @@ DATASETS = {
         "param_name": "mis_acyr_id",
         "db_section": "dwhdb",
     },
+    "class_schedule_heatmap": {
+        "sql_file": "class_schedule_heatmap.sql",
+        "mis_term_id": ["257","263","265"],
+        "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"

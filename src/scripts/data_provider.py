@@ -27,7 +27,7 @@ def _query_oracle(sql_path: Path, acyrs: tuple[str, ...], db_section: str = "dwh
 
     base_sql = sql_path.read_text(encoding="utf-8")
     placeholders = ", ".join(f":t{i}" for i in range(1, len(acyrs) + 1))
-    sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql)
+    sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql, flags=re.IGNORECASE)
     params = {f"t{i}": t for i, t in enumerate(acyrs, 1)}
 
     engine = get_engine(section=db_section)
@@ -158,3 +158,10 @@ def fetch_cte_sx_submitted(acyrs: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("cte_sx_submitted", "mis_acyr_id", acyrs)
     return _query_oracle(_SQL_DIR / "cte_sx_submitted.sql", acyrs)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_class_schedule_heatmap(terms: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("class_schedule_heatmap", "mis_term_id", terms)
+    return _query_oracle(_SQL_DIR / "class_schedule_heatmap.sql", terms)
