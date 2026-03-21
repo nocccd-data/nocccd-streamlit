@@ -34,7 +34,7 @@ _ETHN_MAP = {
 
 
 def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list[tuple[pd.DataFrame, str]]:
-    """Build the 9 summary DataFrames from raw student + employee data."""
+    """Build the 10 summary DataFrames from raw student + employee data."""
     acyr = df_stu["academic_year"].iloc[0]
     fy_label = f"FY {fisc_year}"
 
@@ -44,6 +44,17 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
         "enrollments": [len(df_stu)],
         "headcount": [df_stu["pidm"].nunique()],
     })
+
+    # df1b — Campus Headcount (Unduplicated)
+    CAMP_MAP = {"1": "Cypress", "2": "Fullerton", "3": "NOCE"}
+    df1b = (
+        df_stu.groupby("camp_code", as_index=False)
+        .agg(enrollments=("pidm", "size"), headcount=("pidm", "nunique"))
+    )
+    df1b["camp_code"] = df1b["camp_code"].astype(str).map(CAMP_MAP)
+    df1b.rename(columns={"camp_code": "campus"}, inplace=True)
+    df1b["pct"] = (df1b["headcount"] * 100.0 / df1b["headcount"].sum()).round(2)
+    df1b.insert(0, "academic_year", acyr)
 
     # df2 — Race/Ethnicity
     df2 = (
@@ -129,7 +140,8 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
     df9 = df9.sort_values("pct", ascending=False)
 
     return [
-        (df1, f"{acyr} Headcount (Unduplicated)"),
+        (df1, f"{acyr} Districtwide Headcount (Unduplicated)"),
+        (df1b, f"{acyr} Campus Headcount (Unduplicated)"),
         (df2, f"{acyr} Race/Ethnicity"),
         (df3, f"{acyr} Gender"),
         (df4, f"{acyr} Avg. Age"),
@@ -273,7 +285,7 @@ def render():
 
     # --- Student tables ---
     st.subheader("Students")
-    for df, title in datasets[:5]:
+    for df, title in datasets[:6]:
         st.caption(title)
         st.dataframe(df, hide_index=True, use_container_width=True)
 
