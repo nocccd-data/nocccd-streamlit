@@ -161,15 +161,17 @@ def _mpl_heatmap(ax, pivot: pd.DataFrame, title: str):
                 color = "white" if val > vmax * 0.65 else "black"
                 ax.text(j, i, f"{int(val):,}", ha="center", va="center", fontsize=8, color=color)
 
-    # Day totals below the heatmap
+    # Day totals below the x-axis labels
+    from matplotlib.transforms import blended_transform_factory
+    trans = blended_transform_factory(ax.transData, ax.transAxes)
     day_totals = pivot.fillna(0).sum()
     for j, col in enumerate(pivot.columns):
         total = day_totals[col]
         if total > 0:
-            ax.annotate(
-                f"{int(total):,}", xy=(j, len(pivot.index) - 0.5),
-                xytext=(0, 14), textcoords="offset points",
+            ax.text(
+                j, -0.08, f"{int(total):,}", transform=trans,
                 ha="center", va="top", fontsize=9, fontweight="bold",
+                clip_on=False,
             )
 
     return im
@@ -211,7 +213,7 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
 
         fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
         fig.suptitle("Class Schedule Heatmap", fontsize=16, fontweight="bold", y=0.96)
-        fig.subplots_adjust(left=0.10, right=0.92, top=0.85, bottom=0.10)
+        fig.subplots_adjust(left=0.10, right=0.92, top=0.85, bottom=0.15)
         _mpl_heatmap(ax, pivot_day, f"{term} — Student Enrollment by Day of Week")
         _add_pdf_footer(fig)
         pdf.savefig(fig)
@@ -235,7 +237,7 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
             pivot_time.index = pivot_time.index.droplevel(0)
 
             fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
-            fig.subplots_adjust(left=0.10, right=0.92, top=0.90, bottom=0.10)
+            fig.subplots_adjust(left=0.10, right=0.92, top=0.90, bottom=0.15)
             _mpl_heatmap(ax, pivot_time, f"{term} — {campus} — Enrollment by Time & Day")
             _add_pdf_footer(fig)
             pdf.savefig(fig)
