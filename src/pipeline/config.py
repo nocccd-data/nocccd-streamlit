@@ -3,13 +3,13 @@ from pathlib import Path
 DATASETS = {
     "fast_facts_emp": {
         "sql_file": "fast_facts_emp.sql",
-        "fisc_year": ["2025"],
+        "fisc_year": ["2023", "2024", "2025"],
         "param_name": "fisc_year",
         "db_section": "rept",
     },
     "fast_facts_stu": {
         "sql_file": "fast_facts_stu.sql",
-        "acyr_code": ["2024"],
+        "acyr_code": ["2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
