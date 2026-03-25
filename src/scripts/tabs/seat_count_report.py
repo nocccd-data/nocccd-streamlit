@@ -301,6 +301,8 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
                     fontweight="bold", color="black",
                 )
             cursor = PAGE_H - MT
+            # Column header on every page
+            _draw_header_row()
 
         def _ensure_space(needed):
             if cursor - needed < MB:
@@ -367,9 +369,6 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
                     fontsize=6.5, fontweight="bold", color="#003056",
                 )
                 cursor -= ROW_H
-
-                # Column header
-                _draw_header_row()
 
                 courses = (
                     df_dept.groupby(["subject_code", "course_number"], sort=True)
