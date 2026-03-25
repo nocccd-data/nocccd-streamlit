@@ -98,6 +98,8 @@ Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`no
 
 **Email credentials**: Stored in `.streamlit/secrets.toml` under `[email]` section. Uses a dedicated Gmail account (`nocccd.reports@gmail.com`) with App Password (2-Step Verification must be enabled on the Google account). Tableau Cloud credentials in the same file are used to download Hyper data.
 
+**Scheduled delivery**: `.github/workflows/mail-reports.yml` runs at 9am PDT weekdays via GitHub Actions cron. Also supports manual trigger from the Actions tab. Secrets are stored in GitHub repo settings (Settings > Secrets), mapped to `secrets.toml` keys at runtime by the workflow.
+
 ### Tab system (`src/scripts/tabs/`)
 
 `tabs/__init__.py` has a `TABS` list of `(label, render_fn)` tuples. `streamlit_app.py` renders whichever tab is selected in the sidebar.

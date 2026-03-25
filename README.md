@@ -191,6 +191,14 @@ python -m src.pipeline.mail seat_count_fall2025_by_campus --recipient "Test Reci
 python -m src.pipeline.mail seat_count_fall2025_by_campus
 ```
 
+### Scheduled delivery (GitHub Actions)
+
+The workflow `.github/workflows/mail-reports.yml` sends reports automatically at **9am PDT weekdays**. It can also be triggered manually from the Actions tab with a campaign name and optional dry-run flag.
+
+GitHub Actions secrets required (Settings > Secrets and variables > Actions):
+- `TABLEAU_SERVER`, `TABLEAU_SITE_NAME`, `TABLEAU_PAT_NAME`, `TABLEAU_PAT_VALUE` — Tableau Cloud credentials
+- `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` — Gmail SMTP credentials
+
 ### Streamlit UI
 
 The **Mail Admin** tab in the Streamlit app provides an interactive interface to preview campaigns, dry-run PDF generation, and send emails with a progress bar.
