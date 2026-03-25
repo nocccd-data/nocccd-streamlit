@@ -257,8 +257,8 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
     # width_fraction is relative to usable width (PAGE_W - ML - MR)
     usable = PAGE_W - ML - MR
     _cols = [
-        ("CRN",   0.055), ("Sched", 0.065), ("Start", 0.085), ("End", 0.085),
-        ("XList", 0.045),
+        ("CRN",   0.05),  ("Sched", 0.115), ("Start", 0.07),  ("End", 0.07),
+        ("XList", 0.04),
         ("Max",   0.04),  ("Enrl",  0.04),  ("Fill%", 0.05),
         ("Cens",  0.04),  ("Cens%", 0.05),
         ("AM",    0.04),  ("AM%",   0.05),
