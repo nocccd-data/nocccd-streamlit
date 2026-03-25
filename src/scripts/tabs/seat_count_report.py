@@ -235,7 +235,8 @@ def _fillrate_mpl_color(rate: float) -> str:
     return "#F8D7DA"
 
 
-def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
+def _generate_pdf(df: pd.DataFrame, term_title: str,
+                   filter_scope: str = "", summary: dict | None = None) -> bytes:
     """Render a continuous banded report as a multi-page PDF.
 
     Rows flow continuously across pages (no per-department clipping).
@@ -251,19 +252,19 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
     MT = 0.70             # top margin
     MB = 0.55             # bottom margin (room for footer)
     ROW_H = 0.16          # row height in inches
-    FONT_SZ = 6.0
+    FONT_SZ = 7.0
 
     # Column definitions: (label, width_fraction, align)
     # width_fraction is relative to usable width (PAGE_W - ML - MR)
     usable = PAGE_W - ML - MR
     _cols = [
-        ("CRN",   0.05),  ("Sched", 0.115), ("Start", 0.07),  ("End", 0.07),
-        ("XList", 0.04),
-        ("Max",   0.04),  ("Enrl",  0.04),  ("Fill%", 0.05),
-        ("Cens",  0.04),  ("Cens%", 0.05),
-        ("AM",    0.04),  ("AM%",   0.05),
-        ("PM",    0.04),  ("PM%",   0.05),
-        ("NoHr",  0.04),  ("NoHr%", 0.05),
+        ("CRN",   0.05),  ("Sched", 0.12),  ("Start", 0.09),  ("End", 0.09),
+        ("XList", 0.05),
+        ("Max",   0.05),  ("Enrl",  0.05),  ("Fill%", 0.05),
+        ("Cens",  0.05),  ("Cens%", 0.05),
+        ("AM",    0.05),  ("AM%",   0.05),
+        ("PM",    0.05),  ("PM%",   0.05),
+        ("NoHr",  0.05),  ("NoHr%", 0.05),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -294,13 +295,61 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
             ax.axis("off")
             page_num += 1
             if page_num == 1:
+                from matplotlib.patches import FancyBboxPatch
+
+                # Title — left justified
                 ax.text(
-                    PAGE_W / 2, PAGE_H - 0.35,
-                    f"Seat Count Report \u2014 {term_title}",
-                    ha="center", va="top", fontsize=12,
+                    ML, PAGE_H - 0.35,
+                    "Seat Count Report",
+                    ha="left", va="top", fontsize=14,
                     fontweight="bold", color="black",
                 )
-            cursor = PAGE_H - MT
+                # Filter scope subtitle
+                scope_text = filter_scope or term_title
+                ax.text(
+                    ML, PAGE_H - 0.60,
+                    scope_text,
+                    ha="left", va="top", fontsize=10,
+                    fontweight="bold", color="#003056",
+                )
+                # Summary metric cards
+                if summary:
+                    card_y = PAGE_H - 1.25
+                    card_h = 0.48
+                    card_gap = 0.08
+                    card_w = (usable - card_gap * 3) / 4
+                    metrics = [
+                        ("Total Sections", f"{summary['sections']:,}"),
+                        ("Total Seats", f"{summary['max']:,}"),
+                        ("Current Enrolled", f"{summary['enrolled']:,}"),
+                        ("Overall Fill Rate", _fmt_pct(summary['fill'])),
+                    ]
+                    for idx, (label, value) in enumerate(metrics):
+                        cx = ML + idx * (card_w + card_gap)
+                        # Card border
+                        ax.add_patch(FancyBboxPatch(
+                            (cx, card_y), card_w, card_h,
+                            boxstyle="round,pad=0.03",
+                            facecolor="white", edgecolor="#AAAAAA",
+                            linewidth=0.8, zorder=0,
+                        ))
+                        # Label
+                        ax.text(
+                            cx + 0.08, card_y + card_h - 0.06,
+                            label, ha="left", va="top",
+                            fontsize=7, color="#555555",
+                        )
+                        # Value
+                        ax.text(
+                            cx + 0.08, card_y + 0.06,
+                            value, ha="left", va="bottom",
+                            fontsize=12, fontweight="bold", color="black",
+                        )
+                    cursor = card_y - 0.20
+                else:
+                    cursor = PAGE_H - MT - 0.50
+            else:
+                cursor = PAGE_H - MT
             # Column header on every page
             _draw_header_row()
 
@@ -323,7 +372,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
                 ax.text(
                     col_x[i] + col_w[i] / 2, cursor - ROW_H / 2,
                     label, ha="center", va="center",
-                    fontsize=5, fontweight="bold", color="white",
+                    fontsize=6, fontweight="bold", color="white",
                 )
             cursor -= ROW_H
 
@@ -366,7 +415,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
                 ax.text(
                     ML + 0.05, cursor - ROW_H / 2,
                     dept_label, ha="left", va="center",
-                    fontsize=6.5, fontweight="bold", color="#003056",
+                    fontsize=7.5, fontweight="bold", color="#003056",
                 )
                 cursor -= ROW_H
 
@@ -462,7 +511,10 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
 
 def generate_report_pdf(df: pd.DataFrame, params: dict) -> bytes:
     """Public API for the mail system. params must include 'term_title'."""
-    return _generate_pdf(df, params.get("term_title", ""))
+    term_title = params.get("term_title", "")
+    filter_scope = params.get("filter_scope", term_title)
+    summary = _compute_totals(df)
+    return _generate_pdf(df, term_title, filter_scope=filter_scope, summary=summary)
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +576,18 @@ def render():
         filtered = filtered[filtered["department_desc"] == department]
 
     # --- Sidebar: PDF export (after query block per ordering rule) ---
-    pdf_bytes = _generate_pdf(filtered, term_title)
+    # Build filter scope for PDF
+    _scope_parts = [term_title]
+    if campus != "All":
+        _scope_parts.append(campus)
+    if division != "All":
+        _scope_parts.append(division)
+    if department != "All":
+        _scope_parts.append(department)
+    _filter_scope = " / ".join(_scope_parts)
+    _summary = _compute_totals(filtered)
+    pdf_bytes = _generate_pdf(filtered, term_title,
+                              filter_scope=_filter_scope, summary=_summary)
     st.sidebar.download_button(
         "Download PDF",
         data=pdf_bytes,
@@ -533,8 +596,15 @@ def render():
         key="sc_pdf_btn",
     )
 
-    # --- Main: Term title ---
-    st.subheader(f"{term_title}")
+    # --- Main: Term title + filter scope ---
+    filter_parts = [term_title]
+    if campus != "All":
+        filter_parts.append(campus)
+    if division != "All":
+        filter_parts.append(division)
+    if department != "All":
+        filter_parts.append(department)
+    st.subheader(" / ".join(filter_parts))
 
     # --- Main: Summary metrics ---
     totals = _compute_totals(filtered)
