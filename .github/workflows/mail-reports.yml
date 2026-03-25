@@ -1,0 +1,63 @@
+name: Mail Reports
+
+on:
+  # Scheduled: 9am PST weekdays (5pm UTC, or 4pm UTC during DST)
+  # Using 4pm UTC = 9am PDT (March-November)
+  schedule:
+    - cron: '0 16 * * 1-5'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      campaign:
+        description: 'Campaign name'
+        required: true
+        default: 'seat_count_fall2025_by_campus'
+      dry_run:
+        description: 'Dry run (generate PDFs, do not send)'
+        type: boolean
+        default: false
+
+jobs:
+  send-reports:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write secrets.toml
+        run: |
+          mkdir -p .streamlit
+          cat > .streamlit/secrets.toml << 'SECRETS_EOF'
+          SERVER = "${{ secrets.TABLEAU_SERVER }}"
+          SITE_NAME = "${{ secrets.TABLEAU_SITE_NAME }}"
+          PAT_NAME = "${{ secrets.TABLEAU_PAT_NAME }}"
+          PAT_VALUE = "${{ secrets.TABLEAU_PAT_VALUE }}"
+
+          [email]
+          smtp_server = "smtp.gmail.com"
+          smtp_port = 587
+          smtp_username = "${{ secrets.GMAIL_USERNAME }}"
+          smtp_password = "${{ secrets.GMAIL_APP_PASSWORD }}"
+          from_email = "${{ secrets.GMAIL_USERNAME }}"
+          from_name = "NOCCCD ESIE Data Team"
+          SECRETS_EOF
+
+      - name: Send reports
+        run: |
+          CAMPAIGN="${{ github.event.inputs.campaign || 'seat_count_fall2025_by_campus' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+
+          if [ "$DRY_RUN" = "true" ]; then
+            python -m src.pipeline.mail "$CAMPAIGN" --dry-run
+          else
+            python -m src.pipeline.mail "$CAMPAIGN"
+          fi
