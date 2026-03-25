@@ -1,6 +1,4 @@
-"""Home landing page — displays project cards with progress tracking."""
-
-from datetime import date, datetime
+"""Home landing page — displays project cards with search and sort."""
 
 import streamlit as st
 
@@ -8,39 +6,47 @@ from home_config import PROJECTS
 
 
 def render():
+    # Search and sort controls
+    c1, c2 = st.columns([3, 1])
+    search = c1.text_input("Search projects", placeholder="Type to filter...", key="home_search")
+    sort_order = c2.selectbox("Sort", ["Default", "A-Z", "Z-A"], key="home_sort")
+
+    # Filter projects by search term
+    filtered = PROJECTS
+    if search:
+        q = search.lower()
+        filtered = [
+            p for p in PROJECTS
+            if q in p["tab_label"].lower()
+            or q in p["description"].lower()
+            or any(q in m.lower() for m in p.get("metrics", []))
+        ]
+
+    # Sort
+    if sort_order == "A-Z":
+        filtered = sorted(filtered, key=lambda p: p["tab_label"])
+    elif sort_order == "Z-A":
+        filtered = sorted(filtered, key=lambda p: p["tab_label"], reverse=True)
+
+    if not filtered:
+        st.info("No projects match your search.")
+        return
+
+    # Render cards
     cols = st.columns(3)
-    for idx, proj in enumerate(PROJECTS):
+    for idx, proj in enumerate(filtered):
         col = cols[idx % 3]
         with col:
             with st.container(border=True):
                 st.subheader(proj["tab_label"])
                 st.caption(proj["description"])
 
-                # Due date with color coding
-                due_str = proj.get("due_date")
-                if due_str:
-                    due = datetime.strptime(due_str, "%Y-%m-%d").date()
-                    days_left = (due - date.today()).days
-                    if days_left < 0:
-                        st.markdown(f":red[**Due: {due_str}** (overdue)]")
-                    elif days_left <= 7:
-                        st.markdown(f":orange[**Due: {due_str}** ({days_left}d left)]")
-                    else:
-                        st.markdown(f"**Due:** {due_str} ({days_left}d left)")
-                else:
-                    st.markdown("**Due:** No due date")
-
-                # Progress bar from milestones
-                milestones = proj["milestones"]
-                done_count = sum(1 for m in milestones if m["done"])
-                total = len(milestones)
-                st.progress(done_count / total if total else 0, text=f"{done_count}/{total} milestones")
-
-                # Milestone checklist
-                with st.expander("Milestones"):
-                    for m in milestones:
-                        icon = ":white_check_mark:" if m["done"] else ":white_large_square:"
-                        st.markdown(f"{icon} {m['label']}")
+                # Metrics list
+                metrics = proj.get("metrics", [])
+                if metrics:
+                    with st.expander("Metrics"):
+                        for m in metrics:
+                            st.markdown(f"- {m}")
 
                 # Navigate button
                 st.button(

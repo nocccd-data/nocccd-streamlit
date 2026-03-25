@@ -1,102 +1,86 @@
 """Project card configuration for the Home landing page.
 
-Edit this file to update card descriptions, due dates, and milestones.
+Edit this file to update card descriptions and metrics.
 Each entry's ``tab_label`` must match the label string in ``tabs.TABS``.
-Set ``due_date`` to ``None`` for projects with no due date.
+``metrics`` lists the types of metrics/data available in each dashboard.
 """
 
 PROJECTS = [
     {
         "tab_label": "Fast Facts",
         "description": "Student and employee demographics snapshot for the current academic year.",
-        "due_date": None,
-        "milestones": [
-            {"label": "Create fast_facts_stu.sql and fast_facts_emp.sql", "done": True},
-            {"label": "Register datasets in config.py", "done": True},
-            {"label": "Build Fast Facts Streamlit tab", "done": True},
-            {"label": "Add PDF export", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "Student headcount by ethnicity, gender, age",
+            "Employee headcount by classification, ethnicity, gender",
+            "Student enrollment status breakdown",
+            "Employee full-time/part-time ratios",
         ],
     },
     {
         "tab_label": "Seat Count Report",
         "description": "Section-level seat counts and fill rates by campus, division, and department.",
-        "due_date": None,
-        "milestones": [
-            {"label": "Create seat_count_report.sql", "done": True},
-            {"label": "Register dataset in config.py", "done": True},
-            {"label": "Build Seat Count Report tab", "done": True},
-            {"label": "Add PDF export", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "Current enrollment and fill rates",
+            "Census enrollment and fill rates",
+            "First day morning/evening/no-hours enrollment",
+            "Crosslist-adjusted seat counts",
+            "Department and division totals",
         ],
     },
     {
         "tab_label": "Class Schedule Heatmap",
         "description": "Heatmap visualization of class schedule enrollment by day of week and time of day.",
-        "due_date": None,
-        "milestones": [
-            {"label": "Create class_schedule_heatmap.sql", "done": True},
-            {"label": "Register dataset in config.py", "done": True},
-            {"label": "Build Streamlit tab", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "Section counts by day and time slot",
+            "Enrollment density heatmap",
+            "Campus-level comparisons",
         ],
     },
     {
         "tab_label": "Persistence by Student Type",
         "description": "Fall-to-spring and fall-to-fall persistence rates by campus and student type.",
-        "due_date": None,
-        "milestones": [
-            {"label": "Create persistence_by_styp.sql", "done": True},
-            {"label": "Register dataset in config.py", "done": True},
-            {"label": "Build Streamlit tab", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "Fall-to-spring persistence rates",
+            "Fall-to-fall persistence rates",
+            "Breakdown by student type (FTIC, transfer, returning)",
+            "Multi-term trend lines by campus",
         ],
     },
     {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
-        "due_date": "",
-        "milestones": [
-            {"label": "Create MV of COI and NHRDIST base queries", "done": True},
-            {"label": "Create coi_nhrdist.sql query for calcs", "done": True},
-            {"label": "Build metrics and tables via Jupyter", "done": True},
-            {"label": "Import metrics and tables to Streamlit", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "Total estimated vs actual payments",
+            "Payment difference by term",
+            "Top outlier employees",
+            "Match status breakdown",
         ],
     },
     {
         "tab_label": "SCFF Degrees - MIS SP Submitted",
         "description": "Compares MIS SP Submitted records against SCFF financial-aid awards.",
-        "due_date": "",
-        "milestones": [
-            {"label": "Create deg_scff.sql base SCFF counts", "done": True},
-            {"label": "Create deg_sp_submitted.sql comparison query", "done": True},
-            {"label": "Metrics and table exploration via Jupyter", "done": True},
-            {"label": "Import tables to Streamlit", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "SCFF degree counts by DICD",
+            "MIS SP submitted vs SCFF match rates",
+            "Unmatched record detail",
         ],
     },
     {
         "tab_label": "SCFF Degrees - MIS SP Current",
         "description": "Compares MIS SP Current records against SCFF financial-aid awards.",
-        "due_date": "",
-        "milestones": [
-            {"label": "Create deg_sp_current.sql comparison query", "done": True},
-            {"label": "Metrics and table exploration via Jupyter", "done": True},
-            {"label": "Import tables to Streamlit", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "SCFF degree counts by DICD",
+            "MIS SP current vs SCFF match rates",
+            "Unmatched record detail",
         ],
     },
     {
         "tab_label": "SCFF Awards - MIS FA Submitted",
         "description": "Compares MIS FA Submitted records against SCFF financial-aid awards.",
-        "due_date": "",
-        "milestones": [
-            {"label": "Create deg_fa_scff.sql base SCFF counts", "done": True},
-            {"label": "Create deg_fa_submitted.sql comparison query", "done": True},
-            {"label": "Metrics and table exploration via Jupyter", "done": True},
-            {"label": "Import tables to Streamlit", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
+        "metrics": [
+            "SCFF award counts by DICD",
+            "MIS FA submitted vs SCFF match rates",
+            "Unmatched record detail",
         ],
     },
 ]
