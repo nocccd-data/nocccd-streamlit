@@ -19,6 +19,18 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "Seat Count Report",
+        "description": "Section-level seat counts and fill rates by campus, division, and department.",
+        "due_date": None,
+        "milestones": [
+            {"label": "Create seat_count_report.sql", "done": True},
+            {"label": "Register dataset in config.py", "done": True},
+            {"label": "Build Seat Count Report tab", "done": True},
+            {"label": "Add PDF export", "done": True},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
+    {
         "tab_label": "Class Schedule Heatmap",
         "description": "Heatmap visualization of class schedule enrollment by day of week and time of day.",
         "due_date": None,
@@ -84,18 +96,6 @@ PROJECTS = [
             {"label": "Create deg_fa_submitted.sql comparison query", "done": True},
             {"label": "Metrics and table exploration via Jupyter", "done": True},
             {"label": "Import tables to Streamlit", "done": True},
-            {"label": "Stakeholder review complete", "done": False},
-        ],
-    },
-    {
-        "tab_label": "Seat Count Report",
-        "description": "Section-level seat counts and fill rates by campus, division, and department.",
-        "due_date": None,
-        "milestones": [
-            {"label": "Create seat_count_report.sql", "done": True},
-            {"label": "Register dataset in config.py", "done": True},
-            {"label": "Build Seat Count Report tab", "done": False},
-            {"label": "Add PDF export", "done": False},
             {"label": "Stakeholder review complete", "done": False},
         ],
     },

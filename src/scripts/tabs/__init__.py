@@ -14,6 +14,7 @@ from .mail_admin import render as mail_admin_render
 # To retire a tab: remove its tuple (and optionally delete the module).
 TABS = [
     ("Fast Facts", fast_facts_render),
+    ("Seat Count Report", seat_count_report_render),
     ("Class Schedule Heatmap", class_schedule_heatmap_render),
     ("Persistence by Student Type", persistence_by_styp_render),
     ("COI vs NHRDIST Validation", coi_nhrdist_val_render),
@@ -21,6 +22,5 @@ TABS = [
     ("SCFF Degrees - MIS SP Current", mis_sp_current_scff_render),
     ("SCFF Awards - MIS FA Submitted", mis_fa_submitted_scff_render),
     ("SCFF CTE - MIS SX Submitted", cte_sx_submitted_scff_render),
-    ("Seat Count Report", seat_count_report_render),
     ("Mail Admin", mail_admin_render),
 ]
