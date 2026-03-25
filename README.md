@@ -144,6 +144,26 @@ python -m src.pipeline.run coi_nhrdist_val --extract-only
 
 Hyper files are written to `src/pipeline/hyper/`.
 
+### Scheduled daily refresh (macOS launchd)
+
+A launch agent runs the pipeline daily at noon in the background (no terminal window). Requires VPN connection to reach Oracle. If VPN is not connected, it fails silently and logs to `~/Library/Logs/nocccd-pipeline.log`.
+
+Plist location: `~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`
+
+```bash
+# Check the log
+cat ~/Library/Logs/nocccd-pipeline.log
+
+# Run it right now (to test)
+launchctl start com.nocccd.pipeline.refresh
+
+# Disable it
+launchctl unload ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
+
+# Re-enable it
+launchctl load ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
+```
+
 ## Mass Mailing: Filtered PDF Reports
 
 The mail system generates filtered PDF reports and emails them to specific recipients. Each recipient gets a PDF filtered to their campus/division/department. Data is fetched from **Tableau Cloud Hyper files** (same pre-extracted data the Streamlit Cloud app uses), not Oracle directly.
