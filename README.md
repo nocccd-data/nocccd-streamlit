@@ -195,6 +195,17 @@ python -m src.pipeline.mail seat_count_fall2025_by_campus
 
 The workflow `.github/workflows/mail-reports.yml` sends reports automatically at **9am PDT weekdays**. It can also be triggered manually from the Actions tab with a campaign name and optional dry-run flag.
 
+To adjust the schedule, edit the cron line in `.github/workflows/mail-reports.yml`. GitHub Actions cron uses **UTC only** and does not auto-adjust for daylight saving:
+
+| Schedule | Cron | Notes |
+|----------|------|-------|
+| 9am PDT (default) | `0 16 * * 1-5` | Mar–Nov (daylight saving) |
+| 9am PST | `0 17 * * 1-5` | Nov–Mar (standard time) |
+| 8am PDT | `0 15 * * 1-5` | One hour earlier |
+| Noon PDT | `0 19 * * 1-5` | |
+
+The `1-5` means Monday–Friday. During the DST/PST switch, the schedule shifts by 1 hour.
+
 GitHub Actions secrets required (Settings > Secrets and variables > Actions):
 - `TABLEAU_SERVER`, `TABLEAU_SITE_NAME`, `TABLEAU_PAT_NAME`, `TABLEAU_PAT_VALUE` — Tableau Cloud credentials
 - `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` — Gmail SMTP credentials
