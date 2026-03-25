@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Streamlit dashboards for NOCCCD (North Orange County Community College District) ad-hoc data validation. The app runs in two modes:
+Streamlit dashboards for NOCCCD (North Orange County Community College District) data reporting and analytics — the **NOCCCD Data Hub**. The app runs in two modes:
 - **Local**: queries Oracle EDW directly via `oracledb` + SQLAlchemy
 - **Cloud** (Streamlit Cloud): downloads pre-extracted `.hyper` files from Tableau Cloud
 

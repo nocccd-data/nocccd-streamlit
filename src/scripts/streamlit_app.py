@@ -10,7 +10,7 @@ from theme import apply_theme
 from auth import is_admin_tab, render_admin_gate, render_admin_hub
 
 st.set_page_config(
-    page_title="ESIE Ad-Hoc Visualization Board",
+    page_title="NOCCCD Data Hub",
     page_icon=":bar_chart:",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -56,7 +56,7 @@ selected = st.sidebar.selectbox("Project", labels, key="project_selectbox", on_c
 st.sidebar.markdown("---")
 
 # Title
-st.title("ESIE Ad-Hoc Visualization Board")
+st.title("NOCCCD Data Hub")
 
 admin_mode = st.session_state.get("_admin_mode", False)
 admin_selected = st.session_state.get("_admin_selected_tab")

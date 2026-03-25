@@ -1,6 +1,6 @@
 # nocccd-streamlit
 
-Streamlit dashboards for NOCCCD ad-hoc data validation. Supports two data modes:
+**NOCCCD Data Hub** — Streamlit dashboards for NOCCCD data reporting and analytics. Supports two data modes:
 
 - **Local mode** — queries Oracle EDW directly
 - **Cloud mode** — reads pre-extracted Hyper files from Tableau Cloud (used on Streamlit Cloud)
