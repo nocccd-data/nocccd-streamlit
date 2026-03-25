@@ -84,6 +84,17 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 8. Add a project card in `home_config.py` — `tab_label` must exactly match the label string in `tabs.TABS` or the Home "Open" button won't navigate correctly
 9. Update `README.md` file tree
 
+### Cascading sidebar filters
+
+The Seat Count Report tab (`seat_count_report.py`) uses cascading dynamic filters: Term Code → Campus → Division → Department. The approach:
+1. Query button fetches **all** rows for the selected term into `st.session_state`
+2. Campus/Division/Department `st.sidebar.selectbox()` widgets each include an "All" option
+3. Each filter's options list is derived from the **already-filtered** DataFrame (filtered by parent selections)
+4. When a parent filter changes, Streamlit reruns the script; child options update and reset to "All" if the previous selection is no longer valid
+5. No additional database calls — all filtering is local pandas operations
+
+This pattern is suitable for any tab where the full dataset fits in memory and users need hierarchical drill-down.
+
 ### SQL parameterization
 
 Two patterns are supported:
@@ -92,7 +103,7 @@ Two patterns are supported:
 
 ### Sidebar PDF export
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap) use `st.sidebar.download_button()` to offer a PDF download.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report) use `st.sidebar.download_button()` to offer a PDF download.
 
 **Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
 
@@ -107,7 +118,9 @@ if "xx_data" in st.session_state:
     st.sidebar.download_button("Download PDF", data=..., key="xx_pdf_btn")
 ```
 
-**PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. See `fast_facts.py` (`_generate_pdf`) and `class_schedule_heatmap.py` (`_generate_pdf` + `_mpl_heatmap`) for examples.
+**PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. Two patterns exist:
+- **Table-based**: `ax.table()` renders a DataFrame as a table on a matplotlib axes. Good for small/medium tables. See `fast_facts.py` and `class_schedule_heatmap.py`.
+- **Row-by-row drawing**: For long banded reports that span many pages, draw each row with `ax.text()` and `Rectangle` patches directly on a full-page axes (`ax.set_xlim(0, PAGE_W)`). This avoids clipping — rows flow continuously across pages. See `seat_count_report.py` (`_generate_pdf`).
 
 **Page layout**: Use a fixed page size (e.g. `8.5 x 11` portrait for tables, `11 x 8.5` landscape for charts) and position content with `fig.subplots_adjust()` margins. Do **not** use `tight_layout()` or `bbox_inches="tight"` — these shrink-wrap the figure to the content, leaving no room for headers/footers and causing overlaps. Content should fit within the page margins, not fill the entire page.
 
@@ -135,6 +148,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 - **Dataframe canvas**: `st.dataframe()` uses glide-data-grid which renders to a `<canvas>` element. CSS cannot style canvas content. The only way to customize gridline color, header background, and text colors is through `config.toml` theme keys (`dataframeBorderColor`, `dataframeHeaderBackgroundColor`, `textColor`). Header text color and index column text color are derived from `textColor` at 60% and 80% opacity respectively — there is no independent control.
 - **Card border scoping**: The `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` selector matches both Home page cards and tab metric columns. Home cards already get borders from `st.container(border=True)`, so adding `border` to this generic selector creates a double border. Use `:has([data-testid="stMetric"])` to scope border/padding/radius to metric columns only. Setting `border-color` alone is insufficient — `border-style` defaults to `none`, so use the full `border: 1px solid ...` shorthand.
 - **Expanding crosstab tables**: The MIS SP tabs use `_build_expandable_crosstab()` which renders HTML tables via `st.markdown(unsafe_allow_html=True)`. Header styling uses `var(--secondary-background-color, #555)` but this CSS variable doesn't resolve inside `st.markdown()` HTML, so it falls back to `#555` (dark grey) in both modes. The `theme.py` overrides fix this — `.grid-row.header` and `.sub-table thead th` are globally targeted with `light-dark()` to set proper light/dark backgrounds and text colors. Reuse `_build_expandable_crosstab()` for future tabs that need expandable pivot tables.
+- **Banded HTML tables**: The Seat Count Report uses `.sc-banded` CSS class for grouped banded tables rendered via `st.markdown(unsafe_allow_html=True)`. Styled in `theme.py` with `light-dark()` for department headers (`.dept-header`), course headers (`.course-header`), subtotal rows (`.subtotal-row`, `.dept-total`), and fill rate coloring (`.sc-fillrate-high/med/low`). Each division is wrapped in `st.expander()`. Reuse this pattern for future banded/grouped reports.
 
 ### Color palette reference
 
@@ -150,6 +164,11 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 | Crosstab header bg | `#E8E8E8` | `#555` |
 | Crosstab header text | `#000000` | `#FFFFFF` |
 | Dropdown separator | `#444444` | `#AAAAAA` |
+| Banded dept header | `#D6E4F0` | `#1A3A5C` |
+| Banded course header | `#F0F4F8` | `#2D3748` |
+| Fill rate high (>=80%) | `#D4EDDA` | `#1B4D3E` |
+| Fill rate med (50-80%) | `#FFF3CD` | `#4D3F00` |
+| Fill rate low (<50%) | `#F8D7DA` | `#4D1F24` |
 
 ### Adding themed elements
 
