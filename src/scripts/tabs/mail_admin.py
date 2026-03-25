@@ -53,8 +53,6 @@ def render():
     st.dataframe(pd.DataFrame(recipient_data), hide_index=True, use_container_width=True)
 
     # --- Sidebar: Actions ---
-    st.sidebar.divider()
-
     dry_run_btn = st.sidebar.button("Dry Run (Preview)", key="ma_dry_run_btn")
     send_btn = st.sidebar.button("Send All", key="ma_send_btn", type="primary")
 
