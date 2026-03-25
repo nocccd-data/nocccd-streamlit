@@ -236,130 +236,224 @@ def _fillrate_mpl_color(rate: float) -> str:
 
 
 def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
+    """Render a continuous banded report as a multi-page PDF.
+
+    Rows flow continuously across pages (no per-department clipping).
+    Uses matplotlib text drawing for precise row-by-row control.
+    """
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
-        "axes.facecolor": "white",
         "text.color": "black",
-        "axes.labelcolor": "black",
-        "savefig.facecolor": "white",
     })
 
-    PAGE_W, PAGE_H = 11.0, 8.5  # landscape
-    MARGIN_TOP = 0.70
-    MARGIN_BOT = 0.50
-    ROW_H = 0.22
-    HEADER_H = 0.35
+    PAGE_W, PAGE_H = 8.5, 11.0
+    ML, MR = 0.50, 0.50  # left/right margins in inches
+    MT = 0.70             # top margin
+    MB = 0.55             # bottom margin (room for footer)
+    ROW_H = 0.16          # row height in inches
+    FONT_SZ = 6.0
+
+    # Column definitions: (label, width_fraction, align)
+    # width_fraction is relative to usable width (PAGE_W - ML - MR)
+    usable = PAGE_W - ML - MR
+    _cols = [
+        ("CRN",   0.055), ("Sched", 0.065), ("Start", 0.085), ("End", 0.085),
+        ("XList", 0.045),
+        ("Max",   0.04),  ("Enrl",  0.04),  ("Fill%", 0.05),
+        ("Cens",  0.04),  ("Cens%", 0.05),
+        ("AM",    0.04),  ("AM%",   0.05),
+        ("PM",    0.04),  ("PM%",   0.05),
+        ("NoHr",  0.04),  ("NoHr%", 0.05),
+    ]
+    col_labels = [c[0] for c in _cols]
+    col_w = [c[1] * usable for c in _cols]
+    col_x = []
+    x = ML
+    for w in col_w:
+        col_x.append(x)
+        x += w
+    n_cols = len(col_labels)
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
+        fig = None
+        ax = None
+        cursor = 0.0
+        page_num = 0
+
+        def _new_page():
+            nonlocal fig, ax, cursor, page_num
+            if fig is not None:
+                _add_pdf_footer(fig)
+                pdf.savefig(fig)
+                plt.close(fig)
+            fig = plt.figure(figsize=(PAGE_W, PAGE_H))
+            ax = fig.add_axes([0, 0, 1, 1])
+            ax.set_xlim(0, PAGE_W)
+            ax.set_ylim(0, PAGE_H)
+            ax.axis("off")
+            page_num += 1
+            if page_num == 1:
+                ax.text(
+                    PAGE_W / 2, PAGE_H - 0.35,
+                    f"Seat Count Report \u2014 {term_title}",
+                    ha="center", va="top", fontsize=12,
+                    fontweight="bold", color="black",
+                )
+            cursor = PAGE_H - MT
+
+        def _ensure_space(needed):
+            if cursor - needed < MB:
+                _new_page()
+
+        def _draw_row_bg(y, color, height=ROW_H):
+            from matplotlib.patches import Rectangle
+            ax.add_patch(Rectangle(
+                (ML, y), usable, height,
+                facecolor=color, edgecolor="none", zorder=0,
+            ))
+
+        def _draw_header_row():
+            nonlocal cursor
+            _ensure_space(ROW_H)
+            _draw_row_bg(cursor - ROW_H, "#003056")
+            for i, label in enumerate(col_labels):
+                ax.text(
+                    col_x[i] + col_w[i] / 2, cursor - ROW_H / 2,
+                    label, ha="center", va="center",
+                    fontsize=5, fontweight="bold", color="white",
+                )
+            cursor -= ROW_H
+
+        def _draw_gridlines(y):
+            for i in range(n_cols + 1):
+                xp = col_x[i] if i < n_cols else col_x[-1] + col_w[-1]
+                ax.plot([xp, xp], [y, y + ROW_H], color="#CCCCCC",
+                        linewidth=0.3, zorder=1)
+            ax.plot([ML, ML + usable], [y, y], color="#CCCCCC",
+                    linewidth=0.3, zorder=1)
+
+        _new_page()
+
         divisions = sorted(df["division_desc"].dropna().unique())
 
-        for div_idx, division in enumerate(divisions):
+        for division in divisions:
             df_div = df[df["division_desc"] == division]
             departments = sorted(df_div["department_desc"].dropna().unique())
 
-            fig = plt.figure(figsize=(PAGE_W, PAGE_H))
-            if div_idx == 0:
-                fig.suptitle(
-                    f"Seat Count Report \u2014 {term_title}",
-                    fontsize=14, fontweight="bold", color="black", y=0.96,
-                )
-            fig.text(
-                0.04, PAGE_H - 0.35,
-                division, fontsize=12, fontweight="bold", color="#003056",
-                transform=fig.dpi_scale_trans,
+            # Division header
+            _ensure_space(ROW_H * 2)
+            ax.text(
+                ML, cursor - ROW_H * 0.6,
+                division, ha="left", va="center",
+                fontsize=9, fontweight="bold", color="#003056",
             )
-            cursor = PAGE_H - MARGIN_TOP
+            cursor -= ROW_H * 1.2
 
             for dept in departments:
                 df_dept = df_div[df_div["department_desc"] == dept]
                 dt = _compute_totals(df_dept)
 
-                # Build table data for this department
-                table_data = []
-                col_labels = ["CRN", "Subject", "Crs#", "Title", "Max", "Enrl", "Fill%"]
+                # Department header
+                _ensure_space(ROW_H * 2.5)
+                dept_label = (
+                    f"{dept}  ({dt['sections']} sect, "
+                    f"{dt['enrolled']:,}/{dt['max']:,}, {_fmt_pct(dt['fill'])})"
+                )
+                _draw_row_bg(cursor - ROW_H, "#D6E4F0")
+                ax.text(
+                    ML + 0.05, cursor - ROW_H / 2,
+                    dept_label, ha="left", va="center",
+                    fontsize=6.5, fontweight="bold", color="#003056",
+                )
+                cursor -= ROW_H
+
+                # Column header
+                _draw_header_row()
 
                 courses = (
                     df_dept.groupby(["subject_code", "course_number"], sort=True)
                     .first()
-                    .reset_index()[["subject_code", "course_number"]]
+                    .reset_index()[["subject_code", "course_number", "course_title", "crse_alias"]]
                     .sort_values(["subject_code", "course_number"])
                 )
+
                 for _, cr in courses.iterrows():
+                    subj = str(cr["subject_code"])
+                    alias = cr["crse_alias"]
+                    display_num = str(alias) if pd.notna(alias) and str(alias).strip() else str(cr["course_number"])
+                    ctitle = str(cr["course_title"])
+
+                    # Course header — merged row
+                    _ensure_space(ROW_H)
+                    _draw_row_bg(cursor - ROW_H, "#EDF2F7")
+                    ax.text(
+                        ML + 0.08, cursor - ROW_H / 2,
+                        f"{subj} {display_num} \u2014 {ctitle}",
+                        ha="left", va="center",
+                        fontsize=FONT_SZ, fontweight="bold", fontstyle="italic",
+                        color="#003056",
+                    )
+                    cursor -= ROW_H
+
+                    # CRN data rows
                     df_c = df_dept[
                         (df_dept["subject_code"] == cr["subject_code"])
                         & (df_dept["course_number"] == cr["course_number"])
                     ].sort_values("crn")
+
                     for _, r in df_c.iterrows():
-                        table_data.append([
+                        _ensure_space(ROW_H)
+                        y = cursor - ROW_H
+                        _draw_gridlines(y)
+
+                        vals = [
                             str(r["crn"]),
-                            str(r["subject_code"]),
-                            str(r["course_number"]),
-                            str(r["course_title"])[:30],
-                            f"{int(r['enroll_max']):,}",
-                            f"{int(r['current_enroll_count']):,}",
+                            str(r.get("scheduling_desc", "")) if pd.notna(r.get("scheduling_desc")) else "",
+                            _fmt_date(r["start_date"]),
+                            _fmt_date(r["end_date"]),
+                            str(r["crosslist_group"]) if pd.notna(r["crosslist_group"]) else "",
+                            _fmt_int(r["enroll_max"]),
+                            _fmt_int(r["current_enroll_count"]),
                             _fmt_pct(r["current_enroll_fillrate"]),
-                        ])
+                            _fmt_int(r["census_1_enroll_count"]),
+                            _fmt_pct(r["census_1_enroll_fillrate"]),
+                            _fmt_int(r["first_day_morning_enroll_count"]),
+                            _fmt_pct(r["first_day_morning_enroll_fillrate"]),
+                            _fmt_int(r["first_day_evening_enroll_count"]),
+                            _fmt_pct(r["first_day_evening_enroll_fillrate"]),
+                            _fmt_int(r["first_day_no_hours_enroll_count"]),
+                            _fmt_pct(r["first_day_no_hours_enroll_fillrate"]),
+                        ]
 
-                n_rows = len(table_data) + 1  # +1 for header
-                table_h = HEADER_H + ROW_H * n_rows + 0.15
+                        # Fill rate cell backgrounds
+                        rates = {
+                            7: r["current_enroll_fillrate"],
+                            9: r["census_1_enroll_fillrate"],
+                            11: r["first_day_morning_enroll_fillrate"],
+                            13: r["first_day_evening_enroll_fillrate"],
+                            15: r["first_day_no_hours_enroll_fillrate"],
+                        }
+                        for ci, rate in rates.items():
+                            from matplotlib.patches import Rectangle as Rect
+                            ax.add_patch(Rect(
+                                (col_x[ci], y), col_w[ci], ROW_H,
+                                facecolor=_fillrate_mpl_color(rate),
+                                edgecolor="none", zorder=0,
+                            ))
 
-                # Page break if needed
-                if cursor - table_h < MARGIN_BOT:
-                    _add_pdf_footer(fig)
-                    pdf.savefig(fig)
-                    plt.close(fig)
-                    fig = plt.figure(figsize=(PAGE_W, PAGE_H))
-                    cursor = PAGE_H - MARGIN_TOP
-
-                ax = fig.add_axes([
-                    0.04, (cursor - table_h) / PAGE_H,
-                    0.92, table_h / PAGE_H,
-                ])
-                ax.axis("off")
-                ax.set_title(
-                    f"{dept}  ({dt['sections']} sections, "
-                    f"{dt['enrolled']:,}/{dt['max']:,}, {_fmt_pct(dt['fill'])} fill)",
-                    fontsize=9, fontweight="bold", loc="left", color="black",
-                )
-
-                if table_data:
-                    tbl = ax.table(
-                        cellText=table_data,
-                        colLabels=col_labels,
-                        cellLoc="center",
-                        loc="upper center",
-                    )
-                    tbl.auto_set_font_size(False)
-                    tbl.set_fontsize(7)
-                    tbl.auto_set_column_width(list(range(len(col_labels))))
-                    tbl.scale(1, 1.3)
-
-                    for key, cell in tbl.get_celld().items():
-                        cell.set_facecolor("white")
-                        cell.set_text_props(color="black")
-                        cell.set_edgecolor("#CCCCCC")
-
-                    # Header row styling
-                    for col_idx in range(len(col_labels)):
-                        cell = tbl[0, col_idx]
-                        cell.set_facecolor("#003056")
-                        cell.set_text_props(color="white")
-
-                    # Fill rate column coloring
-                    fill_col = len(col_labels) - 1
-                    for row_idx in range(1, len(table_data) + 1):
-                        try:
-                            pct_str = table_data[row_idx - 1][fill_col].rstrip("%")
-                            rate = float(pct_str) / 100.0
-                            tbl[row_idx, fill_col].set_facecolor(
-                                _fillrate_mpl_color(rate)
+                        for i, val in enumerate(vals):
+                            ha = "right" if i >= 5 else "left"
+                            xp = col_x[i] + col_w[i] - 0.03 if ha == "right" else col_x[i] + 0.03
+                            ax.text(
+                                xp, y + ROW_H / 2, val,
+                                ha=ha, va="center", fontsize=FONT_SZ, color="black",
                             )
-                        except (ValueError, IndexError):
-                            pass
 
-                cursor -= table_h
+                        cursor -= ROW_H
 
+        # Final page
+        if fig is not None:
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
