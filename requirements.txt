@@ -3,6 +3,7 @@ pandas
 numpy
 matplotlib
 plotly
+streamlit-plotly-events
 altair
 oracledb
 sqlalchemy

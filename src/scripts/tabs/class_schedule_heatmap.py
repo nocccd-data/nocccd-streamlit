@@ -4,9 +4,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
+from streamlit_plotly_events import plotly_events
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_class_schedule_heatmap
@@ -63,41 +64,18 @@ def _prepare_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
 # Plotly figures (for interactive display)
 # ---------------------------------------------------------------------------
 
-def _build_day_heatmap_fig(df: pd.DataFrame, term: str):
-    """Build Campus × Day pivot heatmap figure."""
+def _pivot_day(df: pd.DataFrame):
+    """Return Campus × Day pivot of enrollment."""
     df_day = df.drop_duplicates(subset=["crn", "campus_description", "day_name"])
     day_campus = (
         df_day.groupby(["campus_description", "day_name"], as_index=False)["current_enrollment"].sum()
     )
     pivot = day_campus.pivot(index="campus_description", columns="day_name", values="current_enrollment")
-    pivot = pivot.reindex(columns=DAY_ORDER)
-
-    fig = px.imshow(
-        pivot,
-        text_auto=",.0f",
-        color_continuous_scale="YlOrRd",
-        labels={"x": "Day", "y": "Campus", "color": "Enrollment"},
-        title=f"{term} — Student Enrollment by Day of Week",
-        aspect="auto",
-    )
-    day_totals = pivot.sum()
-    for i, day in enumerate(DAY_ORDER):
-        total = day_totals.get(day)
-        if pd.notna(total):
-            fig.add_annotation(
-                x=i,
-                y=len(pivot),
-                text=f"<b>{int(total):,}</b>",
-                showarrow=False,
-                font={"size": 12},
-                xref="x",
-                yref="y",
-            )
-    return fig
+    return pivot.reindex(columns=DAY_ORDER).fillna(0)
 
 
-def _build_time_heatmap_fig(df: pd.DataFrame, term: str, campus: str):
-    """Build Hour × Day pivot heatmap figure, or None if no data."""
+def _pivot_time(df: pd.DataFrame, term: str, campus: str):
+    """Return Hour × Day pivot of enrollment, or None if no data."""
     df_filtered = df[(df["academic_term"] == term) & (df["campus_description"] == campus)]
     if df_filtered.empty:
         return None
@@ -110,31 +88,71 @@ def _build_time_heatmap_fig(df: pd.DataFrame, term: str, campus: str):
         values="current_enrollment",
         fill_value=0,
     )
-    pivot = pivot.reindex(columns=DAY_ORDER)
+    pivot = pivot.reindex(columns=DAY_ORDER).fillna(0)
     pivot.index = pivot.index.droplevel(0)
+    return pivot
 
-    fig = px.imshow(
-        pivot,
-        text_auto=",.0f",
-        color_continuous_scale="YlOrRd",
-        labels={"x": "Day", "y": "Start Time", "color": "Enrollment"},
-        title=f"{term} — {campus} — Enrollment by Time & Day",
-        aspect="auto",
+
+def _make_heatmap_fig(pivot: pd.DataFrame, title: str):
+    """Build a go.Heatmap figure with text annotations and day totals."""
+    data = pivot.values
+    vmax = np.nanmax(data) if np.nanmax(data) > 0 else 1
+
+    fig = go.Figure(data=go.Heatmap(
+        z=data,
+        x=list(pivot.columns),
+        y=list(pivot.index),
+        colorscale="YlOrRd",
+        colorbar={"title": "Enrollment"},
+        hovertemplate="Day: %{x}<br>%{y}<br>Enrollment: %{z:,.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Day",
+        yaxis={"autorange": "reversed"},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": "gray"},
     )
-    day_totals = pivot.sum()
-    for i, day in enumerate(DAY_ORDER):
-        total = day_totals.get(day)
-        if pd.notna(total) and total > 0:
+    # Cell value annotations
+    for i, row_label in enumerate(pivot.index):
+        for j, col_label in enumerate(pivot.columns):
+            val = data[i][j]
+            color = "white" if val > vmax * 0.6 else "black"
             fig.add_annotation(
-                x=i,
+                x=col_label, y=row_label,
+                text=f"{int(val):,}",
+                showarrow=False,
+                font={"size": 10, "color": color},
+            )
+    # Day totals below x-axis
+    day_totals = pivot.sum()
+    for day in pivot.columns:
+        total = day_totals.get(day, 0)
+        if total > 0:
+            fig.add_annotation(
+                x=day,
                 y=len(pivot),
                 text=f"<b>{int(total):,}</b>",
                 showarrow=False,
                 font={"size": 12},
-                xref="x",
                 yref="y",
             )
     return fig
+
+
+def _build_day_heatmap_fig(df: pd.DataFrame, term: str):
+    """Build Campus × Day heatmap figure."""
+    pivot = _pivot_day(df)
+    return _make_heatmap_fig(pivot, f"{term} — Student Enrollment by Day of Week")
+
+
+def _build_time_heatmap_fig(df: pd.DataFrame, term: str, campus: str):
+    """Build Hour × Day heatmap figure, or None if no data."""
+    pivot = _pivot_time(df, term, campus)
+    if pivot is None:
+        return None
+    return _make_heatmap_fig(pivot, f"{term} — {campus} — Enrollment by Time & Day")
 
 
 # ---------------------------------------------------------------------------
@@ -247,8 +265,96 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Drill-down tables
+# ---------------------------------------------------------------------------
+
+def _render_drilldown(df_slice: pd.DataFrame, context: str):
+    """Show top 10 subjects and modality breakdown for a heatmap cell selection."""
+    if df_slice.empty:
+        return
+
+    st.markdown(f"**Drill-down: {context}**")
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("**Top 10 Subjects by Enrollment**")
+        top_subj = (
+            df_slice.groupby("subject_desc", as_index=False)["current_enrollment"]
+            .sum()
+            .sort_values("current_enrollment", ascending=False)
+            .head(10)
+            .rename(columns={"subject_desc": "Subject", "current_enrollment": "Enrollment"})
+        )
+        st.dataframe(top_subj, hide_index=True, use_container_width=True)
+
+    with c2:
+        st.markdown("**Modality Breakdown**")
+        modality = (
+            df_slice.groupby("modality_desc", as_index=False)["current_enrollment"]
+            .sum()
+            .sort_values("current_enrollment", ascending=False)
+            .rename(columns={"modality_desc": "Modality", "current_enrollment": "Enrollment"})
+        )
+        st.dataframe(modality, hide_index=True, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
 # Streamlit render
 # ---------------------------------------------------------------------------
+
+def _resolve_click(clicked, pivot):
+    """Resolve a plotly_events click to (row_label, col_label) or (None, None)."""
+    if not clicked:
+        return None, None
+    pt = clicked[0]
+    x_idx = pt.get("pointIndex", [None, None])
+    if isinstance(x_idx, list) and len(x_idx) == 2:
+        row_idx, col_idx = x_idx
+        try:
+            return pivot.index[int(row_idx)], pivot.columns[int(col_idx)]
+        except (IndexError, TypeError):
+            return None, None
+    col_val = pt.get("x")
+    row_val = pt.get("y")
+    if isinstance(col_val, str) and isinstance(row_val, str):
+        return row_val, col_val
+    return None, None
+
+
+def _handle_click(clicked, chart_key, df_term, pivot, campus=None):
+    """Handle a heatmap click, only triggering dialog on genuinely new clicks.
+
+    Each chart tracks its own last-click signature. Only a chart whose
+    click changed since last run writes to csh_drilldown.
+    """
+    row_label, col_label = _resolve_click(clicked, pivot)
+    if row_label is None:
+        return
+
+    # Per-chart signature to detect which chart actually changed
+    click_sig = f"{row_label}:{col_label}"
+    prev_key = f"csh_prev_click_{chart_key}"
+    if st.session_state.get(prev_key) == click_sig:
+        return  # This chart's click hasn't changed — stale data
+    st.session_state[prev_key] = click_sig
+
+    if campus is None:
+        df_drill = df_term[
+            (df_term["campus_description"] == row_label)
+            & (df_term["day_name"] == col_label)
+        ]
+        context = f"{row_label} / {col_label}"
+    else:
+        df_drill = df_term[
+            (df_term["campus_description"] == campus)
+            & (df_term["day_name"] == col_label)
+            & (df_term["hour_label"] == row_label)
+        ]
+        context = f"{campus} / {col_label} / {row_label}"
+
+    if not df_drill.empty:
+        st.session_state["csh_drilldown"] = {"df": df_drill, "context": context}
+
 
 def render():
     st.header("Class Schedule Heatmap")
@@ -300,13 +406,29 @@ def render():
 
     # --- Section A: Enrollment by Day of Week ---
     st.subheader("Enrollment by Day of Week")
-    st.plotly_chart(_build_day_heatmap_fig(df_term, sel_term), use_container_width=True)
+    st.caption("Click any cell to drill down into top subjects and modalities.")
+    day_pivot = _pivot_day(df_term)
+    day_fig = _build_day_heatmap_fig(df_term, sel_term)
+    day_clicked = plotly_events(day_fig, click_event=True, key="csh_day_click")
+    _handle_click(day_clicked, "day", df_term, day_pivot)
 
     # --- Section B: Enrollment by Time & Day ---
     st.subheader("Enrollment by Time & Day")
     for campus in _CAMPUSES:
-        fig = _build_time_heatmap_fig(df_heatmap, sel_term, campus)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
+        time_pivot = _pivot_time(df_heatmap, sel_term, campus)
+        if time_pivot is not None:
+            fig = _build_time_heatmap_fig(df_heatmap, sel_term, campus)
+            clicked = plotly_events(fig, click_event=True, key=f"csh_time_click_{campus}")
+            _handle_click(clicked, f"time_{campus}", df_term, time_pivot, campus=campus)
         else:
             st.info(f"No data for {campus}.")
+
+    # --- Show drill-down dialog if triggered ---
+    if "csh_drilldown" in st.session_state:
+        dd = st.session_state.pop("csh_drilldown")
+
+        @st.dialog(f"Drill Down: {dd['context']}", width="large")
+        def _dialog():
+            _render_drilldown(dd["df"], dd["context"])
+
+        _dialog()

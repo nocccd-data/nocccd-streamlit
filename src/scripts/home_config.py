@@ -11,8 +11,8 @@ PROJECTS = [
         "description": "Student and employee demographics snapshot for the current academic year.",
         "metrics": [
             "Student headcount by ethnicity, gender, age",
-            "Employee headcount by classification, ethnicity, gender",
             "Student enrollment status breakdown",
+            "Employee headcount by classification, ethnicity, gender",
             "Employee full-time/part-time ratios",
         ],
     },
@@ -42,7 +42,7 @@ PROJECTS = [
         "metrics": [
             "Fall-to-spring persistence rates",
             "Fall-to-fall persistence rates",
-            "Breakdown by student type (FTIC, transfer, returning)",
+            "Breakdown by student type",
             "Multi-term trend lines by campus",
         ],
     },
