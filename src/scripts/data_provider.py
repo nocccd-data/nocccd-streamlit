@@ -172,3 +172,11 @@ def fetch_persistence_by_styp(terms: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("persistence_by_styp", "mis_term_id", terms)
     return _query_oracle(_SQL_DIR / "persistence_by_styp.sql", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_seat_count_report(term_codes: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("seat_count_report", "term_code", term_codes)
+    return _query_oracle_single_acyr(
+        _SQL_DIR / "seat_count_report.sql", term_codes, "banner_term_code", db_section="dwhdb")

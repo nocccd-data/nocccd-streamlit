@@ -87,4 +87,16 @@ PROJECTS = [
             {"label": "Stakeholder review complete", "done": False},
         ],
     },
+    {
+        "tab_label": "Seat Count Report",
+        "description": "Section-level seat counts and fill rates by campus, division, and department.",
+        "due_date": None,
+        "milestones": [
+            {"label": "Create seat_count_report.sql", "done": True},
+            {"label": "Register dataset in config.py", "done": True},
+            {"label": "Build Seat Count Report tab", "done": False},
+            {"label": "Add PDF export", "done": False},
+            {"label": "Stakeholder review complete", "done": False},
+        ],
+    },
 ]

@@ -73,6 +73,12 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    "seat_count_report": {
+        "sql_file": "seat_count_report.sql",
+        "banner_term_code": ["202510", "202515", "202520", "202535", "202530", "202605"],
+        "param_name": "banner_term_code",
+        "db_section": "rept",
+    },
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"

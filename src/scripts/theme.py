@@ -116,6 +116,45 @@ THEME_CSS = """\
 .project-dropdown-sep {
     border-bottom: 1px solid light-dark(#444444, #AAAAAA) !important;
 }
+
+/* Seat count banded report */
+.sc-banded { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sc-banded th {
+    background: light-dark(#003056, #1A3A5C) !important;
+    color: #FFFFFF !important;
+    padding: 6px 10px; text-align: left; position: sticky; top: 0;
+    border: 1px solid light-dark(#002040, #0D2137);
+}
+.sc-banded td {
+    padding: 4px 10px;
+    border: 1px solid light-dark(#DDDDDD, #333333);
+    color: light-dark(#000000, #FFFFFF) !important;
+}
+.sc-banded .dept-header td {
+    background: light-dark(#D6E4F0, #1A3A5C) !important;
+    font-weight: bold; font-size: 14px;
+    color: light-dark(#003056, #FFFFFF) !important;
+    border-bottom: 2px solid light-dark(#003056, #3D9DF3) !important;
+}
+.sc-banded .course-header td {
+    background: light-dark(#F0F4F8, #2D3748) !important;
+    font-weight: 600; font-style: italic;
+    color: light-dark(#003056, #CBD5E0) !important;
+}
+.sc-banded .subtotal-row td {
+    font-weight: bold;
+    border-top: 2px solid light-dark(#888888, #AAAAAA) !important;
+    background: light-dark(#F5F5F5, #1A1A2E) !important;
+}
+.sc-banded .dept-total td {
+    font-weight: bold;
+    border-top: 3px double light-dark(#003056, #3D9DF3) !important;
+    background: light-dark(#E8EEF4, #0F2A3E) !important;
+}
+.sc-banded tr:hover td { background: light-dark(#FFFDE7, #2C2C00) !important; }
+.sc-fillrate-high { background: light-dark(#D4EDDA, #1B4D3E) !important; }
+.sc-fillrate-med  { background: light-dark(#FFF3CD, #4D3F00) !important; }
+.sc-fillrate-low  { background: light-dark(#F8D7DA, #4D1F24) !important; }
 </style>"""
 
 
