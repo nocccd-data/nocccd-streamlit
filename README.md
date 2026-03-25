@@ -24,6 +24,11 @@ nocccd-streamlit/
 │   │   ├── extract.py            # Query Oracle, write .hyper files
 │   │   ├── publish.py            # Upload/download Hyper to/from Tableau Cloud
 │   │   ├── run.py                # CLI entry point for pipeline
+│   │   ├── mail/                 # Mass mailing system
+│   │   │   ├── mail_config.py    # Campaign definitions + report registry
+│   │   │   ├── report_generator.py  # Fetch → filter → PDF → send orchestrator
+│   │   │   ├── sender.py         # Gmail SMTP/TLS email sender
+│   │   │   └── run.py            # CLI entry point for mail
 │   │   ├── sql/                  # SQL query files (one per dataset)
 │   │   ├── hyper/                # Generated .hyper files (gitignored)
 │   │   └── libs/
@@ -41,7 +46,9 @@ nocccd-streamlit/
 │   │       ├── home.py           # Home landing page with project cards
 │   │       ├── coi_nhrdist_val.py
 │   │       ├── mis_sp_submitted_scff.py
-│   │       └── mis_sp_current_scff.py
+│   │       ├── mis_sp_current_scff.py
+│   │       ├── seat_count_report.py
+│   │       └── mail_admin.py     # Mail Admin tab (send filtered PDF reports)
 │   └── static/
 │       └── NOCCCD Logo.jpg
 ├── .streamlit/
@@ -60,6 +67,7 @@ nocccd-streamlit/
 | `deg_scff` | `deg_scff.sql` | SCFF financial aid awards |
 | `deg_sp_submitted` | `deg_sp_submitted.sql` | Degree SP submitted vs SCFF match |
 | `deg_sp_current` | `deg_sp_current.sql` | Degree SP current vs SCFF match |
+| `seat_count_report` | `seat_count_report.sql` | Section seat counts and fill rates |
 
 ## Setup
 
@@ -135,6 +143,57 @@ python -m src.pipeline.run coi_nhrdist_val --extract-only
 ```
 
 Hyper files are written to `src/pipeline/hyper/`.
+
+## Mass Mailing: Filtered PDF Reports
+
+The mail system generates filtered PDF reports and emails them to specific recipients. Each recipient gets a PDF filtered to their campus/division/department. Data is fetched from **Tableau Cloud Hyper files** (same pre-extracted data the Streamlit Cloud app uses), not Oracle directly.
+
+### Configure credentials
+
+Add to `.streamlit/secrets.toml`:
+
+```toml
+# Tableau Cloud credentials (already present for the pipeline)
+SERVER = "https://..."
+SITE_NAME = "nocccd"
+PAT_NAME = "..."
+PAT_VALUE = "..."
+
+# Gmail SMTP for mass mailing
+[email]
+smtp_server = "smtp.gmail.com"
+smtp_port = 587
+smtp_username = "nocccd.reports@gmail.com"
+smtp_password = "your-gmail-app-password"
+from_email = "nocccd.reports@gmail.com"
+from_name = "NOCCCD ESIE Data Team"
+```
+
+The Gmail account requires 2-Step Verification enabled and an App Password generated (Google Account > Security > App Passwords).
+
+### Define campaigns
+
+Edit `src/pipeline/mail/mail_config.py` to configure campaigns with report types, parameters, and recipient lists.
+
+### CLI usage
+
+```bash
+# List available campaigns
+python -m src.pipeline.mail
+
+# Dry run — generate PDFs without sending
+python -m src.pipeline.mail seat_count_fall2025_by_campus --dry-run
+
+# Send to a single recipient for testing
+python -m src.pipeline.mail seat_count_fall2025_by_campus --recipient "Test Recipient"
+
+# Send to all recipients
+python -m src.pipeline.mail seat_count_fall2025_by_campus
+```
+
+### Streamlit UI
+
+The **Mail Admin** tab in the Streamlit app provides an interactive interface to preview campaigns, dry-run PDF generation, and send emails with a progress bar.
 
 ## Running the Streamlit App
 

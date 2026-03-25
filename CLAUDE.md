@@ -47,6 +47,18 @@ python -m src.pipeline.run --extract-only
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Mail: list campaigns
+python -m src.pipeline.mail
+
+# Mail: dry run (generate PDFs, don't send)
+python -m src.pipeline.mail seat_count_fall2025_by_campus --dry-run
+
+# Mail: send to single recipient for testing
+python -m src.pipeline.mail seat_count_fall2025_by_campus --recipient "Test Recipient"
+
+# Mail: send to all recipients
+python -m src.pipeline.mail seat_count_fall2025_by_campus
 ```
 
 ## Architecture
@@ -60,7 +72,7 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 
 ### Dual-mode data access (`data_provider.py`)
 
-`_is_cloud()` decides the mode: returns `True` if `FORCE_CLOUD=1` env var is set OR `config.ini` doesn't exist (Streamlit Cloud has no Oracle access). Each public `fetch_*()` function branches on this to either query Oracle or download from Tableau Cloud. All fetch functions are cached with `@st.cache_data(ttl=600)`.
+`_is_cloud()` decides the mode: returns `True` if `FORCE_CLOUD=1` env var is set OR `config.ini` doesn't exist (Streamlit Cloud has no Oracle access). Each public `fetch_*()` function is a thin `@st.cache_data(ttl=600)` wrapper around a `_fetch_*_raw()` helper. The `_raw` helpers are un-decorated and can be called without a Streamlit runtime. Note: the mail pipeline does **not** use these `_raw` helpers — it fetches directly from Tableau Cloud Hyper files via `_fetch_from_hyper()` in `mail_config.py` to avoid Oracle and `st.secrets` dependencies.
 
 ### Pipeline flow (`src/pipeline/`)
 
@@ -68,6 +80,23 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 2. **`extract.py`** — reads SQL, resolves values via `cfg[param_name]`, expands `IN (:t1...)` or loops single-param SQL, queries Oracle, writes `.hyper` via `pantab.frame_to_hyper()`
 3. **`publish.py`** — uploads `.hyper` to "Streamlit Data" project on Tableau Cloud; also has `download_hyper()` which downloads `.tdsx`, extracts `.hyper` from the ZIP
 4. **`run.py`** — CLI orchestrator, reads Tableau credentials from `.streamlit/secrets.toml`
+
+### Mass mailing system (`src/pipeline/mail/`)
+
+Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`nocccd.reports@gmail.com`).
+
+1. **`mail_config.py`** — `REPORT_REGISTRY` maps report types to fetch/filter/PDF functions. `CAMPAIGNS` defines mail jobs with parameters, subject/body templates, and recipient lists with per-recipient filter overrides. Data is fetched from **Tableau Cloud Hyper files** (same source as Streamlit Cloud), not Oracle — this avoids Oracle dependencies and uses pre-extracted data. The `_fetch_from_hyper()` helper loads Tableau credentials directly from `secrets.toml` (no `st.secrets`).
+2. **`report_generator.py`** — orchestrator: fetches data **once** from Tableau Cloud, then for each recipient applies filters, generates PDF, sends email. Returns `list[SendResult]` with success/failure per recipient. Accepts a `progress_callback` for UI integration.
+3. **`sender.py`** — sends a single email with PDF attachment via Gmail SMTP/TLS (`nocccd.reports@gmail.com`, port 587, app password auth). Rate-limited with `time.sleep(2)` between sends.
+4. **`run.py`** — CLI entry point (`python -m src.pipeline.mail`). Supports `--dry-run` and `--recipient` flags.
+
+**Adding a new report type to the mail system:**
+1. Add a `generate_report_pdf(df, params) -> bytes` function in the tab module
+2. Add a `_fetch_<report>()` function in `mail_config.py` using `_fetch_from_hyper()`
+3. Register in `REPORT_REGISTRY` with fetch_fn, filter_columns, pdf_fn
+4. Create campaigns in `CAMPAIGNS` dict with recipients and filters
+
+**Email credentials**: Stored in `.streamlit/secrets.toml` under `[email]` section. Uses a dedicated Gmail account (`nocccd.reports@gmail.com`) with App Password (2-Step Verification must be enabled on the Google account). Tableau Cloud credentials in the same file are used to download Hyper data.
 
 ### Tab system (`src/scripts/tabs/`)
 

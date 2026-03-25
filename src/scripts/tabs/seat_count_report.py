@@ -461,6 +461,11 @@ def _generate_pdf(df: pd.DataFrame, term_title: str) -> bytes:
     return buf.getvalue()
 
 
+def generate_report_pdf(df: pd.DataFrame, params: dict) -> bytes:
+    """Public API for the mail system. params must include 'term_title'."""
+    return _generate_pdf(df, params.get("term_title", ""))
+
+
 # ---------------------------------------------------------------------------
 # Render
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ from .mis_sp_current_scff import render as mis_sp_current_scff_render
 from .mis_fa_submitted_scff import render as mis_fa_submitted_scff_render
 from .cte_sx_submitted_scff import render as cte_sx_submitted_scff_render
 from .seat_count_report import render as seat_count_report_render
+from .mail_admin import render as mail_admin_render
 
 # Registry of active tabs: (label, render_function)
 # To add a tab: import its render function and append a tuple here.
@@ -21,4 +22,5 @@ TABS = [
     ("SCFF Awards - MIS FA Submitted", mis_fa_submitted_scff_render),
     ("SCFF CTE - MIS SX Submitted", cte_sx_submitted_scff_render),
     ("Seat Count Report", seat_count_report_render),
+    ("Mail Admin", mail_admin_render),
 ]
