@@ -39,16 +39,23 @@ nocccd-streamlit/
 │   ├── scripts/                  # Streamlit app
 │   │   ├── streamlit_app.py      # Main entry point
 │   │   ├── data_provider.py      # Dual-mode data access (Oracle / Cloud)
-│   │   ├── home_config.py        # Project card config (descriptions, due dates, milestones)
+│   │   ├── home_config.py        # Project card config (descriptions, metrics)
+│   │   ├── admin_config.py       # Protected tabs configuration
+│   │   ├── auth.py               # Admin authentication gate
 │   │   ├── theme.py              # Light/dark theme CSS overrides
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
 │   │       ├── home.py           # Home landing page with project cards
+│   │       ├── fast_facts.py
+│   │       ├── seat_count_report.py
+│   │       ├── class_schedule_heatmap.py
+│   │       ├── persistence_by_styp.py
 │   │       ├── coi_nhrdist_val.py
 │   │       ├── mis_sp_submitted_scff.py
 │   │       ├── mis_sp_current_scff.py
-│   │       ├── seat_count_report.py
-│   │       └── mail_admin.py     # Mail Admin tab (send filtered PDF reports)
+│   │       ├── mis_fa_submitted_scff.py
+│   │       ├── cte_sx_submitted_scff.py
+│   │       └── mail_admin.py     # Mail Admin tab (password-protected)
 │   └── static/
 │       └── NOCCCD Logo.jpg
 ├── .streamlit/
@@ -63,11 +70,19 @@ nocccd-streamlit/
 
 | Name | SQL File | Description |
 |------|----------|-------------|
+| `fast_facts_stu` | `fast_facts_stu.sql` | Student demographics by academic year |
+| `fast_facts_emp` | `fast_facts_emp.sql` | Employee demographics by fiscal year |
+| `seat_count_report` | `seat_count_report.sql` | Section seat counts and fill rates |
+| `class_schedule_heatmap` | `class_schedule_heatmap.sql` | Class schedule by day/time for heatmap |
+| `persistence_by_styp` | `persistence_by_styp.sql` | Persistence rates by student type |
 | `coi_nhrdist_val` | `coi_nhrdist_val.sql` | COI vs NHRDIST payroll validation |
 | `deg_scff` | `deg_scff.sql` | SCFF financial aid awards |
 | `deg_sp_submitted` | `deg_sp_submitted.sql` | Degree SP submitted vs SCFF match |
 | `deg_sp_current` | `deg_sp_current.sql` | Degree SP current vs SCFF match |
-| `seat_count_report` | `seat_count_report.sql` | Section seat counts and fill rates |
+| `deg_fa_scff` | `deg_fa_scff.sql` | SCFF FA financial aid awards |
+| `deg_fa_submitted` | `deg_fa_submitted.sql` | FA submitted vs SCFF match |
+| `cte_scff` | `cte_scff.sql` | SCFF CTE awards |
+| `cte_sx_submitted` | `cte_sx_submitted.sql` | CTE SX submitted vs SCFF match |
 
 ## Setup
 

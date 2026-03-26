@@ -126,6 +126,39 @@ The Seat Count Report tab (`seat_count_report.py`) uses cascading dynamic filter
 
 This pattern is suitable for any tab where the full dataset fits in memory and users need hierarchical drill-down.
 
+### Persistence projections (`persistence_by_styp.py`)
+
+The Persistence by Student Type tab supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
+
+- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per group. Minimum 2 data points.
+- **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
+
+Projected values are clipped to [0, 1]. The next term label is derived from MIS term ID pattern (IDs increment by 10 per year: 207→217→…→257→267).
+
+**Plotly facet subplot gotcha**: `px.line(facet_col_wrap=3)` does NOT store traces in categorical order — the trace order matches Plotly's internal subplot layout, which differs from the category order. To add projection traces to the correct facet panel, match each existing trace to its category by comparing y-data with `np.allclose()`, then read the trace's `xaxis`/`yaxis` to determine its subplot. Setting `xaxis="x"` on `go.Scatter()` raises a validator error in some Plotly versions — only set `xaxis`/`yaxis` for non-default subplots (i.e., skip when value is `"x"` or `"y"`).
+
+**PDF export**: Includes projected dashed lines on all charts plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
+
+Widget prefix: `"pbs_"`
+
+### Admin authentication (`auth.py`, `admin_config.py`)
+
+Protected tabs (currently Mail Admin) require a password before access. The system:
+
+1. **`admin_config.py`** — `PROTECTED_TABS` set defines which tab labels require authentication
+2. **`auth.py`** — `render_admin_hub()` shows the admin tab selector after password check. Password stored in `.streamlit/secrets.toml` under `[admin]` section: `password = "your-password"`
+3. **`streamlit_app.py`** — splits `TABS` into public and admin lists. Admin button appears in the sidebar below the author line. `on_change` callback on the project dropdown exits admin mode automatically.
+
+Session state keys: `_admin_mode`, `_admin_authenticated`, `_admin_selected_tab`
+
+**Adding a new admin-protected tab**: Add the tab label string to `PROTECTED_TABS` in `admin_config.py`.
+
+### Class Schedule Heatmap drill-down
+
+The heatmap tab (`class_schedule_heatmap.py`) shows section counts by day/time. Below each heatmap, an expander with dropdown selectors (Campus+Day or Day+Hour depending on chart type) lets users drill into a specific cell combination. `_render_drilldown()` shows 4 tables: top 10 Divisions, top 10 Departments, top 10 Subjects, and full Modality breakdown — each with enrollment count and percentage. CRN deduplication (`drop_duplicates(subset=["crn"])`) is applied before aggregation to avoid inflated counts from multiple meeting rows per section.
+
+Widget prefix: `"csh_"`
+
 ### SQL parameterization
 
 Two patterns are supported:
@@ -134,7 +167,7 @@ Two patterns are supported:
 
 ### Sidebar PDF export
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report) use `st.sidebar.download_button()` to offer a PDF download.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type) use `st.sidebar.download_button()` to offer a PDF download.
 
 **Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
 
@@ -213,6 +246,8 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 
 - **Oracle credentials**: `src/pipeline/libs/config.ini` (gitignored; copy from `config.ini.template`)
 - **Tableau Cloud PAT**: `.streamlit/secrets.toml` (keys: `SERVER`, `SITE_NAME`, `PAT_NAME`, `PAT_VALUE`)
+- **Admin password**: `.streamlit/secrets.toml` under `[admin]` section (key: `password`)
+- **Email credentials**: `.streamlit/secrets.toml` under `[email]` section (Gmail SMTP for mass mailing)
 - **Python version**: pinned to 3.13 in `.python-version` (pantab wheels unavailable for 3.14)
 
 ## Deployment

@@ -83,4 +83,13 @@ PROJECTS = [
             "Unmatched record detail",
         ],
     },
+    {
+        "tab_label": "SCFF CTE - MIS SX Submitted",
+        "description": "Compares MIS SX Submitted records against SCFF CTE awards.",
+        "metrics": [
+            "SCFF CTE counts by DICD",
+            "MIS SX submitted vs SCFF match rates",
+            "Unmatched record detail",
+        ],
+    },
 ]
