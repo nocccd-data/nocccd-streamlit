@@ -171,11 +171,11 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 nohrs_class = _fillrate_css_class(r["first_day_no_hours_enroll_fillrate"])
 
                 rows.append("<tr>")
-                rows.append(f"<td>{_safe(r['crn'])}</td>")
+                rows.append(f"<td style='text-align:center'>{_safe(r['crn'])}</td>")
                 rows.append(f"<td>{_safe(r['scheduling_desc'])}</td>")
-                rows.append(f"<td>{_fmt_date(r['start_date'])}</td>")
-                rows.append(f"<td>{_fmt_date(r['end_date'])}</td>")
-                rows.append(f"<td>{_safe(r['crosslist_group'])}</td>")
+                rows.append(f"<td style='text-align:center'>{_fmt_date(r['start_date'])}</td>")
+                rows.append(f"<td style='text-align:center'>{_fmt_date(r['end_date'])}</td>")
+                rows.append(f"<td style='text-align:center'>{_safe(r['crosslist_group'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['enroll_max'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
                 rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
@@ -341,8 +341,8 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                         )
                         # Value
                         ax.text(
-                            cx + 0.08, card_y + 0.06,
-                            value, ha="left", va="bottom",
+                            cx + card_w / 2, card_y + 0.06,
+                            value, ha="center", va="bottom",
                             fontsize=12, fontweight="bold", color="black",
                         )
                     cursor = card_y - 0.20
@@ -492,9 +492,17 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                                 edgecolor="none", zorder=0,
                             ))
 
+                        _CENTER_COLS = {0, 2, 3, 4}  # CRN, Start, End, XList
                         for i, val in enumerate(vals):
-                            ha = "right" if i >= 5 else "left"
-                            xp = col_x[i] + col_w[i] - 0.03 if ha == "right" else col_x[i] + 0.03
+                            if i in _CENTER_COLS:
+                                ha = "center"
+                                xp = col_x[i] + col_w[i] / 2
+                            elif i >= 5:
+                                ha = "right"
+                                xp = col_x[i] + col_w[i] - 0.03
+                            else:
+                                ha = "left"
+                                xp = col_x[i] + 0.03
                             ax.text(
                                 xp, y + ROW_H / 2, val,
                                 ha=ha, va="center", fontsize=FONT_SZ, color="black",

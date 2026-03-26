@@ -23,6 +23,15 @@ THEME_CSS = """\
     border-radius: 0.5rem !important;
     padding: 1rem !important;
 }
+[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+}
+[data-testid="stMetric"] [data-testid="stMetricValue"] > div {
+    width: 100% !important;
+    text-align: center !important;
+}
 
 /* Card text */
 [data-testid="stColumn"] [data-testid="stVerticalBlock"] p,
@@ -122,7 +131,7 @@ THEME_CSS = """\
 .sc-banded th {
     background: light-dark(#003056, #1A3A5C) !important;
     color: #FFFFFF !important;
-    padding: 6px 10px; text-align: left; position: sticky; top: 0;
+    padding: 6px 10px; text-align: center; position: sticky; top: 0;
     border: 1px solid light-dark(#002040, #0D2137);
 }
 .sc-banded td {
