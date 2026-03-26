@@ -34,8 +34,8 @@ _COL_LABELS = [
     "Start", "End", "XList",
     "Max", "Enrolled", "Fill %",
     "Census", "Census %",
-    "1st AM", "AM %",
-    "1st PM", "PM %",
+    "1st Day", "Day %",
+    "1st Eve", "Eve %",
     "1st NoHrs", "NoHrs %",
 ]
 
@@ -258,13 +258,13 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     # width_fraction is relative to usable width (PAGE_W - ML - MR)
     usable = PAGE_W - ML - MR
     _cols = [
-        ("CRN",   0.05),  ("Sched", 0.12),  ("Start", 0.09),  ("End", 0.09),
+        ("CRN",   0.05),  ("Sched", 0.12),  ("Start", 0.10),  ("End", 0.10),
         ("XList", 0.05),
         ("Max",   0.05),  ("Enrl",  0.05),  ("Fill%", 0.05),
         ("Cens",  0.05),  ("Cens%", 0.05),
-        ("AM",    0.05),  ("AM%",   0.05),
-        ("PM",    0.05),  ("PM%",   0.05),
-        ("NoHr",  0.05),  ("NoHr%", 0.05),
+        ("1st\nDay",  0.05),  ("Day\n%",  0.05),
+        ("1st\nEve",  0.05),  ("Eve\n%",  0.05),
+        ("1st\nNoHr", 0.05),  ("NoHr\n%", 0.05),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -366,15 +366,17 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
 
         def _draw_header_row():
             nonlocal cursor
-            _ensure_space(ROW_H)
-            _draw_row_bg(cursor - ROW_H, "#003056")
+            hdr_h = ROW_H * 1.6  # taller for two-line labels
+            _ensure_space(hdr_h)
+            _draw_row_bg(cursor - hdr_h, "#003056", height=hdr_h)
             for i, label in enumerate(col_labels):
                 ax.text(
-                    col_x[i] + col_w[i] / 2, cursor - ROW_H / 2,
+                    col_x[i] + col_w[i] / 2, cursor - hdr_h / 2,
                     label, ha="center", va="center",
                     fontsize=6, fontweight="bold", color="white",
+                    linespacing=1.2,
                 )
-            cursor -= ROW_H
+            cursor -= hdr_h
 
         def _draw_gridlines(y):
             for i in range(n_cols + 1):
