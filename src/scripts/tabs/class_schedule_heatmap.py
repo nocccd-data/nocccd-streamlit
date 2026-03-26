@@ -7,7 +7,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
-from streamlit_plotly_events import plotly_events
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_class_schedule_heatmap
@@ -268,93 +267,70 @@ def _generate_pdf(df_heatmap: pd.DataFrame, term: str) -> bytes:
 # Drill-down tables
 # ---------------------------------------------------------------------------
 
+def _top_n_pct(df: pd.DataFrame, group_col: str, val_col: str, label: str, n: int = 10) -> pd.DataFrame:
+    """Group, sum, compute percentage, return top N rows."""
+    agg = (
+        df.groupby(group_col, as_index=False)[val_col]
+        .sum()
+        .sort_values(val_col, ascending=False)
+    )
+    total = agg[val_col].sum()
+    agg["Pct"] = (agg[val_col] / total * 100).round(1).astype(str) + "%" if total > 0 else "0%"
+    return (
+        agg.head(n)
+        .rename(columns={group_col: label, val_col: "Enrollment"})
+        [[ label, "Enrollment", "Pct"]]
+    )
+
+
 def _render_drilldown(df_slice: pd.DataFrame, context: str):
-    """Show top 10 subjects and modality breakdown for a heatmap cell selection."""
+    """Show top 10 divisions, departments, subjects, and modality breakdown.
+
+    Deduplicates by CRN to avoid inflated counts from multiple meeting rows.
+    """
     if df_slice.empty:
+        st.info(f"No data for {context}.")
         return
 
-    st.markdown(f"**Drill-down: {context}**")
-    c1, c2 = st.columns(2)
+    deduped = df_slice.drop_duplicates(subset=["crn"])
+    total_enrl = deduped["current_enrollment"].sum()
+
+    st.markdown(f"**{context}** — {total_enrl:,} total enrollment")
+
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
-        st.markdown("**Top 10 Subjects by Enrollment**")
-        top_subj = (
-            df_slice.groupby("subject_desc", as_index=False)["current_enrollment"]
-            .sum()
-            .sort_values("current_enrollment", ascending=False)
-            .head(10)
-            .rename(columns={"subject_desc": "Subject", "current_enrollment": "Enrollment"})
+        st.markdown("**Top 10 Divisions**")
+        st.dataframe(
+            _top_n_pct(deduped, "division_desc", "current_enrollment", "Division"),
+            hide_index=True, use_container_width=True,
         )
-        st.dataframe(top_subj, hide_index=True, use_container_width=True)
 
     with c2:
-        st.markdown("**Modality Breakdown**")
-        modality = (
-            df_slice.groupby("modality_desc", as_index=False)["current_enrollment"]
-            .sum()
-            .sort_values("current_enrollment", ascending=False)
-            .rename(columns={"modality_desc": "Modality", "current_enrollment": "Enrollment"})
+        st.markdown("**Top 10 Departments**")
+        st.dataframe(
+            _top_n_pct(deduped, "department_desc", "current_enrollment", "Department"),
+            hide_index=True, use_container_width=True,
         )
-        st.dataframe(modality, hide_index=True, use_container_width=True)
+
+    with c3:
+        st.markdown("**Top 10 Subjects**")
+        st.dataframe(
+            _top_n_pct(deduped, "subject_desc", "current_enrollment", "Subject"),
+            hide_index=True, use_container_width=True,
+        )
+
+    with c4:
+        st.markdown("**Modality Breakdown**")
+        st.dataframe(
+            _top_n_pct(deduped, "modality_desc", "current_enrollment", "Modality", n=20),
+            hide_index=True, use_container_width=True,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Streamlit render
 # ---------------------------------------------------------------------------
-
-def _resolve_click(clicked, pivot):
-    """Resolve a plotly_events click to (row_label, col_label) or (None, None)."""
-    if not clicked:
-        return None, None
-    pt = clicked[0]
-    x_idx = pt.get("pointIndex", [None, None])
-    if isinstance(x_idx, list) and len(x_idx) == 2:
-        row_idx, col_idx = x_idx
-        try:
-            return pivot.index[int(row_idx)], pivot.columns[int(col_idx)]
-        except (IndexError, TypeError):
-            return None, None
-    col_val = pt.get("x")
-    row_val = pt.get("y")
-    if isinstance(col_val, str) and isinstance(row_val, str):
-        return row_val, col_val
-    return None, None
-
-
-def _handle_click(clicked, chart_key, df_term, pivot, campus=None):
-    """Handle a heatmap click, only triggering dialog on genuinely new clicks.
-
-    Each chart tracks its own last-click signature. Only a chart whose
-    click changed since last run writes to csh_drilldown.
-    """
-    row_label, col_label = _resolve_click(clicked, pivot)
-    if row_label is None:
-        return
-
-    # Per-chart signature to detect which chart actually changed
-    click_sig = f"{row_label}:{col_label}"
-    prev_key = f"csh_prev_click_{chart_key}"
-    if st.session_state.get(prev_key) == click_sig:
-        return  # This chart's click hasn't changed — stale data
-    st.session_state[prev_key] = click_sig
-
-    if campus is None:
-        df_drill = df_term[
-            (df_term["campus_description"] == row_label)
-            & (df_term["day_name"] == col_label)
-        ]
-        context = f"{row_label} / {col_label}"
-    else:
-        df_drill = df_term[
-            (df_term["campus_description"] == campus)
-            & (df_term["day_name"] == col_label)
-            & (df_term["hour_label"] == row_label)
-        ]
-        context = f"{campus} / {col_label} / {row_label}"
-
-    if not df_drill.empty:
-        st.session_state["csh_drilldown"] = {"df": df_drill, "context": context}
-
 
 def render():
     st.header("Class Schedule Heatmap")
@@ -406,29 +382,46 @@ def render():
 
     # --- Section A: Enrollment by Day of Week ---
     st.subheader("Enrollment by Day of Week")
-    st.caption("Click any cell to drill down into top subjects and modalities.")
-    day_pivot = _pivot_day(df_term)
-    day_fig = _build_day_heatmap_fig(df_term, sel_term)
-    day_clicked = plotly_events(day_fig, click_event=True, key="csh_day_click")
-    _handle_click(day_clicked, "day", df_term, day_pivot)
+    st.plotly_chart(_build_day_heatmap_fig(df_term, sel_term), use_container_width=True)
+
+    # Day drill-down
+    with st.expander("Explore by Campus & Day"):
+        d1, d2 = st.columns(2)
+        campuses_in_data = sorted(df_term["campus_description"].dropna().unique())
+        dd_campus = d1.selectbox("Campus", campuses_in_data, key="csh_dd_campus")
+        dd_day = d2.selectbox("Day", DAY_ORDER, key="csh_dd_day")
+
+        df_day_drill = df_term[
+            (df_term["campus_description"] == dd_campus)
+            & (df_term["day_name"] == dd_day)
+        ]
+        _render_drilldown(df_day_drill, f"{dd_campus} / {dd_day}")
 
     # --- Section B: Enrollment by Time & Day ---
     st.subheader("Enrollment by Time & Day")
     for campus in _CAMPUSES:
-        time_pivot = _pivot_time(df_heatmap, sel_term, campus)
-        if time_pivot is not None:
-            fig = _build_time_heatmap_fig(df_heatmap, sel_term, campus)
-            clicked = plotly_events(fig, click_event=True, key=f"csh_time_click_{campus}")
-            _handle_click(clicked, f"time_{campus}", df_term, time_pivot, campus=campus)
+        fig = _build_time_heatmap_fig(df_heatmap, sel_term, campus)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Time drill-down
+            with st.expander(f"Explore — {campus}"):
+                t1, t2 = st.columns(2)
+                td_day = t1.selectbox("Day", DAY_ORDER, key=f"csh_td_day_{campus}")
+                hours_available = sorted(
+                    df_term[
+                        (df_term["campus_description"] == campus)
+                        & (df_term["hour_label"].notna())
+                    ]["hour_label"].unique(),
+                    key=lambda h: df_term[df_term["hour_label"] == h]["begin_hour"].iloc[0],
+                )
+                if hours_available:
+                    td_hour = t2.selectbox("Start Time", hours_available, key=f"csh_td_hour_{campus}")
+                    df_time_drill = df_term[
+                        (df_term["campus_description"] == campus)
+                        & (df_term["day_name"] == td_day)
+                        & (df_term["hour_label"] == td_hour)
+                    ]
+                    _render_drilldown(df_time_drill, f"{campus} / {td_day} / {td_hour}")
         else:
             st.info(f"No data for {campus}.")
-
-    # --- Show drill-down dialog if triggered ---
-    if "csh_drilldown" in st.session_state:
-        dd = st.session_state.pop("csh_drilldown")
-
-        @st.dialog(f"Drill Down: {dd['context']}", width="large")
-        def _dialog():
-            _render_drilldown(dd["df"], dd["context"])
-
-        _dialog()
