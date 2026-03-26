@@ -360,6 +360,7 @@ def _generate_pdf(
     campus: str, persistence_type: str,
     proj_overall: pd.DataFrame | None = None,
     proj_by_styp: pd.DataFrame | None = None,
+    proj_method: str | None = None,
 ) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
@@ -428,6 +429,91 @@ def _generate_pdf(
                                 proj_rate=s_rate, proj_label=s_label)
             for j in range(len(page_labels), len(axes)):
                 axes[j].set_visible(False)
+            _add_pdf_footer(fig)
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        # Methodology page (only when projections are active)
+        if proj_method and (proj_overall is not None or proj_by_styp is not None):
+            fig = plt.figure(figsize=(PAGE_W, PAGE_H))
+            fig.text(0.50, 0.95, "Projection Methodology",
+                     fontsize=16, fontweight="bold", ha="center")
+
+            y = 0.85
+            if proj_method == "Linear Regression":
+                lines = [
+                    "Method: Linear Regression",
+                    "",
+                    "A straight line (y = mx + b) is fit through all available",
+                    "historical data points using least-squares regression.",
+                    "The projected value is the extrapolated point for the",
+                    "next fall term.",
+                    "",
+                    "R\u00b2 (goodness of fit) indicates how well the linear",
+                    "model fits the historical data. Values closer to 1.0",
+                    "mean a stronger linear trend; values near 0 suggest no",
+                    "clear trend and the projection should be treated with",
+                    "caution.",
+                ]
+            else:
+                lines = [
+                    "Method: Weighted Moving Average",
+                    "",
+                    "The last 3 data points are averaged with increasing",
+                    "weights (1\u00d7, 2\u00d7, 3\u00d7), giving the most recent",
+                    "year triple the influence of the oldest year in the",
+                    "window. This method responds quickly to recent changes",
+                    "without assuming a long-term trend.",
+                ]
+
+            for line in lines:
+                if line == "":
+                    y -= 0.015
+                    continue
+                weight = "bold" if line.startswith("Method:") else "normal"
+                fig.text(0.10, y, line, fontsize=11, fontweight=weight,
+                         va="top")
+                y -= 0.03
+
+            y -= 0.02
+            fig.text(0.10, y,
+                     "Projections are estimates based on historical patterns "
+                     "and should be interpreted with caution.\n"
+                     "Projected values are clipped to the 0\u2013100% range.",
+                     fontsize=9, color="grey", va="top")
+
+            # R² table for linear regression
+            if proj_method == "Linear Regression":
+                r_sq_data: list[tuple[str, str]] = []
+                if proj_overall is not None and "_r_squared" in proj_overall.columns:
+                    for _, r in proj_overall[
+                        proj_overall["campus"] == campus
+                    ].iterrows():
+                        r_sq_data.append(("All Students", f"{r['_r_squared']:.3f}"))
+                if proj_by_styp is not None and "_r_squared" in proj_by_styp.columns:
+                    for _, r in proj_by_styp[
+                        proj_by_styp["campus"] == campus
+                    ].iterrows():
+                        r_sq_data.append((r["styp_label"], f"{r['_r_squared']:.3f}"))
+
+                if r_sq_data:
+                    y -= 0.05
+                    fig.text(0.10, y, "R\u00b2 by Group", fontsize=12,
+                             fontweight="bold", va="top")
+                    y -= 0.035
+                    col_w = [0.30, 0.10]
+                    # Header
+                    fig.text(0.10, y, "Group", fontsize=10,
+                             fontweight="bold", va="top")
+                    fig.text(0.10 + col_w[0], y, "R\u00b2", fontsize=10,
+                             fontweight="bold", va="top")
+                    y -= 0.025
+                    for grp, rsq in r_sq_data:
+                        fig.text(0.10, y, grp, fontsize=10, va="top")
+                        fig.text(0.10 + col_w[0], y, rsq, fontsize=10,
+                                 va="top")
+                        y -= 0.025
+
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
@@ -506,6 +592,7 @@ def render():
             ptype_val,
             proj_overall=pdf_proj_overall,
             proj_by_styp=pdf_proj_by_styp,
+            proj_method=proj_method if show_projection else None,
         )
         st.sidebar.download_button(
             "Download PDF",
