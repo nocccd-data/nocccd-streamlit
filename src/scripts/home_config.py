@@ -92,4 +92,13 @@ PROJECTS = [
             "Unmatched record detail",
         ],
     },
+    {
+        "tab_label": "BOT Goal 1 - Students",
+        "description": "Board of Trustees Goal 1 — Student enrollment headcount trends by campus.",
+        "metrics": [
+            "Distinct student headcount by campus",
+            "NOCCCD unduplicated total",
+            "5-year percentage change",
+        ],
+    },
 ]

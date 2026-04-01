@@ -79,6 +79,12 @@ DATASETS = {
         "param_name": "banner_term_code",
         "db_section": "rept",
     },
+    "bot_goal1_students": {
+        "sql_file": "bot_goal1_students.sql",
+        "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
+    }
 }
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
