@@ -159,6 +159,29 @@ The heatmap tab (`class_schedule_heatmap.py`) shows section counts by day/time. 
 
 Widget prefix: `"csh_"`
 
+### BOT (Board of Trustees) tabs (`bot_goal*_*.py`)
+
+BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Excel tab becomes one Streamlit tab. The SQL returns enrollment-level records (one row per pidm+crn) with demographic columns; all charts aggregate from this raw data.
+
+**Standard chart set per tab** (4 charts, reuse this pattern for each new BOT goal tab):
+1. **Headcount by Campus** — grouped bar chart (`px.bar`, `barmode="group"`) with NOCCCD unduplicated total + 5-yr % change horizontal bar chart. Layout: `st.columns([3, 1])`.
+2. **Proportion by Race/Ethnicity** — HTML data-bar table (inline `<div>` bars proportional to percentage, colored per race) + summary HTML table with counts and 5-yr % change. Layout: `st.columns([3, 2])`.
+3. **Proportion by Gender** — horizontal grouped bar chart (`px.bar`, `orientation="h"`, academic year on y-axis) + summary HTML table. Layout: `st.columns([3, 2])`.
+4. **First-Generation Status** — line chart (`px.line`, markers + text labels) for **Credit colleges only** (excludes NOCE) + summary HTML table. Layout: `st.columns([3, 2])`.
+
+**Key patterns:**
+- Raw DataFrame stored in `st.session_state["bg1_df"]` — all 4 charts aggregate from it, no re-querying
+- NOCCCD unduplicated count: `df.groupby("academic_year")["pidm"].nunique()` (cross-campus dedup, NOT sum of per-campus counts)
+- Credit-only filter for first-gen: `df[df["site"] == "Credit"]` (NOCE excluded due to survey data gaps)
+- Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting
+- 5-yr % change: `(last_year - first_year) / first_year * 100`
+- Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
+- Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
+
+**Plotly horizontal grouped bar gotcha**: Bars render in reverse legend order. To get the desired top-to-bottom order, pass `category_orders` with the reversed label list.
+
+Widget prefix: `"bg1_"` (Goal 1), use `"bg2_"`, `"bg3_"`, etc. for subsequent goals.
+
 ### SQL parameterization
 
 Two patterns are supported:
@@ -233,6 +256,22 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 | Fill rate high (>=80%) | `#D4EDDA` | `#1B4D3E` |
 | Fill rate med (50-80%) | `#FFF3CD` | `#4D3F00` |
 | Fill rate low (<50%) | `#F8D7DA` | `#4D1F24` |
+
+### NOCCCD brand colors
+
+Official district color palette used in BOT charts and reports:
+
+| Color | HEX | RGB | Usage |
+|-------|-----|-----|-------|
+| Green | `#50b913` | 80, 185, 19 | Cypress College |
+| Blue | `#0081b7` | 0, 129, 183 | General accent |
+| Light Blue | `#5faed3` | 95, 174, 211 | Male, Multiethnic |
+| Dark Teal | `#004062` | 0, 64, 98 | NOCE, Female, Asian, First-Gen |
+| Navy | `#11234f` | 17, 35, 79 | Amer Indian/AK Native |
+| Teal | `#00b3a0` | 0, 179, 16 | Filipino |
+| Teal/Aqua | `#50b9c3` | 80, 185, 195 | NOCCCD Unduplicated, Hispanic, Non-Binary, Not First-Gen |
+| Grey | `#575a5d` | 87, 90, 93 | Pacific Islander |
+| Orange | `#f99d40` | 249, 157, 64 | Fullerton College, Black/African American, Unknown (gender) |
 
 ### Adding themed elements
 

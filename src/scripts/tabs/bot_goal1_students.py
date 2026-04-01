@@ -111,6 +111,19 @@ _GENDER_COLORS = {
     "Unknown": "#f99d40",
 }
 
+# First-generation constants
+_FIRSTGEN_ORDER = ["Y", "N", "Unknown"]
+_FIRSTGEN_LABELS = {
+    "Y": "First Generation Student",
+    "N": "Not First Generation Student",
+    "Unknown": "Unknown",
+}
+_FIRSTGEN_COLORS = {
+    "First Generation Student": "#004062",
+    "Not First Generation Student": "#50b9c3",
+    "Unknown": "#5faed3",
+}
+
 
 def _aggregate_race(df: pd.DataFrame) -> pd.DataFrame:
     """District-wide unduplicated PIDM count by race/ethnicity by academic year."""
@@ -340,6 +353,112 @@ def _build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str
     return "\n".join(rows)
 
 
+def _aggregate_firstgen(df: pd.DataFrame) -> pd.DataFrame:
+    """Credit colleges only: unduplicated PIDM count by first-gen status."""
+    credit = df[df["site"] == "Credit"].copy()
+    stu = credit.drop_duplicates(subset=["pidm", "academic_year"])
+    stu["fg"] = stu["first_gen_ind"].where(stu["first_gen_ind"].isin(["Y", "N"]), "Unknown")
+    by_fg = (
+        stu.groupby(["academic_year", "fg"])
+        .size()
+        .reset_index(name="count")
+    )
+    totals = stu.groupby("academic_year").size().reset_index(name="total")
+    out = by_fg.merge(totals, on="academic_year")
+    out["pct"] = out["count"] / out["total"]
+    out["fg_label"] = out["fg"].map(_FIRSTGEN_LABELS)
+    return out
+
+
+def _build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
+    """Line chart: first-gen proportion over academic years."""
+    labels = [_FIRSTGEN_LABELS[g] for g in _FIRSTGEN_ORDER]
+    fig = px.line(
+        df_fg,
+        x="academic_year",
+        y="pct",
+        color="fg_label",
+        text="pct",
+        markers=True,
+        color_discrete_map=_FIRSTGEN_COLORS,
+        category_orders={"academic_year": years, "fg_label": labels},
+    )
+    fig.update_traces(
+        texttemplate="%{y:.1%}",
+        textposition="top center",
+        mode="lines+markers+text",
+    )
+    fig.update_layout(
+        height=420,
+        xaxis_title=None,
+        yaxis_title=None,
+        yaxis=dict(tickformat=".0%", range=[0, 0.7]),
+        legend_title=None,
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+        margin=dict(t=10),
+    )
+    return fig
+
+
+def _build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
+    """Summary HTML table for first-gen: counts and 5-yr % change."""
+    if len(years) < 2:
+        return ""
+    first_yr, last_yr = years[0], years[-1]
+    piv = df_fg.pivot_table(
+        index="fg", columns="academic_year",
+        values="count", aggfunc="first",
+    )
+    rows: list[str] = []
+    rows.append(
+        '<table style="border-collapse:collapse; font-size:13px; '
+        'table-layout:fixed;">'
+    )
+    rows.append("<colgroup>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("</colgroup>")
+    rows.append("<thead><tr>")
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{first_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{last_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        "<th style='text-align:center; padding:6px 8px; "
+        "border-bottom:2px solid #555;'>5-Yr %<br>Change</th>"
+    )
+    rows.append("</tr></thead><tbody>")
+
+    for fg in _FIRSTGEN_ORDER:
+        label = _FIRSTGEN_LABELS[fg]
+        color = _FIRSTGEN_COLORS.get(label, "#555555")
+        fc = int(piv.loc[fg, first_yr]) if fg in piv.index and first_yr in piv.columns and pd.notna(piv.loc[fg, first_yr]) else 0
+        lc = int(piv.loc[fg, last_yr]) if fg in piv.index and last_yr in piv.columns and pd.notna(piv.loc[fg, last_yr]) else 0
+        chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
+
+        cell = (
+            "padding:4px 8px; color:white; background:{bg}; "
+            "text-align:right; border-bottom:1px solid #444;"
+        )
+        rows.append("<tr>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{fc:,}</td>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
+        rows.append(
+            f"<td style='text-align:right; padding:4px 8px; "
+            f"font-weight:bold; color:white; background:{color}; "
+            f"border-bottom:1px solid #444;'>{chg_str}</td>"
+        )
+        rows.append("</tr>")
+
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
 # ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------
@@ -516,4 +635,38 @@ def render():
     st.markdown(
         "<div style='text-align:left'><small>Source: Banner</small></div>",
         unsafe_allow_html=True,
+    )
+
+    # --- Chart 4: Proportion by First-Generation Status (Credit only) ---
+    st.divider()
+    st.subheader("NOCCCD Credit Colleges")
+    st.markdown(
+        f"**Proportion of Enrolled Students by First-Generation College Status**"
+        f"  \n{year_range}"
+    )
+    st.caption(
+        "Among all unduplicated students enrolled in Cypress and Fullerton "
+        "Colleges as of census in the reporting year, the proportion of "
+        "students who reported neither parent/guardian had ever attended college."
+    )
+    df_fg = _aggregate_firstgen(df)
+
+    col_fgchart, col_fgsummary = st.columns([3, 2])
+    with col_fgchart:
+        st.plotly_chart(
+            _build_firstgen_line_chart(df_fg, years),
+            use_container_width=True,
+        )
+    with col_fgsummary:
+        fg_html = _build_firstgen_summary_html(df_fg, years)
+        if fg_html:
+            st.markdown(fg_html, unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:left'><small>Source: Banner</small></div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Note: NOCE data are excluded due to the large number of unknown cases. "
+        "Because these data are collected through an online survey and many NOCE "
+        "students register in person/on paper, their information are not collected."
     )
