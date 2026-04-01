@@ -101,6 +101,16 @@ _RACE_COLORS = {
     "Unreported": "#50b913",
 }
 
+# Gender constants
+_GENDER_ORDER = ["F", "M", "NB", "N"]
+_GENDER_LABELS = {"F": "Female", "M": "Male", "NB": "Non-Binary", "N": "Unknown"}
+_GENDER_COLORS = {
+    "Female": "#004062",
+    "Male": "#5faed3",
+    "Non-Binary": "#50b9c3",
+    "Unknown": "#f99d40",
+}
+
 
 def _aggregate_race(df: pd.DataFrame) -> pd.DataFrame:
     """District-wide unduplicated PIDM count by race/ethnicity by academic year."""
@@ -202,6 +212,114 @@ def _build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
         color = _RACE_COLORS.get(race, "#555555")
         fc = int(piv.loc[race, first_yr]) if race in piv.index and first_yr in piv.columns and pd.notna(piv.loc[race, first_yr]) else 0
         lc = int(piv.loc[race, last_yr]) if race in piv.index and last_yr in piv.columns and pd.notna(piv.loc[race, last_yr]) else 0
+        chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
+
+        cell = (
+            "padding:4px 8px; color:white; background:{bg}; "
+            "text-align:right; border-bottom:1px solid #444;"
+        )
+        rows.append("<tr>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{fc:,}</td>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
+        rows.append(
+            f"<td style='text-align:right; padding:4px 8px; "
+            f"font-weight:bold; color:white; background:{color}; "
+            f"border-bottom:1px solid #444;'>{chg_str}</td>"
+        )
+        rows.append("</tr>")
+
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
+def _aggregate_gender(df: pd.DataFrame) -> pd.DataFrame:
+    """District-wide unduplicated PIDM count by gender by academic year."""
+    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
+    by_gender = (
+        stu.groupby(["academic_year", "gender"])
+        .size()
+        .reset_index(name="count")
+    )
+    totals = stu.groupby("academic_year").size().reset_index(name="total")
+    out = by_gender.merge(totals, on="academic_year")
+    out["pct"] = out["count"] / out["total"]
+    out["gender_label"] = out["gender"].map(_GENDER_LABELS)
+    return out
+
+
+def _build_gender_bar_chart(df_gender: pd.DataFrame, years: list[str]):
+    """Horizontal grouped bar chart: gender proportion by academic year."""
+    df_plot = df_gender.copy()
+    labels = [_GENDER_LABELS[g] for g in _GENDER_ORDER]
+    df_plot["gender_label"] = pd.Categorical(
+        df_plot["gender_label"], categories=labels, ordered=True,
+    )
+    fig = px.bar(
+        df_plot.sort_values(["academic_year", "gender_label"]),
+        x="pct",
+        y="academic_year",
+        color="gender_label",
+        orientation="h",
+        barmode="group",
+        text="pct",
+        color_discrete_map=_GENDER_COLORS,
+        category_orders={
+            "academic_year": list(reversed(years)),
+            "gender_label": list(reversed(labels)),
+        },
+    )
+    fig.update_traces(texttemplate="%{text:.1%}", textposition="outside")
+    fig.update_layout(
+        height=420,
+        xaxis_title=None,
+        xaxis=dict(tickformat=".0%", range=[0, 0.75]),
+        yaxis_title=None,
+        legend_title=None,
+        legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5),
+        margin=dict(t=10),
+    )
+    return fig
+
+
+def _build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str:
+    """Summary HTML table for gender: counts and 5-yr % change."""
+    if len(years) < 2:
+        return ""
+    first_yr, last_yr = years[0], years[-1]
+    piv = df_gender.pivot_table(
+        index="gender", columns="academic_year",
+        values="count", aggfunc="first",
+    )
+    rows: list[str] = []
+    rows.append(
+        '<table style="border-collapse:collapse; font-size:13px; '
+        'table-layout:fixed;">'
+    )
+    rows.append("<colgroup>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("</colgroup>")
+    rows.append("<thead><tr>")
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{first_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{last_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        "<th style='text-align:center; padding:6px 8px; "
+        "border-bottom:2px solid #555;'>5-Yr %<br>Change</th>"
+    )
+    rows.append("</tr></thead><tbody>")
+
+    for g in _GENDER_ORDER:
+        label = _GENDER_LABELS[g]
+        color = _GENDER_COLORS.get(label, "#555555")
+        fc = int(piv.loc[g, first_yr]) if g in piv.index and first_yr in piv.columns and pd.notna(piv.loc[g, first_yr]) else 0
+        lc = int(piv.loc[g, last_yr]) if g in piv.index and last_yr in piv.columns and pd.notna(piv.loc[g, last_yr]) else 0
         chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
 
         cell = (
@@ -370,6 +488,31 @@ def render():
         summary_html = _build_race_summary_html(df_race, years)
         if summary_html:
             st.markdown(summary_html, unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:left'><small>Source: Banner</small></div>",
+        unsafe_allow_html=True,
+    )
+
+    # --- Chart 3: Proportion by Gender ---
+    st.divider()
+    st.subheader("NOCCCD")
+    st.markdown(f"**Proportion of Enrolled Students by Gender**  \n{year_range}")
+    st.caption(
+        "Among all unduplicated students enrolled as of census in NOCCCD "
+        "in the reporting year, the proportion of students by gender."
+    )
+    df_gender = _aggregate_gender(df)
+
+    col_gchart, col_gsummary = st.columns([3, 2])
+    with col_gchart:
+        st.plotly_chart(
+            _build_gender_bar_chart(df_gender, years),
+            use_container_width=True,
+        )
+    with col_gsummary:
+        gender_html = _build_gender_summary_html(df_gender, years)
+        if gender_html:
+            st.markdown(gender_html, unsafe_allow_html=True)
     st.markdown(
         "<div style='text-align:left'><small>Source: Banner</small></div>",
         unsafe_allow_html=True,
