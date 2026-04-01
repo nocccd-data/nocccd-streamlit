@@ -61,6 +61,167 @@ def _compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+_RACE_ORDER = [
+    "Hispanic or Latino",
+    "Asian",
+    "White Non-Hispanic",
+    "Multiethnicity",
+    "Black or African American",
+    "Filipino",
+    "American Indian or Alaska Native",
+    "Pacific Islander or Native Hawaiian",
+    "Unreported",
+]
+
+_RACE_SHORT = {
+    "Hispanic or Latino": "Latino/Hispanic",
+    "Asian": "Asian",
+    "White Non-Hispanic": "White",
+    "Multiethnicity": "Multiethnic",
+    "Black or African American": "Black or African American",
+    "Filipino": "Filipino",
+    "American Indian or Alaska Native": "Amer Indian/AK Native",
+    "Pacific Islander or Native Hawaiian": "Pacific Islander/HI Native",
+    "Unreported": "Unknown/Non-Respondent",
+}
+
+# Year column header colors (cycle through NOCCCD palette)
+_YEAR_COLORS = ["#50b9c3", "#004062", "#0081b7", "#f99d40", "#5faed3"]
+
+# Bar colors per race/ethnicity
+_RACE_COLORS = {
+    "Hispanic or Latino": "#50b9c3",
+    "Asian": "#004062",
+    "White Non-Hispanic": "#0081b7",
+    "Multiethnicity": "#5faed3",
+    "Black or African American": "#f99d40",
+    "Filipino": "#00b3a0",
+    "American Indian or Alaska Native": "#11234f",
+    "Pacific Islander or Native Hawaiian": "#575a5d",
+    "Unreported": "#50b913",
+}
+
+
+def _aggregate_race(df: pd.DataFrame) -> pd.DataFrame:
+    """District-wide unduplicated PIDM count by race/ethnicity by academic year."""
+    # Deduplicate to one row per pidm per academic year (district-level)
+    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
+    by_race = (
+        stu.groupby(["academic_year", "race_description"])
+        .size()
+        .reset_index(name="count")
+    )
+    totals = stu.groupby("academic_year").size().reset_index(name="total")
+    out = by_race.merge(totals, on="academic_year")
+    out["pct"] = out["count"] / out["total"]
+    return out
+
+
+def _build_race_proportion_html(df_race: pd.DataFrame, years: list[str]) -> str:
+    """Table with inline data bars: race rows × year columns."""
+    piv = df_race.pivot_table(
+        index="race_description", columns="academic_year",
+        values="pct", aggfunc="first",
+    )
+    # Max pct across all cells for scaling bar widths
+    max_pct = piv.max().max() if not piv.empty else 1.0
+
+    rows: list[str] = []
+    rows.append('<table style="border-collapse:collapse; font-size:13px;">')
+    # Header
+    rows.append("<thead><tr>")
+    rows.append("<th style='padding:4px 8px; border-bottom:2px solid #555;'></th>")
+    for yr in years:
+        rows.append(
+            f"<th style='text-align:center; padding:4px 10px; "
+            f"border-bottom:2px solid #555;'>{yr}</th>"
+        )
+    rows.append("</tr></thead><tbody>")
+    # Data rows
+    for race in _RACE_ORDER:
+        label = _RACE_SHORT.get(race, race)
+        rows.append("<tr>")
+        rows.append(
+            f"<td style='text-align:right; padding:4px 8px; "
+            f"white-space:nowrap; font-weight:bold;'>{label}</td>"
+        )
+        bar_color = _RACE_COLORS.get(race, "#555555")
+        for i, yr in enumerate(years):
+            pct = piv.loc[race, yr] if race in piv.index and yr in piv.columns else None
+            if pct is not None and pd.notna(pct):
+                bar_w = pct / max_pct * 100 if max_pct > 0 else 0
+                rows.append(
+                    f"<td style='padding:3.6px 4px; min-width:80px;'>"
+                    f"<div style='background:{bar_color}; width:{bar_w:.0f}%; "
+                    f"padding:2.6px 6px; color:white; font-size:12px; "
+                    f"white-space:nowrap; border-radius:2px;'>"
+                    f"{pct:.1%}</div></td>"
+                )
+            else:
+                rows.append("<td style='padding:4px 4px;'></td>")
+        rows.append("</tr>")
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
+def _build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
+    """Summary HTML table with race colors: counts and 5-yr % change."""
+    if len(years) < 2:
+        return ""
+    first_yr, last_yr = years[0], years[-1]
+    piv = df_race.pivot_table(
+        index="race_description", columns="academic_year",
+        values="count", aggfunc="first",
+    )
+    rows: list[str] = []
+    rows.append(
+        '<table style="border-collapse:collapse; font-size:13px; '
+        'table-layout:fixed;">'
+    )
+    rows.append("<colgroup>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("<col style='width:33.3%'>")
+    rows.append("</colgroup>")
+    rows.append("<thead><tr>")
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{first_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        f"<th style='text-align:center; padding:6px 8px; "
+        f"border-bottom:2px solid #555;'>{last_yr}<br>Student Count</th>"
+    )
+    rows.append(
+        "<th style='text-align:center; padding:6px 8px; "
+        "border-bottom:2px solid #555;'>5-Yr %<br>Change</th>"
+    )
+    rows.append("</tr></thead><tbody>")
+
+    for race in _RACE_ORDER:
+        color = _RACE_COLORS.get(race, "#555555")
+        fc = int(piv.loc[race, first_yr]) if race in piv.index and first_yr in piv.columns and pd.notna(piv.loc[race, first_yr]) else 0
+        lc = int(piv.loc[race, last_yr]) if race in piv.index and last_yr in piv.columns and pd.notna(piv.loc[race, last_yr]) else 0
+        chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
+
+        cell = (
+            "padding:4px 8px; color:white; background:{bg}; "
+            "text-align:right; border-bottom:1px solid #444;"
+        )
+        rows.append("<tr>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{fc:,}</td>")
+        rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
+        rows.append(
+            f"<td style='text-align:right; padding:4px 8px; "
+            f"font-weight:bold; color:white; background:{color}; "
+            f"border-bottom:1px solid #444;'>{chg_str}</td>"
+        )
+        rows.append("</tr>")
+
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
 # ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------
@@ -184,6 +345,31 @@ def render():
         else:
             st.info("Need at least 2 years for % change.")
 
+    st.markdown(
+        "<div style='text-align:left'><small>Source: Banner</small></div>",
+        unsafe_allow_html=True,
+    )
+
+    # --- Chart 2: Proportion by Race/Ethnicity ---
+    st.divider()
+    st.subheader("NOCCCD")
+    st.markdown(f"**Proportion of Enrolled Students by Race/Ethnicity**  \n{year_range}")
+    st.caption(
+        "Among all unduplicated students enrolled as of census in NOCCCD "
+        "in the reporting year, the proportion of students by race/ethnicity."
+    )
+    df_race = _aggregate_race(df)
+
+    col_prop, col_summary = st.columns([3, 2])
+    with col_prop:
+        st.markdown(
+            _build_race_proportion_html(df_race, years),
+            unsafe_allow_html=True,
+        )
+    with col_summary:
+        summary_html = _build_race_summary_html(df_race, years)
+        if summary_html:
+            st.markdown(summary_html, unsafe_allow_html=True)
     st.markdown(
         "<div style='text-align:left'><small>Source: Banner</small></div>",
         unsafe_allow_html=True,
