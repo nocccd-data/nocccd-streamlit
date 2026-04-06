@@ -81,7 +81,7 @@ DATASETS = {
     },
     "bot_goal1_students": {
         "sql_file": "bot_goal1_students.sql",
-        "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",
     }

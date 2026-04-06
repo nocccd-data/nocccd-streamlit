@@ -106,7 +106,7 @@ _GENDER_ORDER = ["F", "M", "NB", "N"]
 _GENDER_LABELS = {"F": "Female", "M": "Male", "NB": "Non-Binary", "N": "Unknown"}
 _GENDER_COLORS = {
     "Female": "#004062",
-    "Male": "#5faed3",
+    "Male": "#0081b7",
     "Non-Binary": "#50b9c3",
     "Unknown": "#f99d40",
 }
@@ -121,7 +121,7 @@ _FIRSTGEN_LABELS = {
 _FIRSTGEN_COLORS = {
     "First Generation Student": "#004062",
     "Not First Generation Student": "#50b9c3",
-    "Unknown": "#5faed3",
+    "Unknown": "#f99d40",
 }
 
 
@@ -176,7 +176,8 @@ def _build_race_proportion_html(df_race: pd.DataFrame, years: list[str]) -> str:
                 rows.append(
                     f"<td style='padding:3.6px 4px; min-width:80px;'>"
                     f"<div style='background:{bar_color}; width:{bar_w:.0f}%; "
-                    f"padding:2.6px 6px; color:white; font-size:12px; "
+                    f"padding:2.6px 6px; color:light-dark(#000000, #FFFFFF); "
+                    f"font-size:12px; "
                     f"white-space:nowrap; border-radius:2px;'>"
                     f"{pct:.1%}</div></td>"
                 )
@@ -228,7 +229,7 @@ def _build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
         chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
 
         cell = (
-            "padding:4px 8px; color:white; background:{bg}; "
+            "padding:4px 8px; color:light-dark(#000000, #FFFFFF); background:{bg}; "
             "text-align:right; border-bottom:1px solid #444;"
         )
         rows.append("<tr>")
@@ -236,7 +237,7 @@ def _build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
         rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
         rows.append(
             f"<td style='text-align:right; padding:4px 8px; "
-            f"font-weight:bold; color:white; background:{color}; "
+            f"font-weight:bold; color:light-dark(#000000, #FFFFFF); background:{color}; "
             f"border-bottom:1px solid #444;'>{chg_str}</td>"
         )
         rows.append("</tr>")
@@ -336,7 +337,7 @@ def _build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str
         chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
 
         cell = (
-            "padding:4px 8px; color:white; background:{bg}; "
+            "padding:4px 8px; color:light-dark(#000000, #FFFFFF); background:{bg}; "
             "text-align:right; border-bottom:1px solid #444;"
         )
         rows.append("<tr>")
@@ -344,7 +345,7 @@ def _build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str
         rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
         rows.append(
             f"<td style='text-align:right; padding:4px 8px; "
-            f"font-weight:bold; color:white; background:{color}; "
+            f"font-weight:bold; color:light-dark(#000000, #FFFFFF); background:{color}; "
             f"border-bottom:1px solid #444;'>{chg_str}</td>"
         )
         rows.append("</tr>")
@@ -392,7 +393,7 @@ def _build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
         height=420,
         xaxis_title=None,
         yaxis_title=None,
-        yaxis=dict(tickformat=".0%", range=[0, 0.7]),
+        yaxis=dict(tickformat=".0%", range=[0, 0.7], showticklabels=False),
         legend_title=None,
         legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
         margin=dict(t=10),
@@ -442,7 +443,7 @@ def _build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
         chg_str = f"{(lc - fc) / fc * 100:+.0f}%" if fc > 0 else ""
 
         cell = (
-            "padding:4px 8px; color:white; background:{bg}; "
+            "padding:4px 8px; color:light-dark(#000000, #FFFFFF); background:{bg}; "
             "text-align:right; border-bottom:1px solid #444;"
         )
         rows.append("<tr>")
@@ -450,7 +451,7 @@ def _build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
         rows.append(f"<td style='{cell.format(bg=color)}'>{lc:,}</td>")
         rows.append(
             f"<td style='text-align:right; padding:4px 8px; "
-            f"font-weight:bold; color:white; background:{color}; "
+            f"font-weight:bold; color:light-dark(#000000, #FFFFFF); background:{color}; "
             f"border-bottom:1px solid #444;'>{chg_str}</td>"
         )
         rows.append("</tr>")
@@ -482,12 +483,13 @@ def _build_headcount_chart(df_agg: pd.DataFrame):
     fig.update_layout(
         height=420,
         xaxis_title=None,
-        yaxis_title="Distinct Student Headcount",
+        yaxis_title=None,
+        yaxis=dict(showticklabels=False),
         legend_title=None,
         legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5),
         uniformtext_minsize=8,
         uniformtext_mode="hide",
-        margin=dict(t=30),
+        margin=dict(l=10, t=30),
     )
     return fig
 
@@ -501,7 +503,7 @@ def _build_pct_change_chart(df_pct: pd.DataFrame):
         text="pct_change",
         color="camp_desc",
         color_discrete_map=_COLOR_MAP,
-        category_orders={"camp_desc": _CAMPUS_ORDER},
+        category_orders={"camp_desc": list(reversed(_CAMPUS_ORDER))},
     )
     fig.update_traces(
         texttemplate="%{text:.1f}%",
