@@ -223,6 +223,7 @@ def build_pct_change_chart(df_pct: pd.DataFrame):
         },
     )
     fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    min_val = df_pct["pct_change"].min()
     max_val = df_pct["pct_change"].max()
     fig.update_layout(
         height=420,
@@ -230,8 +231,8 @@ def build_pct_change_chart(df_pct: pd.DataFrame):
         title="5-Yr % Change",
         xaxis_title="% Change",
         xaxis_range=[
-            df_pct["pct_change"].min() - 5,
-            max_val * 1.4 if max_val > 0 else 5,
+            min_val * 1.8 if min_val < 0 else min_val - 5,
+            max_val * 1.8 if max_val > 0 else max_val + 5,
         ],
         yaxis_title=None,
         margin=dict(l=10, t=50),

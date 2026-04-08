@@ -119,4 +119,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 2 - Associate Degrees",
+        "description": "Board of Trustees Goal 2 — Associate degree awards by campus.",
+        "metrics": [
+            "Associate degree headcount by campus",
+            "NOCCCD unduplicated total",
+            "5-year percentage change",
+        ],
+    },
 ]
