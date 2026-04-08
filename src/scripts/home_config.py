@@ -110,4 +110,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 2 - Noncredit Certificates",
+        "description": "Board of Trustees Goal 2 — Noncredit certificate awards at NOCE.",
+        "metrics": [
+            "Noncredit certificate headcount",
+            "Race/ethnicity and gender breakdowns",
+            "5-year percentage change",
+        ],
+    },
 ]

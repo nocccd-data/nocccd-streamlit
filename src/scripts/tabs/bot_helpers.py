@@ -80,20 +80,25 @@ FIRSTGEN_COLORS = {
 # Aggregation helpers
 # ---------------------------------------------------------------------------
 
-def aggregate_headcount(df: pd.DataFrame) -> pd.DataFrame:
+def aggregate_headcount(
+    df: pd.DataFrame, *, include_nocccd: bool = True,
+) -> pd.DataFrame:
     """Distinct PIDM count per campus per academic year + NOCCCD unduplicated."""
     by_campus = (
         df.groupby(["academic_year", "camp_desc"])["pidm"]
         .nunique()
         .reset_index(name="headcount")
     )
-    nocccd = (
-        df.groupby("academic_year")["pidm"]
-        .nunique()
-        .reset_index(name="headcount")
-    )
-    nocccd["camp_desc"] = "NOCCCD (Unduplicated)"
-    out = pd.concat([by_campus, nocccd], ignore_index=True)
+    if include_nocccd:
+        nocccd = (
+            df.groupby("academic_year")["pidm"]
+            .nunique()
+            .reset_index(name="headcount")
+        )
+        nocccd["camp_desc"] = "NOCCCD (Unduplicated)"
+        out = pd.concat([by_campus, nocccd], ignore_index=True)
+    else:
+        out = by_campus
     out["camp_desc"] = pd.Categorical(
         out["camp_desc"], categories=CAMPUS_ORDER, ordered=True,
     )
@@ -148,10 +153,12 @@ def aggregate_gender(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def aggregate_firstgen(df: pd.DataFrame) -> pd.DataFrame:
-    """Credit colleges only: unduplicated PIDM count by first-gen status."""
-    credit = df[df["site"] == "Credit"].copy()
-    stu = credit.drop_duplicates(subset=["pidm", "academic_year"])
+def aggregate_firstgen(
+    df: pd.DataFrame, *, credit_only: bool = True,
+) -> pd.DataFrame:
+    """Unduplicated PIDM count by first-gen status (credit-only by default)."""
+    subset = df[df["site"] == "Credit"].copy() if credit_only else df.copy()
+    stu = subset.drop_duplicates(subset=["pidm", "academic_year"])
     stu["fg"] = stu["first_gen_ind"].where(
         stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
     )
@@ -390,7 +397,7 @@ def build_gender_bar_chart(df_gender: pd.DataFrame, years: list[str]):
     fig.update_layout(
         height=420,
         xaxis_title=None,
-        xaxis=dict(tickformat=".0%", range=[0, 0.75]),
+        xaxis=dict(tickformat=".0%", range=[0, df_plot["pct"].max() * 1.2]),
         yaxis_title=None,
         legend_title=None,
         legend=dict(
@@ -478,6 +485,8 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
         firstgen_org (optional, defaults to org),
         firstgen_title, firstgen_caption,
         firstgen_note (optional, None to skip)
+        include_nocccd (optional, default True) — show NOCCCD unduplicated bar
+        credit_only_firstgen (optional, default True) — filter first-gen to credit
     """
     years = sorted(df["academic_year"].dropna().unique())
     year_range = (
@@ -490,7 +499,9 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
     st.subheader(org)
     st.markdown(f"**{titles['headcount_title']}**  \n{year_range}")
     st.caption(titles["headcount_caption"])
-    df_agg = aggregate_headcount(df)
+    df_agg = aggregate_headcount(
+        df, include_nocccd=titles.get("include_nocccd", True),
+    )
     df_pct = compute_pct_change(df_agg)
 
     col_main, col_pct = st.columns([3, 1])
@@ -549,7 +560,9 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
     st.subheader(fg_org)
     st.markdown(f"**{titles['firstgen_title']}**  \n{year_range}")
     st.caption(titles["firstgen_caption"])
-    df_fg = aggregate_firstgen(df)
+    df_fg = aggregate_firstgen(
+        df, credit_only=titles.get("credit_only_firstgen", True),
+    )
 
     col_fc, col_fs = st.columns([3, 2])
     with col_fc:
