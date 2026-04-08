@@ -137,4 +137,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 2 - Bachelor's Degrees",
+        "description": "Board of Trustees Goal 2 — Bachelor's degree awards by campus.",
+        "metrics": [
+            "Bachelor's degree headcount by campus",
+            "NOCCCD unduplicated total",
+            "5-year percentage change",
+        ],
+    },
 ]

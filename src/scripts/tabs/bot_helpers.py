@@ -550,6 +550,7 @@ def render_bot_charts(
         firstgen_note (optional, None to skip)
         include_nocccd (optional, default True) — show NOCCCD unduplicated bar
         credit_only_firstgen (optional, default True) — filter first-gen to credit
+        headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
     """
     years = sorted(df["academic_year"].dropna().unique())
     year_range = (
@@ -578,6 +579,9 @@ def render_bot_charts(
         else:
             st.info("Need at least 2 years for % change.")
     st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+
+    if titles.get("headcount_only"):
+        return
 
     # --- Chart 2: Proportion by Race/Ethnicity ---
     st.divider()
