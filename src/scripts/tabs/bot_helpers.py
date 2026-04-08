@@ -44,12 +44,12 @@ RACE_SHORT = {
 }
 RACE_COLORS = {
     "Hispanic or Latino": "#50b9c3",
-    "Asian": "#004062",
+    "Asian": "#007a94",
     "White Non-Hispanic": "#0081b7",
     "Multiethnicity": "#5faed3",
     "Black or African American": "#f99d40",
     "Filipino": "#00b3a0",
-    "American Indian or Alaska Native": "#11234f",
+    "American Indian or Alaska Native": "#007a94",
     "Pacific Islander or Native Hawaiian": "#575a5d",
     "Unreported": "#50b913",
 }
@@ -57,7 +57,7 @@ RACE_COLORS = {
 GENDER_ORDER = ["F", "M", "NB", "N"]
 GENDER_LABELS = {"F": "Female", "M": "Male", "NB": "Non-Binary", "N": "Unknown"}
 GENDER_COLORS = {
-    "Female": "#004062",
+    "Female": "#007a94",
     "Male": "#0081b7",
     "Non-Binary": "#50b9c3",
     "Unknown": "#f99d40",
@@ -70,7 +70,7 @@ FIRSTGEN_LABELS = {
     "Unknown": "Unknown",
 }
 FIRSTGEN_COLORS = {
-    "First Generation Student": "#004062",
+    "First Generation Student": "#007a94",
     "Not First Generation Student": "#50b9c3",
     "Unknown": "#f99d40",
 }
@@ -494,7 +494,11 @@ def build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
         height=420,
         xaxis_title=None,
         yaxis_title=None,
-        yaxis=dict(tickformat=".0%", range=[0, 0.7], showticklabels=False),
+        yaxis=dict(
+            tickformat=".0%",
+            range=[0, max(df_fg["pct"].max() * 1.4, 0.1)],
+            showticklabels=False,
+        ),
         legend_title=None,
         legend=dict(
             orientation="h", yanchor="top", y=-0.15,

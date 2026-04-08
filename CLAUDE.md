@@ -277,11 +277,13 @@ Official district color palette used in BOT charts and reports:
 | Green | `#50b913` | 80, 185, 19 | Cypress College |
 | Blue | `#0081b7` | 0, 129, 183 | General accent |
 | Light Blue | `#5faed3` | 95, 174, 211 | Male, Multiethnic |
-| Dark Teal | `#004062` | 0, 64, 98 | NOCE, Female, Asian, First-Gen |
-| Navy | `#11234f` | 17, 35, 79 | Amer Indian/AK Native |
+| Dark Teal | `#004062` | 0, 64, 98 | NOCE |
 | Teal | `#00b3a0` | 0, 179, 16 | Filipino |
 | Teal/Aqua | `#50b9c3` | 80, 185, 195 | NOCCCD Unduplicated, Hispanic, Non-Binary, Not First-Gen |
+| Teal Blue | `#007a94` | 0, 122, 148 | Asian, Female, First-Gen, Amer Indian/AK Native |
 | Grey | `#575a5d` | 87, 90, 93 | Pacific Islander |
+| Sand Yellow | `#fbde81` | 251, 222, 129 | Available accent |
+| Golden Yellow | `#ffdd00` | 255, 209, 0 | Available accent |
 | Orange | `#f99d40` | 249, 157, 64 | Fullerton College, Black/African American, Unknown (gender) |
 
 ### Adding themed elements
