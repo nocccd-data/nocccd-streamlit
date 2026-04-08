@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal2_cert
+from src.scripts.data_provider import fetch_bot_goal1_students, fetch_bot_goal2_cert
 from src.scripts.tabs.bot_helpers import render_bot_charts
 
 _CFG = DATASETS["bot_goal2_cert"]
@@ -49,15 +49,22 @@ def render():
         if not selected_acyrs:
             st.warning("Select at least one academic year.")
             return
+        sorted_acyrs = tuple(sorted(selected_acyrs))
         fetch_bot_goal2_cert.clear()
-        df = fetch_bot_goal2_cert(tuple(sorted(selected_acyrs)))
+        fetch_bot_goal1_students.clear()
+        df = fetch_bot_goal2_cert(sorted_acyrs)
+        base = fetch_bot_goal1_students(sorted_acyrs)
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg2_df"] = df
+        st.session_state["bg2_base"] = base
 
     if "bg2_df" not in st.session_state:
         st.info("Select Academic Years and press **Query** to load data.")
         return
 
-    render_bot_charts(st.session_state["bg2_df"], _TITLES)
+    render_bot_charts(
+        st.session_state["bg2_df"], _TITLES,
+        base_df=st.session_state.get("bg2_base"),
+    )

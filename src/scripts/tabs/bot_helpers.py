@@ -124,39 +124,76 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def aggregate_race(df: pd.DataFrame) -> pd.DataFrame:
-    """Unduplicated PIDM count by race/ethnicity by academic year."""
+def aggregate_race(
+    df: pd.DataFrame, base_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Unduplicated PIDM count by race/ethnicity by academic year.
+
+    When *base_df* is provided the percentage is computed as
+    count(df) / count(base_df) per race per year (rate metric).
+    """
     stu = df.drop_duplicates(subset=["pidm", "academic_year"])
     by_race = (
         stu.groupby(["academic_year", "race_description"])
         .size()
         .reset_index(name="count")
     )
-    totals = stu.groupby("academic_year").size().reset_index(name="total")
-    out = by_race.merge(totals, on="academic_year")
-    out["pct"] = out["count"] / out["total"]
+    if base_df is not None:
+        base_stu = base_df.drop_duplicates(subset=["pidm", "academic_year"])
+        totals = (
+            base_stu.groupby(["academic_year", "race_description"])
+            .size()
+            .reset_index(name="total")
+        )
+        out = by_race.merge(totals, on=["academic_year", "race_description"], how="left")
+    else:
+        totals = stu.groupby("academic_year").size().reset_index(name="total")
+        out = by_race.merge(totals, on="academic_year")
+    out["total"] = out["total"].fillna(0)
+    out["pct"] = out["count"] / out["total"].replace(0, float("nan"))
     return out
 
 
-def aggregate_gender(df: pd.DataFrame) -> pd.DataFrame:
-    """Unduplicated PIDM count by gender by academic year."""
+def aggregate_gender(
+    df: pd.DataFrame, base_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Unduplicated PIDM count by gender by academic year.
+
+    When *base_df* is provided the percentage is computed as
+    count(df) / count(base_df) per gender per year (rate metric).
+    """
     stu = df.drop_duplicates(subset=["pidm", "academic_year"])
     by_gender = (
         stu.groupby(["academic_year", "gender"])
         .size()
         .reset_index(name="count")
     )
-    totals = stu.groupby("academic_year").size().reset_index(name="total")
-    out = by_gender.merge(totals, on="academic_year")
-    out["pct"] = out["count"] / out["total"]
+    if base_df is not None:
+        base_stu = base_df.drop_duplicates(subset=["pidm", "academic_year"])
+        totals = (
+            base_stu.groupby(["academic_year", "gender"])
+            .size()
+            .reset_index(name="total")
+        )
+        out = by_gender.merge(totals, on=["academic_year", "gender"], how="left")
+    else:
+        totals = stu.groupby("academic_year").size().reset_index(name="total")
+        out = by_gender.merge(totals, on="academic_year")
+    out["total"] = out["total"].fillna(0)
+    out["pct"] = out["count"] / out["total"].replace(0, float("nan"))
     out["gender_label"] = out["gender"].map(GENDER_LABELS)
     return out
 
 
 def aggregate_firstgen(
     df: pd.DataFrame, *, credit_only: bool = True,
+    base_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Unduplicated PIDM count by first-gen status (credit-only by default)."""
+    """Unduplicated PIDM count by first-gen status (credit-only by default).
+
+    When *base_df* is provided the percentage is computed as
+    count(df) / count(base_df) per first-gen status per year.
+    """
     subset = df[df["site"] == "Credit"].copy() if credit_only else df.copy()
     stu = subset.drop_duplicates(subset=["pidm", "academic_year"])
     stu["fg"] = stu["first_gen_ind"].where(
@@ -167,9 +204,23 @@ def aggregate_firstgen(
         .size()
         .reset_index(name="count")
     )
-    totals = stu.groupby("academic_year").size().reset_index(name="total")
-    out = by_fg.merge(totals, on="academic_year")
-    out["pct"] = out["count"] / out["total"]
+    if base_df is not None:
+        base_subset = base_df[base_df["site"] == "Credit"].copy() if credit_only else base_df.copy()
+        base_stu = base_subset.drop_duplicates(subset=["pidm", "academic_year"])
+        base_stu["fg"] = base_stu["first_gen_ind"].where(
+            base_stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
+        )
+        totals = (
+            base_stu.groupby(["academic_year", "fg"])
+            .size()
+            .reset_index(name="total")
+        )
+        out = by_fg.merge(totals, on=["academic_year", "fg"], how="left")
+    else:
+        totals = stu.groupby("academic_year").size().reset_index(name="total")
+        out = by_fg.merge(totals, on="academic_year")
+    out["total"] = out["total"].fillna(0)
+    out["pct"] = out["count"] / out["total"].replace(0, float("nan"))
     out["fg_label"] = out["fg"].map(FIRSTGEN_LABELS)
     return out
 
@@ -476,8 +527,15 @@ _SOURCE_FOOTER = (
 )
 
 
-def render_bot_charts(df: pd.DataFrame, titles: dict):
+def render_bot_charts(
+    df: pd.DataFrame, titles: dict,
+    base_df: pd.DataFrame | None = None,
+):
     """Render the standard 4-chart BOT layout.
+
+    When *base_df* is provided (Goal 1 Students data), the proportion
+    charts (race, gender, first-gen) compute rates relative to the base
+    population rather than within the current dataset.
 
     titles keys:
         org, headcount_title, headcount_caption,
@@ -522,7 +580,7 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
     st.subheader(org)
     st.markdown(f"**{titles['race_title']}**  \n{year_range}")
     st.caption(titles["race_caption"])
-    df_race = aggregate_race(df)
+    df_race = aggregate_race(df, base_df=base_df)
 
     col_prop, col_summary = st.columns([3, 2])
     with col_prop:
@@ -541,7 +599,7 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
     st.subheader(org)
     st.markdown(f"**{titles['gender_title']}**  \n{year_range}")
     st.caption(titles["gender_caption"])
-    df_gender = aggregate_gender(df)
+    df_gender = aggregate_gender(df, base_df=base_df)
 
     col_gc, col_gs = st.columns([3, 2])
     with col_gc:
@@ -563,6 +621,7 @@ def render_bot_charts(df: pd.DataFrame, titles: dict):
     st.caption(titles["firstgen_caption"])
     df_fg = aggregate_firstgen(
         df, credit_only=titles.get("credit_only_firstgen", True),
+        base_df=base_df,
     )
 
     col_fc, col_fs = st.columns([3, 2])

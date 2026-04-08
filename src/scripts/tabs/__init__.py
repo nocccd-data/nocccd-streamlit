@@ -11,6 +11,7 @@ from .bot_goal1_students import render as bot_goal1_students_render
 from .bot_goal2_cert import render as bot_goal2_cert_render
 from .bot_goal2_cert_nc import render as bot_goal2_cert_nc_render
 from .bot_goal2_assoc import render as bot_goal2_assoc_render
+from .bot_goal2_adt import render as bot_goal2_adt_render
 from .mail_admin import render as mail_admin_render
 
 # Registry of active tabs: (label, render_function)
@@ -30,5 +31,6 @@ TABS = [
     ("BOT Goal 2 - Certificates", bot_goal2_cert_render),
     ("BOT Goal 2 - Noncredit Certificates", bot_goal2_cert_nc_render),
     ("BOT Goal 2 - Associate Degrees", bot_goal2_assoc_render),
+    ("BOT Goal 2 - ADT", bot_goal2_adt_render),
     ("Mail Admin", mail_admin_render),
 ]

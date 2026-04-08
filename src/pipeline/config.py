@@ -102,6 +102,12 @@ DATASETS = {
         "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",
+    },
+    "bot_goal2_adt": {
+        "sql_file": "bot_goal2_adt.sql",
+        "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
     }
 }
 

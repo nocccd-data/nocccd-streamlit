@@ -178,6 +178,17 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
 
+**Rate metrics (Goal 2+ tabs)**: Charts 2-4 (race, gender, first-gen) compute proportions relative to the **Goal 1 Students** base population, not within the tab's own dataset. For example, "Hispanic certificate rate" = Hispanic cert earners / total Hispanic students (from Goal 1). This is implemented via `base_df` parameter:
+- Each Goal 2+ tab fetches both its own data AND Goal 1 Students data
+- `render_bot_charts(df, titles, base_df=goal1_df)` passes the base population
+- Aggregation functions (`aggregate_race`, `aggregate_gender`, `aggregate_firstgen`) use `base_df` for the per-group denominator when provided
+- Goal 1 Students tab passes `base_df=None` — proportions are within its own population (composition metric)
+- Chart 1 (headcount) always shows absolute counts regardless of `base_df`
+
+**Configurable flags in titles dict:**
+- `include_nocccd` (default `True`): set `False` for single-campus tabs (e.g., NOCE noncredit) to skip the NOCCCD unduplicated bar
+- `credit_only_firstgen` (default `True`): set `False` for noncredit tabs so first-gen data isn't filtered out
+
 **Plotly horizontal grouped bar gotcha**: Bars render in reverse legend order. To get the desired top-to-bottom order, pass `category_orders` with the reversed label list.
 
 Widget prefix: `"bg1_"` (Goal 1), use `"bg2_"`, `"bg3_"`, etc. for subsequent goals.

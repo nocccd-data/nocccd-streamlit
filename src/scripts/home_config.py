@@ -128,4 +128,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 2 - ADT",
+        "description": "Board of Trustees Goal 2 — Associate degrees for transfer by campus.",
+        "metrics": [
+            "ADT headcount by campus",
+            "NOCCCD unduplicated total",
+            "5-year percentage change",
+        ],
+    },
 ]
