@@ -114,6 +114,18 @@ DATASETS = {
         "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",
+    },
+    "bot_goal2_xfer": {
+        "sql_file": "bot_goal2_xfer.sql",
+        "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
+    },
+    "bot_goal2_wage": {
+        "sql_file": "bot_goal2_wage.sql",
+        "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
     }
 }
 

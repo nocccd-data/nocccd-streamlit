@@ -146,4 +146,22 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 2 - Transfers",
+        "description": "Board of Trustees Goal 2 — Student transfers to 4-year institutions by campus.",
+        "metrics": [
+            "Transfer headcount by campus",
+            "Race/ethnicity and gender breakdowns",
+            "5-year percentage change",
+        ],
+    },
+    {
+        "tab_label": "BOT Goal 2 - Living Wage",
+        "description": "Board of Trustees Goal 2 — Students achieving a living wage by campus.",
+        "metrics": [
+            "Living wage headcount by campus",
+            "Race/ethnicity and gender breakdowns",
+            "5-year percentage change",
+        ],
+    },
 ]
