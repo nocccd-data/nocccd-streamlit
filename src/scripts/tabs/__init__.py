@@ -15,6 +15,7 @@ from .bot_goal2_adt import render as bot_goal2_adt_render
 from .bot_goal2_bac import render as bot_goal2_bac_render
 from .bot_goal2_xfer import render as bot_goal2_xfer_render
 from .bot_goal2_wage import render as bot_goal2_wage_render
+from .bot_goal3_finaid import render as bot_goal3_finaid_render
 from .mail_admin import render as mail_admin_render
 
 # Registry of active tabs: (label, render_function)
@@ -38,5 +39,6 @@ TABS = [
     ("BOT Goal 2 - Bachelor's Degrees", bot_goal2_bac_render),
     ("BOT Goal 2 - Transfers", bot_goal2_xfer_render),
     ("BOT Goal 2 - Living Wage", bot_goal2_wage_render),
+    ("BOT Goal 3 - Financial Aid", bot_goal3_finaid_render),
     ("Mail Admin", mail_admin_render),
 ]

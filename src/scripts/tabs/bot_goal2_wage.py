@@ -1,7 +1,10 @@
 import streamlit as st
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal1_students, fetch_bot_goal2_wage
+from src.scripts.data_provider import (
+    fetch_bot_goal2_wage,
+    fetch_bot_goal2_wage_denom,
+)
 from src.scripts.tabs.bot_helpers import render_bot_charts
 
 _CFG = DATASETS["bot_goal2_wage"]
@@ -56,9 +59,9 @@ def render():
             return
         sorted_acyrs = tuple(sorted(selected_acyrs))
         fetch_bot_goal2_wage.clear()
-        fetch_bot_goal1_students.clear()
+        fetch_bot_goal2_wage_denom.clear()
         df = fetch_bot_goal2_wage(sorted_acyrs)
-        base = fetch_bot_goal1_students(sorted_acyrs)
+        base = fetch_bot_goal2_wage_denom(sorted_acyrs)
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return

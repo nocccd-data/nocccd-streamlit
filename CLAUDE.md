@@ -178,16 +178,27 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
 
-**Rate metrics (Goal 2+ tabs)**: Charts 2-4 (race, gender, first-gen) compute proportions relative to the **Goal 1 Students** base population, not within the tab's own dataset. For example, "Hispanic certificate rate" = Hispanic cert earners / total Hispanic students (from Goal 1). This is implemented via `base_df` parameter:
-- Each Goal 2+ tab fetches both its own data AND Goal 1 Students data
-- `render_bot_charts(df, titles, base_df=goal1_df)` passes the base population
+**Rate metrics (Goal 2+ tabs)**: Charts 2-4 (race, gender, first-gen) compute proportions relative to a **base population** dataset, not within the tab's own dataset. For example, "Hispanic certificate rate" = Hispanic cert earners / total Hispanic students. This is implemented via `base_df` parameter:
+- Each Goal 2+ tab fetches both its own data AND a base population dataset
+- `render_bot_charts(df, titles, base_df=base)` passes the base population
 - Aggregation functions (`aggregate_race`, `aggregate_gender`, `aggregate_firstgen`) use `base_df` for the per-group denominator when provided
 - Goal 1 Students tab passes `base_df=None` — proportions are within its own population (composition metric)
 - Chart 1 (headcount) always shows absolute counts regardless of `base_df`
 
+**Base population per tab**: Most Goal 2+ tabs use `bot_goal1_students` as the denominator. The only exception is:
+- **BOT Goal 2 - Living Wage** (`bot_goal2_wage.py`): uses `bot_goal2_wage_denom` (SQL at `src/pipeline/sql/bot_goal2_wage_denom.sql`) as its base population. This is a specialized denominator that excludes students who enrolled in the next academic year or transferred (since living wage is measured for students who leave the system). The `bot_goal2_wage_denom` dataset has no standalone tab — it's used purely as a denominator via `fetch_bot_goal2_wage_denom()` in `data_provider.py`.
+
+**Campus scope per tab**: Some BOT tabs are scoped to credit colleges only (Cypress + Fullerton, excluding NOCE). The filter is applied at the **SQL level** (e.g., `WHERE a.site = 'Credit'` in the SQL), not in Python. Credit-only tabs currently include:
+- Goal 2: Certificates, Associate Degrees, ADT, Bachelor's, Transfers, Financial Aid
+
+Noncredit-only (NOCE) tabs: Goal 2 Noncredit Certificates. All-campus tabs (credit + noncredit): Goal 1 Students, Goal 2 Living Wage.
+
+When adding a new tab, align the titles dict (`org`, captions) with the SQL's actual scope. "NOCCCD Credit Colleges" vs "NOCE" vs "NOCCCD" as appropriate.
+
 **Configurable flags in titles dict:**
-- `include_nocccd` (default `True`): set `False` for single-campus tabs (e.g., NOCE noncredit) to skip the NOCCCD unduplicated bar
-- `credit_only_firstgen` (default `True`): set `False` for noncredit tabs so first-gen data isn't filtered out
+- `include_nocccd` (default `True`): set `False` for single-campus tabs (e.g., NOCE noncredit) to skip the NOCCCD unduplicated bar. Credit-only tabs keep it since "NOCCCD (Unduplicated)" meaningfully represents Cypress+Fullerton combined.
+- `credit_only_firstgen` (default `True`): set `False` for noncredit tabs so first-gen data isn't filtered out. Redundant (but harmless) for tabs already filtered to credit at the SQL level.
+- `headcount_only` (default `False`): set `True` to skip charts 2-4 (race, gender, first-gen). Used by Bachelor's tab where the population is too small for meaningful demographic breakdowns.
 
 **Plotly horizontal grouped bar gotcha**: Bars render in reverse legend order. To get the desired top-to-bottom order, pass `category_orders` with the reversed label list.
 

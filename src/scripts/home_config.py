@@ -164,4 +164,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 3 - Financial Aid",
+        "description": "Board of Trustees Goal 3 — Students receiving Pell or BOG financial aid by campus.",
+        "metrics": [
+            "Financial aid recipient headcount by campus",
+            "Race/ethnicity and gender breakdowns",
+            "5-year percentage change",
+        ],
+    },
 ]

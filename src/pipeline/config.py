@@ -126,6 +126,18 @@ DATASETS = {
         "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
         "param_name": "acyr_code",
         "db_section": "rept",
+    },
+    "bot_goal2_wage_denom": {
+        "sql_file": "bot_goal2_wage_denom.sql",
+        "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
+    },
+    "bot_goal3_finaid": {
+        "sql_file": "bot_goal3_finaid.sql",
+        "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
     }
 }
 
