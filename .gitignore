@@ -8,5 +8,3 @@ config.ini
 .streamlit/secrets.toml
 src/pipeline/hyper/
 *.hyper
-src/pipeline/sql/
-*.sql

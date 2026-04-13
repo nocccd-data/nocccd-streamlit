@@ -321,5 +321,5 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
 
 - `pantab` must stay pinned to `==5.2.2` (API differences between major versions)
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
-- SQL files and `.hyper` files are gitignored; SQL lives in `src/pipeline/sql/`, hyper output in `src/pipeline/hyper/`
+- SQL files live in `src/pipeline/sql/` (tracked in git); `.hyper` files are gitignored in `src/pipeline/hyper/`
 - Oracle Instant Client: `/Users/hoonywise/Oracle/instantclient_23_3` with `lib -> .` symlink (macOS SIP workaround)
