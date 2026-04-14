@@ -2,12 +2,13 @@ import streamlit as st
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_bot_goal2_bac
-from src.scripts.tabs.bot_helpers import render_bot_charts
+from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal2_bac"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 
 _TITLES = {
+    "tab_title": "BOT Goal 2 - Bachelor's Degrees",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Bachelor's Degrees Awarded",
     "headcount_caption": (
@@ -57,6 +58,14 @@ def render():
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg2b_df"] = df
+
+    if "bg2b_df" in st.session_state:
+        pdf_bytes = generate_bot_pdf(st.session_state["bg2b_df"], _TITLES)
+        st.sidebar.download_button(
+            "Download PDF", data=pdf_bytes,
+            file_name="bot_goal2_bac.pdf", mime="application/pdf",
+            key="bg2b_pdf_btn",
+        )
 
     if "bg2b_df" not in st.session_state:
         st.info("Select Academic Years and press **Query** to load data.")

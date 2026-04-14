@@ -216,7 +216,13 @@ Two patterns are supported:
 
 ### Sidebar PDF export
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type) use `st.sidebar.download_button()` to offer a PDF download.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download.
+
+**BOT tabs share a single PDF generator**: `generate_bot_pdf(df, titles, base_df=None)` in `bot_helpers.py` produces a portrait 8.5×11 PDF with 2 sections per page. Page 1 has Headcount + Race, Page 2 has Gender + First-Gen. Sections use paper-coordinate positioning via `fig.add_axes([left, bottom, width, height])`. Each tab sets `tab_title` in its `_TITLES` dict for the PDF header. Titles-dict flags `include_nocccd`, `credit_only_firstgen`, `headcount_only` apply to PDF the same way as to the interactive charts. HTML data-bar tables are rendered using matplotlib `Rectangle` patches; HTML summary tables become `ax.table()` with colored cell facecolors.
+
+**PDF always renders in light theme**: The PDF is always meant to print on white paper, so `generate_bot_pdf()` explicitly sets color-related `matplotlib.rcParams` (`figure.facecolor`, `axes.facecolor`, `text.color`, `xtick.color`, `ytick.color`, etc.) to light-theme values. This prevents Streamlit's dark-theme context from leaking into the matplotlib global state. Data-bar and summary table text is hardcoded **black** on colored cells — contrast-aware white text would become invisible when it overflows past a narrow bar onto the white page background.
+
+**BOT section layout gotcha**: The gender section's horizontal bar chart has long y-axis labels (e.g. "2024-2025") that extend left of the axes box. When placed at `left=0.06` (the default section margin), matplotlib clips them at the page edge. The gender section uses `left=0.12` with width `0.48` instead to leave room for tick labels. Sections with labels on the x-axis (headcount, first-gen) don't hit this issue.
 
 **Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
 

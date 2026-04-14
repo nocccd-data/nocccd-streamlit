@@ -135,7 +135,7 @@ DATASETS = {
     },
     "bot_goal3_finaid": {
         "sql_file": "bot_goal3_finaid.sql",
-        "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",
     }
