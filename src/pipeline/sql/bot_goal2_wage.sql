@@ -19,10 +19,6 @@ WITH
                 ELSE 'Y'
             END AS first_gen_ind
         FROM svbsgpd
-            LEFT JOIN svvgedl gedl1
-                ON (svbsgpd_guard_1_gedl_code = gedl1.svvgedl_code)
-            LEFT JOIN svvgedl gedl2
-                ON (svbsgpd_guard_2_gedl_code = gedl2.svvgedl_code)
     ),
 
     wage AS (
