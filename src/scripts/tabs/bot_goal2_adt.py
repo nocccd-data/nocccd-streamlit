@@ -58,6 +58,8 @@ def render():
         fetch_bot_goal1_students.clear()
         df = fetch_bot_goal2_adt(sorted_acyrs)
         base = fetch_bot_goal1_students(sorted_acyrs)
+        # Credit-only scope: denominator should match (Cypress + Fullerton)
+        base = base[base["site"] == "Credit"]
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return

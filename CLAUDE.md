@@ -188,6 +188,11 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 **Base population per tab**: Most Goal 2+ tabs use `bot_goal1_students` as the denominator. The only exception is:
 - **BOT Goal 2 - Living Wage** (`bot_goal2_wage.py`): uses `bot_goal2_wage_denom` (SQL at `src/pipeline/sql/bot_goal2_wage_denom.sql`) as its base population. This is a specialized denominator that excludes students who enrolled in the next academic year or transferred (since living wage is measured for students who leave the system). The `bot_goal2_wage_denom` dataset has no standalone tab — it's used purely as a denominator via `fetch_bot_goal2_wage_denom()` in `data_provider.py`.
 
+**Base_df must match tab's campus scope**: After fetching `bot_goal1_students` as `base`, the tab must filter it to match its own campus scope BEFORE passing to `render_bot_charts()`. Otherwise the proportion denominator includes populations the tab's numerator can never reach (e.g., a credit-only cert tab divided by a district-wide Goal 1 population). Pattern:
+- Credit-only tabs (cert, assoc, adt, xfer, finaid): `base = base[base["site"] == "Credit"]`
+- Noncredit-only tabs (cert_nc): `base = base[base["site"] == "Noncredit"]`
+- All-campus tabs (wage): uses its own denom, no filtering needed
+
 **Campus scope per tab**: Some BOT tabs are scoped to credit colleges only (Cypress + Fullerton, excluding NOCE). The filter is applied at the **SQL level** (e.g., `WHERE a.site = 'Credit'` in the SQL), not in Python. Credit-only tabs currently include:
 - Goal 2: Certificates, Associate Degrees, ADT, Bachelor's, Transfers, Financial Aid
 

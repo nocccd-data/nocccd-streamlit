@@ -57,6 +57,8 @@ def render():
         fetch_bot_goal1_students.clear()
         df = fetch_bot_goal2_cert_nc(sorted_acyrs)
         base = fetch_bot_goal1_students(sorted_acyrs)
+        # Noncredit-only scope: denominator should match (NOCE)
+        base = base[base["site"] == "Noncredit"]
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
