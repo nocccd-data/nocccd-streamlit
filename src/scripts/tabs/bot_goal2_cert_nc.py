@@ -20,19 +20,21 @@ _TITLES = {
     ),
     "race_title": "Proportion of Certificate Recipients by Race/Ethnicity",
     "race_caption": (
-        "Among all unduplicated students awarded noncredit certificates at "
-        "NOCE in the reporting year, the proportion by race/ethnicity."
+        "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
+        "courses in the selected year, the proportion who received a "
+        "noncredit certificate in the reporting year."
     ),
     "gender_title": "Proportion of Certificate Recipients by Gender",
     "gender_caption": (
-        "Among all unduplicated students awarded noncredit certificates at "
-        "NOCE in the reporting year, the proportion by gender."
+        "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
+        "courses in the selected year, the proportion who received a "
+        "noncredit certificate in the reporting year."
     ),
     "firstgen_title": "Proportion of Certificate Recipients by First-Generation College Status",
     "firstgen_caption": (
-        "Among all unduplicated students awarded noncredit certificates at "
-        "NOCE in the reporting year, the proportion who reported neither "
-        "parent/guardian had ever attended college."
+        "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
+        "courses in the selected year, the proportion who received a "
+        "noncredit certificate in the reporting year."
     ),
     "firstgen_note": None,
     "include_nocccd": False,
