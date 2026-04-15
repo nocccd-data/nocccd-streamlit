@@ -495,7 +495,8 @@ def _add_pdf_footer(fig):
              fontsize=7, color="grey", ha="right")
 
 
-def _draw_section_header(fig, section_top, org, title, year_range, caption):
+def _draw_section_header(fig, section_top, org, title, year_range, caption,
+                         pad: float = 0.025):
     y = section_top
     fig.text(0.06, y, org, fontsize=12, fontweight="bold", va="top")
     y -= 0.022
@@ -507,8 +508,7 @@ def _draw_section_header(fig, section_top, org, title, year_range, caption):
     fig.text(0.06, y, wrapped, fontsize=7, color="#555555",
              va="top", style="italic")
     y_after_caption = y - 0.022 * (wrapped.count("\n") + 1)
-    # Gap below caption to prevent axis titles overlapping
-    return y_after_caption - 0.025
+    return y_after_caption - pad
 
 
 def _draw_section_source(fig, y):
@@ -822,17 +822,22 @@ def _generate_pdf(df) -> bytes:
         fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
                  ha="center", va="top")
 
+        # Section 1: chart bottom raised to 0.58 so legend sits above
+        # "Source: Banner" with a clear gap.
         y_after = _draw_section_header(
             fig, 0.935, _TITLES["org"], _TITLES["headcount_title"],
             year_range, _TITLES["headcount_caption"],
         )
-        _mpl_campus(fig, (0.06, 0.54, 0.88, y_after - 0.54),
+        _mpl_campus(fig, (0.06, 0.58, 0.88, y_after - 0.58),
                     df_campus, df_pct)
-        _draw_section_source(fig, 0.52)
+        _draw_section_source(fig, 0.54)
 
+        # Section 2: raised to 0.50 with tight caption-to-chart padding
+        # since the race table has no axis title to overlap.
         y_after = _draw_section_header(
-            fig, 0.48, _TITLES["org"], _TITLES["race_title"],
+            fig, 0.50, _TITLES["org"], _TITLES["race_title"],
             year_range, _TITLES["race_caption"],
+            pad=0.005,
         )
         _mpl_race_table(fig, (0.06, 0.06, 0.54, y_after - 0.06),
                         df_race, years)

@@ -729,12 +729,15 @@ def _add_pdf_footer(fig):
              fontsize=7, color="grey", ha="right")
 
 
-def _draw_section_header(fig, section_top, org, title, year_range, caption):
+def _draw_section_header(fig, section_top, org, title, year_range, caption,
+                         pad: float = 0.025):
     """Draw section header (org, title, year range, caption) at paper coords.
 
-    Returns the y-coordinate of the content area (chart) top, with a
-    fixed gap between the caption and the chart so that matplotlib
-    axis titles don't overlap the caption.
+    Returns the y-coordinate of the content area (chart) top. *pad* is
+    the gap below the caption to prevent matplotlib axis titles from
+    overlapping it. Pass a smaller value (e.g. 0.005) for sections
+    where the chart has no axis title above the axes box (e.g. the
+    race data-bar table drawn on an ``axis("off")`` axes).
     """
     y = section_top
     fig.text(0.06, y, org, fontsize=12, fontweight="bold", va="top")
@@ -747,8 +750,7 @@ def _draw_section_header(fig, section_top, org, title, year_range, caption):
     fig.text(0.06, y, wrapped, fontsize=7, color="#555555",
              va="top", style="italic")
     y_after_caption = y - 0.022 * (wrapped.count("\n") + 1)
-    # Gap below the caption so axis titles on the chart don't overlap it
-    return y_after_caption - 0.025
+    return y_after_caption - pad
 
 
 def _draw_section_source(fig, y):
@@ -1092,28 +1094,30 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
         fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
                  ha="center", va="top")
 
-        # Section 1: Headcount (top half)
+        # Section 1: Headcount (top half) — chart bottom raised to 0.58
+        # so legend sits above the Source line with a clear gap.
         y_after_header = _draw_section_header(
             fig, 0.935, titles["org"], titles["headcount_title"],
             year_range, titles["headcount_caption"],
         )
         _mpl_headcount(
             fig,
-            (0.06, 0.54, 0.88, y_after_header - 0.54),
+            (0.06, 0.58, 0.88, y_after_header - 0.58),
             df_agg, df_pct,
         )
-        _draw_section_source(fig, 0.52)
+        _draw_section_source(fig, 0.54)
 
         if not headcount_only:
-            # Section 2: Race (bottom half)
+            # Section 2: Race (bottom half) — top raised to 0.50 to use
+            # the vertical space freed above; header uses reduced pad
+            # to tighten the gap between caption and the race table.
             y_after_header = _draw_section_header(
-                fig, 0.48, titles["org"], titles["race_title"],
+                fig, 0.50, titles["org"], titles["race_title"],
                 year_range, titles["race_caption"],
+                pad=0.005,
             )
-            # Chart area (left 60%)
             chart_bbox = (0.06, 0.06, 0.54, y_after_header - 0.06)
             _mpl_race_proportion_table(fig, chart_bbox, df_race, years)
-            # Summary table (right 40%)
             table_bbox = (0.62, 0.06, 0.32, y_after_header - 0.06)
             _mpl_race_summary(fig, table_bbox, df_race, years)
             _draw_section_source(fig, 0.04)
