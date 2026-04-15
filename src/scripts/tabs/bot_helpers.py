@@ -730,7 +730,12 @@ def _add_pdf_footer(fig):
 
 
 def _draw_section_header(fig, section_top, org, title, year_range, caption):
-    """Draw section header (org, title, year range, caption) at paper coords."""
+    """Draw section header (org, title, year range, caption) at paper coords.
+
+    Returns the y-coordinate of the content area (chart) top, with a
+    fixed gap between the caption and the chart so that matplotlib
+    axis titles don't overlap the caption.
+    """
     y = section_top
     fig.text(0.06, y, org, fontsize=12, fontweight="bold", va="top")
     y -= 0.022
@@ -741,7 +746,9 @@ def _draw_section_header(fig, section_top, org, title, year_range, caption):
     wrapped = textwrap.fill(caption, width=140)
     fig.text(0.06, y, wrapped, fontsize=7, color="#555555",
              va="top", style="italic")
-    return y - 0.022 * (wrapped.count("\n") + 1)
+    y_after_caption = y - 0.022 * (wrapped.count("\n") + 1)
+    # Gap below the caption so axis titles on the chart don't overlap it
+    return y_after_caption - 0.025
 
 
 def _draw_section_source(fig, y):

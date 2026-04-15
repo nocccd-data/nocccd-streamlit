@@ -506,7 +506,9 @@ def _draw_section_header(fig, section_top, org, title, year_range, caption):
     wrapped = textwrap.fill(caption, width=140)
     fig.text(0.06, y, wrapped, fontsize=7, color="#555555",
              va="top", style="italic")
-    return y - 0.022 * (wrapped.count("\n") + 1)
+    y_after_caption = y - 0.022 * (wrapped.count("\n") + 1)
+    # Gap below caption to prevent axis titles overlapping
+    return y_after_caption - 0.025
 
 
 def _draw_section_source(fig, y):
