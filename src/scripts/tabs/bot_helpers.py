@@ -299,7 +299,11 @@ def build_headcount_chart(df_agg: pd.DataFrame):
         color_discrete_map=COLOR_MAP,
         category_orders={"camp_desc": CAMPUS_ORDER, "academic_year": years},
     )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:,}",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     fig.update_layout(
         height=420,
         xaxis_title=None,
@@ -331,7 +335,11 @@ def build_pct_change_chart(df_pct: pd.DataFrame):
                           if c in df_pct["camp_desc"].values],
         },
     )
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     min_val = df_pct["pct_change"].min()
     max_val = df_pct["pct_change"].max()
     fig.update_layout(
@@ -505,7 +513,11 @@ def build_gender_bar_chart(df_gender: pd.DataFrame, years: list[str]):
             "gender_label": list(reversed(labels)),
         },
     )
-    fig.update_traces(texttemplate="%{text:.1%}", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:.1%}",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     fig.update_layout(
         height=420,
         xaxis_title=None,
@@ -550,6 +562,7 @@ def build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
         texttemplate="%{y:.1%}",
         textposition="top center",
         mode="lines+markers+text",
+        textfont=dict(size=12),
     )
     # Zoom y-axis tight around actual data range so lines are visually
     # separated. Smaller pad = more vertical spread between lines.
@@ -965,7 +978,7 @@ def _mpl_gender_chart(fig, bbox, df_gender, years):
         for y_, v in zip(ys, vals):
             if pd.notna(v) and v > 0:
                 ax.text(v, y_, f"{v:.1%}", va="center",
-                        ha="left", fontsize=5)
+                        ha="left", fontsize=6)
 
     ax.set_yticks(range(n_years))
     ax.set_yticklabels(years, fontsize=7)

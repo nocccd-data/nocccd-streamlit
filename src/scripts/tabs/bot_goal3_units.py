@@ -206,7 +206,11 @@ def _build_campus_chart(df_avg):
         color_discrete_map=COLOR_MAP,
         category_orders={"camp_desc": CAMPUS_ORDER, "academic_year": years},
     )
-    fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:.1f}",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     fig.update_layout(
         height=420,
         xaxis_title=None,
@@ -236,7 +240,11 @@ def _build_pct_change_chart(df_pct):
                           if c in df_pct["camp_desc"].values],
         },
     )
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     min_val = df_pct["pct_change"].min()
     max_val = df_pct["pct_change"].max()
     fig.update_layout(
@@ -401,7 +409,11 @@ def _build_gender_chart(df_gender, years):
             "gender_label": list(reversed(labels)),
         },
     )
-    fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+    fig.update_traces(
+        texttemplate="%{text:.1f}",
+        textposition="outside",
+        textfont=dict(size=12),
+    )
     max_v = df_plot["avg_units"].max() if not df_plot.empty else 100
     fig.update_layout(
         height=420,
@@ -445,6 +457,7 @@ def _build_firstgen_chart(df_fg, years):
         texttemplate="%{y:.1f}",
         textposition="top center",
         mode="lines+markers+text",
+        textfont=dict(size=12),
     )
     # Zoom y-axis to actual data range so lines are visually separated.
     min_v = df_fg["avg_units"].min() if not df_fg.empty else 0
@@ -715,7 +728,7 @@ def _mpl_gender_chart(fig, bbox, df_gender, years):
         for y_, v in zip(ys, vals):
             if pd.notna(v) and v > 0:
                 ax.text(v, y_, f"{v:.1f}", va="center",
-                        ha="left", fontsize=5)
+                        ha="left", fontsize=6)
 
     ax.set_yticks(range(n_years))
     ax.set_yticklabels(years, fontsize=7)
