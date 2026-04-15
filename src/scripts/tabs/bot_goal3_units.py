@@ -411,7 +411,7 @@ def _build_firstgen_chart(df_fg, years):
     # Zoom y-axis to actual data range so lines are visually separated.
     min_v = df_fg["avg_units"].min() if not df_fg.empty else 0
     max_v = df_fg["avg_units"].max() if not df_fg.empty else 100
-    pad = max((max_v - min_v) * 0.5, 5)
+    pad = max((max_v - min_v) * 0.25, 2)
     fig.update_layout(
         height=420,
         xaxis_title=None,
@@ -722,7 +722,7 @@ def _mpl_firstgen_chart(fig, bbox, df_fg, years):
     ax.tick_params(axis="y", labelsize=6)
     min_v = df_fg["avg_units"].min() if not df_fg.empty else 0
     max_v = df_fg["avg_units"].max() if not df_fg.empty else 100
-    pad = max((max_v - min_v) * 0.5, 5)
+    pad = max((max_v - min_v) * 0.25, 2)
     if pd.notna(min_v):
         ax.set_ylim(max(0, min_v - pad), max_v + pad)
     else:

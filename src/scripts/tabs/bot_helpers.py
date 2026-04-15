@@ -514,13 +514,19 @@ def build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
         textposition="top center",
         mode="lines+markers+text",
     )
+    # Zoom y-axis tight around actual data range so lines are visually
+    # separated. Smaller pad = more vertical spread between lines.
+    min_v = df_fg["pct"].min() if not df_fg.empty else 0
+    max_v = df_fg["pct"].max() if not df_fg.empty else 1.0
+    pad = max((max_v - min_v) * 0.25, 0.015)
     fig.update_layout(
         height=420,
         xaxis_title=None,
         yaxis_title=None,
         yaxis=dict(
             tickformat=".0%",
-            range=[0, max(df_fg["pct"].max() * 1.4, 0.1)],
+            range=[max(0, min_v - pad), max_v + pad]
+                  if pd.notna(min_v) else [0, 1.0],
             showticklabels=False,
         ),
         legend_title=None,
