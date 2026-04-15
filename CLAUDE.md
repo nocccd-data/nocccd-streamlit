@@ -194,9 +194,12 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 - All-campus tabs (wage): uses its own denom, no filtering needed
 
 **Campus scope per tab**: Some BOT tabs are scoped to credit colleges only (Cypress + Fullerton, excluding NOCE). The filter is applied at the **SQL level** (e.g., `WHERE a.site = 'Credit'` in the SQL), not in Python. Credit-only tabs currently include:
-- Goal 2: Certificates, Associate Degrees, ADT, Bachelor's, Transfers, Financial Aid
+- Goal 2: Certificates, Associate Degrees, ADT, Bachelor's, Transfers
+- Goal 3: Financial Aid, Average Units
 
 Noncredit-only (NOCE) tabs: Goal 2 Noncredit Certificates. All-campus tabs (credit + noncredit): Goal 1 Students, Goal 2 Living Wage.
+
+**Average-metric tabs (Goal 3 Average Units)**: Unlike other BOT tabs which use count/proportion metrics via `render_bot_charts()` and `generate_bot_pdf()`, the Average Units tab computes **mean of a value column** (`sum_hours_earned`) per demographic group. It has its own self-contained implementation in `bot_goal3_units.py` — imports only the shared constants (COLOR_MAP, RACE_COLORS, etc.) and label maps from `bot_helpers.py`, but uses its own aggregation/chart/PDF functions. Same 4-section layout (campus / race / gender / first-gen) but values display as decimal numbers (e.g., "67.5") instead of percentages. No `base_df` denominator — average is computed within the tab's own data (ADT recipients).
 
 When adding a new tab, align the titles dict (`org`, captions) with the SQL's actual scope. "NOCCCD Credit Colleges" vs "NOCE" vs "NOCCCD" as appropriate.
 

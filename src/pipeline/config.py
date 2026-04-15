@@ -63,7 +63,7 @@ DATASETS = {
     },
     "class_schedule_heatmap": {
         "sql_file": "class_schedule_heatmap.sql",
-        "mis_term_id": ["257","263","265"],
+        "mis_term_id": ["257", "263", "265"],
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
@@ -135,6 +135,12 @@ DATASETS = {
     },
     "bot_goal3_finaid": {
         "sql_file": "bot_goal3_finaid.sql",
+        "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
+        "param_name": "acyr_code",
+        "db_section": "rept",
+    },
+    "bot_goal3_units": {
+        "sql_file": "bot_goal3_units.sql",
         "acyr_code": ["2020", "2021", "2022", "2023", "2024"],
         "param_name": "acyr_code",
         "db_section": "rept",

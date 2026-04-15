@@ -173,4 +173,13 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "BOT Goal 3 - Average Units",
+        "description": "Board of Trustees Goal 3 — Average units earned by ADT recipients at credit colleges.",
+        "metrics": [
+            "Average units by campus",
+            "Race/ethnicity, gender, first-gen breakdowns",
+            "5-year percentage change",
+        ],
+    },
 ]

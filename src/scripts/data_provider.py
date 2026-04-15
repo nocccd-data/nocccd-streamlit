@@ -371,3 +371,16 @@ def _fetch_bot_goal3_finaid_raw(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_bot_goal3_finaid(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
     return _fetch_bot_goal3_finaid_raw(acyr_codes)
+
+
+def _fetch_bot_goal3_units_raw(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+    if _is_cloud():
+        return _download_and_read("bot_goal3_units", "acyr_code", acyr_codes)
+    return _query_oracle_single_acyr(
+        _SQL_DIR / "bot_goal3_units.sql", acyr_codes, "acyr_code",
+        db_section="rept")
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_bot_goal3_units(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+    return _fetch_bot_goal3_units_raw(acyr_codes)

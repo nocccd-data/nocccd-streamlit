@@ -25,8 +25,7 @@ WITH
         SELECT
             stvterm_acyr_code AS acyr_code,
             shrdgmr_pidm AS pidm,
-            camp_code,
-            'Y' as cert_ind
+            camp_code
         FROM (
             SELECT
                 ROW_NUMBER() OVER (PARTITION BY shrdgmr.shrdgmr_term_code_completed, shrdgmr.shrdgmr_coll_code_1, shrdgmr.shrdgmr_pidm, shrdgmr.shrdgmr_program ORDER BY shrdgmr.shrdgmr_seq_no DESC) AS rnum,
