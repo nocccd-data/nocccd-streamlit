@@ -235,6 +235,18 @@ Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Per
 
 **BOT section layout gotcha**: The gender section's horizontal bar chart has long y-axis labels (e.g. "2024-2025") that extend left of the axes box. When placed at `left=0.06` (the default section margin), matplotlib clips them at the page edge. The gender section uses `left=0.12` with width `0.48` instead to leave room for tick labels. Sections with labels on the x-axis (headcount, first-gen) don't hit this issue.
 
+**BOT PDF paper coordinates** (constant across all tabs, including Units):
+- Page 1 Section 1 (Headcount): chart_bbox bottom=0.58, Source at y=0.54 (below the chart's legend).
+- Page 1 Section 2 (Race): header top=0.50 with tight caption padding (`pad=0.005` on `_draw_section_header`, since the race data-bar table renders on an `axis("off")` axes and doesn't need the 0.025 gap Section 1 needs for its "5-Yr % Change" axis title). Chart+table bbox bottom=0.06. Source at y=0.04.
+- Page 2 Section 3 (Gender): chart_bbox left=0.12, width=0.48, bottom=0.56. Source at y=0.52.
+- Page 2 Section 4 (First-Gen): chart_bbox bottom=0.13 (raised so the legend has room above the Source footer). Source at y=0.085. Optional `firstgen_note` (BOT Goal 1 only) renders at y=0.065 just below Source.
+
+**First-gen line chart y-axis zoom**: Both the Plotly interactive chart and the matplotlib PDF chart zoom the y-axis to `[max(0, min - 0.25×range), max + 0.25×range]` (with a small minimum pad) so clustered values (e.g. 3-5%) are visually separated instead of compressed at the bottom of a wide 0-100% range.
+
+**BOT chart font sizes** (uniform across all BOT tabs, including Units):
+- Plotly interactive charts: value labels use `textfont=dict(size=12)` — matches the race HTML data-bar table's 12px and keeps all four charts visually consistent.
+- Matplotlib PDF charts: value labels use `fontsize=6`; axis tick labels use `fontsize=6-7`; summary tables and headers use `fontsize=7`.
+
 **Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
 
 ```python
