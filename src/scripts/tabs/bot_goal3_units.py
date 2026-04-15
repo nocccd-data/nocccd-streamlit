@@ -863,11 +863,13 @@ def _generate_pdf(df) -> bytes:
             fig, 0.48, _TITLES["org"], _TITLES["firstgen_title"],
             year_range, _TITLES["firstgen_caption"],
         )
-        _mpl_firstgen_chart(fig, (0.06, 0.08, 0.54, y_after - 0.08),
+        # Raise chart bottom so legend has room above "Source: Banner".
+        # Matches the shared BOT layout in bot_helpers.py.
+        _mpl_firstgen_chart(fig, (0.06, 0.13, 0.54, y_after - 0.13),
                             df_fg, years)
-        _mpl_firstgen_summary(fig, (0.62, 0.08, 0.32, y_after - 0.08),
+        _mpl_firstgen_summary(fig, (0.62, 0.13, 0.32, y_after - 0.13),
                               df_fg, years)
-        _draw_section_source(fig, 0.06)
+        _draw_section_source(fig, 0.085)
 
         _add_pdf_footer(fig)
         pdf.savefig(fig)

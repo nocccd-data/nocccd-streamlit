@@ -1017,8 +1017,14 @@ def _mpl_firstgen_chart(fig, bbox, df_fg, years):
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda v, _: f"{v:.0%}")
     )
+    # Zoom y-axis tight to data so line points are visually separated
+    min_pct = df_fg["pct"].min() if not df_fg.empty else 0
     max_pct = df_fg["pct"].max() if not df_fg.empty else 0.5
-    ax.set_ylim(0, max(max_pct * 1.4, 0.1) if pd.notna(max_pct) else 0.5)
+    pad = max((max_pct - min_pct) * 0.25, 0.015)
+    if pd.notna(min_pct):
+        ax.set_ylim(max(0, min_pct - pad), max_pct + pad)
+    else:
+        ax.set_ylim(0, 0.5)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
@@ -1136,21 +1142,24 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
         _mpl_gender_summary(fig, table_bbox, df_gender, years)
         _draw_section_source(fig, 0.52)
 
-        # Section 4: First-Gen (bottom half)
+        # Section 4: First-Gen (bottom half) — raise chart bottom to 0.13
+        # so the legend has room below before "Source: Banner" at 0.06.
         fg_org = titles.get("firstgen_org", titles["org"])
         y_after_header = _draw_section_header(
             fig, 0.48, fg_org, titles["firstgen_title"],
             year_range, titles["firstgen_caption"],
         )
-        chart_bbox = (0.06, 0.08, 0.54, y_after_header - 0.08)
+        chart_bbox = (0.06, 0.13, 0.54, y_after_header - 0.13)
         _mpl_firstgen_chart(fig, chart_bbox, df_fg, years)
-        table_bbox = (0.62, 0.08, 0.32, y_after_header - 0.08)
+        table_bbox = (0.62, 0.13, 0.32, y_after_header - 0.13)
         _mpl_firstgen_summary(fig, table_bbox, df_fg, years)
-        _draw_section_source(fig, 0.06)
 
+        # Source sits between the chart legend (~y=0.10) and the page
+        # footer (~y=0.02) with balanced gaps. Same layout across all tabs.
+        _draw_section_source(fig, 0.085)
         if titles.get("firstgen_note"):
             note_wrapped = textwrap.fill(titles["firstgen_note"], width=140)
-            fig.text(0.06, 0.04, note_wrapped,
+            fig.text(0.06, 0.065, note_wrapped,
                      fontsize=6, color="grey", va="top", style="italic")
 
         _add_pdf_footer(fig)
