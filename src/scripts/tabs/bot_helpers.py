@@ -1139,48 +1139,47 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
         pdf.savefig(fig)
         plt.close(fig)
 
-        if headcount_only:
-            return buf.getvalue()
+        if not headcount_only:
+            # --- Page 2: Gender + First-Gen ---
+            fig = plt.figure(figsize=(PAGE_W, PAGE_H))
+            fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
+                     ha="center", va="top")
 
-        # --- Page 2: Gender + First-Gen ---
-        fig = plt.figure(figsize=(PAGE_W, PAGE_H))
-        fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
-                 ha="center", va="top")
+            # Section 3: Gender (top half) — shift chart right so long
+            # y-axis year labels aren't clipped at the page edge.
+            y_after_header = _draw_section_header(
+                fig, 0.935, titles["org"], titles["gender_title"],
+                year_range, titles["gender_caption"],
+            )
+            chart_bbox = (0.12, 0.56, 0.48, y_after_header - 0.56)
+            _mpl_gender_chart(fig, chart_bbox, df_gender, years)
+            table_bbox = (0.62, 0.56, 0.32, y_after_header - 0.56)
+            _mpl_gender_summary(fig, table_bbox, df_gender, years)
+            _draw_section_source(fig, 0.52)
 
-        # Section 3: Gender (top half) — shift chart right so long y-axis
-        # year labels (e.g. "2024-2025") aren't clipped at the page edge.
-        y_after_header = _draw_section_header(
-            fig, 0.935, titles["org"], titles["gender_title"],
-            year_range, titles["gender_caption"],
-        )
-        chart_bbox = (0.12, 0.56, 0.48, y_after_header - 0.56)
-        _mpl_gender_chart(fig, chart_bbox, df_gender, years)
-        table_bbox = (0.62, 0.56, 0.32, y_after_header - 0.56)
-        _mpl_gender_summary(fig, table_bbox, df_gender, years)
-        _draw_section_source(fig, 0.52)
+            # Section 4: First-Gen (bottom half) — raise chart bottom to
+            # 0.13 so the legend has room below before "Source: Banner".
+            fg_org = titles.get("firstgen_org", titles["org"])
+            y_after_header = _draw_section_header(
+                fig, 0.48, fg_org, titles["firstgen_title"],
+                year_range, titles["firstgen_caption"],
+            )
+            chart_bbox = (0.06, 0.13, 0.54, y_after_header - 0.13)
+            _mpl_firstgen_chart(fig, chart_bbox, df_fg, years)
+            table_bbox = (0.62, 0.13, 0.32, y_after_header - 0.13)
+            _mpl_firstgen_summary(fig, table_bbox, df_fg, years)
 
-        # Section 4: First-Gen (bottom half) — raise chart bottom to 0.13
-        # so the legend has room below before "Source: Banner" at 0.06.
-        fg_org = titles.get("firstgen_org", titles["org"])
-        y_after_header = _draw_section_header(
-            fig, 0.48, fg_org, titles["firstgen_title"],
-            year_range, titles["firstgen_caption"],
-        )
-        chart_bbox = (0.06, 0.13, 0.54, y_after_header - 0.13)
-        _mpl_firstgen_chart(fig, chart_bbox, df_fg, years)
-        table_bbox = (0.62, 0.13, 0.32, y_after_header - 0.13)
-        _mpl_firstgen_summary(fig, table_bbox, df_fg, years)
+            # Source sits between the legend and the page footer with
+            # balanced gaps. Same layout across all tabs.
+            _draw_section_source(fig, 0.085)
+            if titles.get("firstgen_note"):
+                note_wrapped = textwrap.fill(
+                    titles["firstgen_note"], width=140)
+                fig.text(0.06, 0.065, note_wrapped,
+                         fontsize=6, color="grey", va="top", style="italic")
 
-        # Source sits between the chart legend (~y=0.10) and the page
-        # footer (~y=0.02) with balanced gaps. Same layout across all tabs.
-        _draw_section_source(fig, 0.085)
-        if titles.get("firstgen_note"):
-            note_wrapped = textwrap.fill(titles["firstgen_note"], width=140)
-            fig.text(0.06, 0.065, note_wrapped,
-                     fontsize=6, color="grey", va="top", style="italic")
-
-        _add_pdf_footer(fig)
-        pdf.savefig(fig)
-        plt.close(fig)
+            _add_pdf_footer(fig)
+            pdf.savefig(fig)
+            plt.close(fig)
 
     return buf.getvalue()

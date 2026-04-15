@@ -235,6 +235,8 @@ Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Per
 
 **BOT section layout gotcha**: The gender section's horizontal bar chart has long y-axis labels (e.g. "2024-2025") that extend left of the axes box. When placed at `left=0.06` (the default section margin), matplotlib clips them at the page edge. The gender section uses `left=0.12` with width `0.48` instead to leave room for tick labels. Sections with labels on the x-axis (headcount, first-gen) don't hit this issue.
 
+**PdfPages early-return gotcha**: In `generate_bot_pdf()`, when `headcount_only=True` (Bachelor's tab), it's tempting to `return buf.getvalue()` right after saving page 1 to skip page 2. That produces a **truncated PDF** that Acrobat refuses to open, because `PdfPages.__exit__` writes the PDF trailer/xref table only when the `with` block exits. Instead, wrap the page 2 code in an `if not headcount_only:` branch inside the `with PdfPages(buf) as pdf:` block, and return `buf.getvalue()` only after the block finishes.
+
 **BOT PDF paper coordinates** (constant across all tabs, including Units):
 - Page 1 Section 1 (Headcount): chart_bbox bottom=0.58, Source at y=0.54 (below the chart's legend).
 - Page 1 Section 2 (Race): header top=0.50 with tight caption padding (`pad=0.005` on `_draw_section_header`, since the race data-bar table renders on an `axis("off")` axes and doesn't need the 0.025 gap Section 1 needs for its "5-Yr % Change" axis title). Chart+table bbox bottom=0.06. Source at y=0.04.
