@@ -132,19 +132,54 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-# Minimum count per race/year cell for a race to be shown in charts/tables.
-# Races whose maximum count across all years falls below this threshold
-# are suppressed from the race proportion chart and summary table.
-RACE_MIN_COUNT = 10
+# Categories whose first-year AND last-year counts both fall below this
+# threshold are suppressed from proportion charts and summary tables
+# (if either boundary year is >= threshold, the category is still shown).
+CATEGORY_MIN_COUNT = 10
+# Legacy alias kept for backward compatibility
+RACE_MIN_COUNT = CATEGORY_MIN_COUNT
+
+
+def _visible_categories(df, key_col, order,
+                        threshold: int = CATEGORY_MIN_COUNT) -> list:
+    """Return *order* filtered to categories where first-year OR last-year count >= threshold.
+
+    A category is hidden only when BOTH the first and last year's counts
+    are below the threshold; middle years are ignored by this rule.
+    """
+    if df is None or df.empty or "count" not in df.columns:
+        return list(order)
+    years = sorted(df["academic_year"].dropna().unique())
+    if len(years) < 2:
+        max_by_cat = df.groupby(key_col)["count"].max()
+        return [c for c in order if max_by_cat.get(c, 0) >= threshold]
+    first_yr, last_yr = years[0], years[-1]
+    first_counts = (
+        df[df["academic_year"] == first_yr]
+        .set_index(key_col)["count"]
+    )
+    last_counts = (
+        df[df["academic_year"] == last_yr]
+        .set_index(key_col)["count"]
+    )
+
+    def _keep(c):
+        fc = first_counts.get(c, 0) or 0
+        lc = last_counts.get(c, 0) or 0
+        return fc >= threshold or lc >= threshold
+
+    return [c for c in order if _keep(c)]
 
 
 def _visible_races(df_race: pd.DataFrame,
-                   threshold: int = RACE_MIN_COUNT) -> list[str]:
-    """Return RACE_ORDER filtered to races with max count across years >= threshold."""
-    if df_race is None or df_race.empty or "count" not in df_race.columns:
-        return list(RACE_ORDER)
-    max_by_race = df_race.groupby("race_description")["count"].max()
-    return [r for r in RACE_ORDER if max_by_race.get(r, 0) >= threshold]
+                   threshold: int = CATEGORY_MIN_COUNT) -> list[str]:
+    return _visible_categories(df_race, "race_description", RACE_ORDER,
+                               threshold)
+
+
+def _visible_genders(df_gender: pd.DataFrame,
+                     threshold: int = CATEGORY_MIN_COUNT) -> list[str]:
+    return _visible_categories(df_gender, "gender", GENDER_ORDER, threshold)
 
 
 def aggregate_race(
@@ -450,8 +485,9 @@ def build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
 
 
 def build_gender_bar_chart(df_gender: pd.DataFrame, years: list[str]):
-    df_plot = df_gender.copy()
-    labels = [GENDER_LABELS[g] for g in GENDER_ORDER]
+    visible = _visible_genders(df_gender)
+    df_plot = df_gender[df_gender["gender"].isin(visible)].copy()
+    labels = [GENDER_LABELS[g] for g in visible]
     df_plot["gender_label"] = pd.Categorical(
         df_plot["gender_label"], categories=labels, ordered=True,
     )
@@ -493,7 +529,8 @@ def build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str:
         values="count", aggfunc="first",
     )
     return _build_summary_table(
-        GENDER_ORDER, GENDER_LABELS, GENDER_COLORS, piv, years[0], years[-1],
+        _visible_genders(df_gender), GENDER_LABELS, GENDER_COLORS,
+        piv, years[0], years[-1],
     )
 
 
@@ -901,12 +938,13 @@ def _mpl_gender_chart(fig, bbox, df_gender, years):
     left, bottom, width, height = bbox
     ax = fig.add_axes([left, bottom, width, height])
 
-    labels = [GENDER_LABELS[g] for g in GENDER_ORDER]
+    visible = _visible_genders(df_gender)
+    labels = [GENDER_LABELS[g] for g in visible]
     n_years = len(years)
     n_genders = len(labels)
     bar_h = 0.8 / max(n_genders, 1)
 
-    for i, (g_code, g_label) in enumerate(zip(GENDER_ORDER, labels)):
+    for i, (g_code, g_label) in enumerate(zip(visible, labels)):
         vals = []
         for yr in years:
             row = df_gender[(df_gender["gender"] == g_code)
@@ -941,7 +979,8 @@ def _mpl_gender_summary(fig, bbox, df_gender, years):
         index="gender", columns="academic_year",
         values="count", aggfunc="first",
     )
-    _mpl_summary_table(fig, bbox, GENDER_ORDER, GENDER_LABELS, GENDER_COLORS,
+    _mpl_summary_table(fig, bbox, _visible_genders(df_gender),
+                       GENDER_LABELS, GENDER_COLORS,
                        piv, years[0], years[-1])
 
 

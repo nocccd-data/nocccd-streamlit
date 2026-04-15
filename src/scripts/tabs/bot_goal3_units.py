@@ -107,16 +107,53 @@ def _aggregate_race(df):
     )
 
 
+def _visible_categories(df, key_col, order, threshold=10):
+    """Filter *order* by first-year OR last-year count >= threshold.
+
+    A category is hidden only when BOTH the first and last year's counts
+    are below the threshold.
+    """
+    if df.empty or "count" not in df.columns:
+        return list(order)
+    years = sorted(df["academic_year"].dropna().unique())
+    if len(years) < 2:
+        max_by_cat = df.groupby(key_col)["count"].max()
+        return [c for c in order if max_by_cat.get(c, 0) >= threshold]
+    first_yr, last_yr = years[0], years[-1]
+    first_counts = (
+        df[df["academic_year"] == first_yr].set_index(key_col)["count"]
+    )
+    last_counts = (
+        df[df["academic_year"] == last_yr].set_index(key_col)["count"]
+    )
+
+    def _keep(c):
+        fc = first_counts.get(c, 0) or 0
+        lc = last_counts.get(c, 0) or 0
+        return fc >= threshold or lc >= threshold
+
+    return [c for c in order if _keep(c)]
+
+
 def _visible_races(df_race, threshold=10):
-    """Races whose max count across years >= threshold."""
-    if df_race.empty or "count" not in df_race.columns:
-        return list(RACE_ORDER)
-    max_by_race = df_race.groupby("race_description")["count"].max()
-    return [r for r in RACE_ORDER if max_by_race.get(r, 0) >= threshold]
+    return _visible_categories(df_race, "race_description", RACE_ORDER,
+                               threshold)
+
+
+def _visible_genders(df_gender, threshold=10):
+    return _visible_categories(df_gender, "gender", GENDER_ORDER, threshold)
 
 
 def _aggregate_gender(df):
-    out = _mean_by(df, ["academic_year", "gender"])
+    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
+    out = (
+        stu.groupby(["academic_year", "gender"])
+        .agg(
+            avg_units=("sum_hours_earned", "mean"),
+            count=("pidm", "nunique"),
+        )
+        .reset_index()
+    )
     out["gender_label"] = out["gender"].map(GENDER_LABELS)
     return out
 
@@ -344,8 +381,9 @@ def _build_race_summary(df_race, years):
 
 
 def _build_gender_chart(df_gender, years):
-    df_plot = df_gender.copy()
-    labels = [GENDER_LABELS[g] for g in GENDER_ORDER]
+    visible = _visible_genders(df_gender)
+    df_plot = df_gender[df_gender["gender"].isin(visible)].copy()
+    labels = [GENDER_LABELS[g] for g in visible]
     df_plot["gender_label"] = pd.Categorical(
         df_plot["gender_label"], categories=labels, ordered=True,
     )
@@ -386,7 +424,7 @@ def _build_gender_summary(df_gender, years):
         values="avg_units", aggfunc="first",
     )
     return _build_summary_html(
-        GENDER_ORDER, GENDER_LABELS, GENDER_COLORS,
+        _visible_genders(df_gender), GENDER_LABELS, GENDER_COLORS,
         piv, years[0], years[-1],
     )
 
@@ -657,12 +695,13 @@ def _mpl_race_summary(fig, bbox, df_race, years):
 def _mpl_gender_chart(fig, bbox, df_gender, years):
     left, bottom, width, height = bbox
     ax = fig.add_axes([left, bottom, width, height])
-    labels = [GENDER_LABELS[g] for g in GENDER_ORDER]
+    visible = _visible_genders(df_gender)
+    labels = [GENDER_LABELS[g] for g in visible]
     n_years = len(years)
     n_genders = len(labels)
     bar_h = 0.8 / max(n_genders, 1)
 
-    for i, (g_code, g_label) in enumerate(zip(GENDER_ORDER, labels)):
+    for i, (g_code, g_label) in enumerate(zip(visible, labels)):
         vals = []
         for yr in years:
             row = df_gender[(df_gender["gender"] == g_code)
@@ -694,7 +733,8 @@ def _mpl_gender_summary(fig, bbox, df_gender, years):
         index="gender", columns="academic_year",
         values="avg_units", aggfunc="first",
     )
-    _mpl_summary_table(fig, bbox, GENDER_ORDER, GENDER_LABELS, GENDER_COLORS,
+    _mpl_summary_table(fig, bbox, _visible_genders(df_gender),
+                       GENDER_LABELS, GENDER_COLORS,
                        piv, years[0], years[-1])
 
 
