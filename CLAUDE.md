@@ -178,6 +178,8 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
 
+**Race category suppression**: Race groups whose maximum count across all selected years falls below `RACE_MIN_COUNT` (default 10) are hidden from both the race data-bar chart and the race summary table. Small-sample races produce noisy percentages and unreliable 5-yr % changes. Implemented via `_visible_races(df_race, threshold=10)` in `bot_helpers.py` (count/proportion tabs) and an equivalent helper in `bot_goal3_units.py` (average-metric tab). The filter is applied consistently in both the interactive chart, the PDF export, and the summary tables.
+
 **Rate metrics (Goal 2+ tabs)**: Charts 2-4 (race, gender, first-gen) compute proportions relative to a **base population** dataset, not within the tab's own dataset. For example, "Hispanic certificate rate" = Hispanic cert earners / total Hispanic students. This is implemented via `base_df` parameter:
 - Each Goal 2+ tab fetches both its own data AND a base population dataset
 - `render_bot_charts(df, titles, base_df=base)` passes the base population
@@ -185,8 +187,9 @@ BOT tabs recreate charts from the annual Board of Trustees Excel report. Each Ex
 - Goal 1 Students tab passes `base_df=None` — proportions are within its own population (composition metric)
 - Chart 1 (headcount) always shows absolute counts regardless of `base_df`
 
-**Base population per tab**: Most Goal 2+ tabs use `bot_goal1_students` as the denominator. The only exception is:
-- **BOT Goal 2 - Living Wage** (`bot_goal2_wage.py`): uses `bot_goal2_wage_denom` (SQL at `src/pipeline/sql/bot_goal2_wage_denom.sql`) as its base population. This is a specialized denominator that excludes students who enrolled in the next academic year or transferred (since living wage is measured for students who leave the system). The `bot_goal2_wage_denom` dataset has no standalone tab — it's used purely as a denominator via `fetch_bot_goal2_wage_denom()` in `data_provider.py`.
+**Base population per tab**: Most Goal 2+ tabs use `bot_goal1_students` as the denominator. Exceptions use specialized denominator datasets (no standalone tab — used purely via a fetch function):
+- **BOT Goal 2 - Living Wage** (`bot_goal2_wage.py`): uses `bot_goal2_wage_denom` (SQL at `src/pipeline/sql/bot_goal2_wage_denom.sql`). Excludes students who enrolled in the next academic year or transferred (since living wage is measured for students who leave the system).
+- **BOT Goal 2 - Noncredit Certificates** (`bot_goal2_cert_nc.py`): uses `bot_goal2_cert_nc_denom` (SQL at `src/pipeline/sql/bot_goal2_cert_nc_denom.sql`). The general Goal 1 NOCE population includes many non-CTE students; this specialized denominator restricts to CTE-relevant subjects/divisions that are eligible for noncredit certificates.
 
 **Base_df must match tab's campus scope**: After fetching `bot_goal1_students` as `base`, the tab must filter it to match its own campus scope BEFORE passing to `render_bot_charts()`. Otherwise the proportion denominator includes populations the tab's numerator can never reach (e.g., a credit-only cert tab divided by a district-wide Goal 1 population). Pattern:
 - Credit-only tabs (cert, assoc, adt, xfer, finaid): `base = base[base["site"] == "Credit"]`

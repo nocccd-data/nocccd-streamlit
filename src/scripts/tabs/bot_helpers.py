@@ -132,6 +132,21 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+# Minimum count per race/year cell for a race to be shown in charts/tables.
+# Races whose maximum count across all years falls below this threshold
+# are suppressed from the race proportion chart and summary table.
+RACE_MIN_COUNT = 10
+
+
+def _visible_races(df_race: pd.DataFrame,
+                   threshold: int = RACE_MIN_COUNT) -> list[str]:
+    """Return RACE_ORDER filtered to races with max count across years >= threshold."""
+    if df_race is None or df_race.empty or "count" not in df_race.columns:
+        return list(RACE_ORDER)
+    max_by_race = df_race.groupby("race_description")["count"].max()
+    return [r for r in RACE_ORDER if max_by_race.get(r, 0) >= threshold]
+
+
 def aggregate_race(
     df: pd.DataFrame, base_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
@@ -334,7 +349,7 @@ def build_race_proportion_html(df_race: pd.DataFrame, years: list[str]) -> str:
             f"border-bottom:2px solid #555;'>{yr}</th>"
         )
     rows.append("</tr></thead><tbody>")
-    for race in RACE_ORDER:
+    for race in _visible_races(df_race):
         label = RACE_SHORT.get(race, race)
         rows.append("<tr>")
         rows.append(
@@ -429,7 +444,8 @@ def build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
         values="count", aggfunc="first",
     )
     return _build_summary_table(
-        RACE_ORDER, RACE_SHORT, RACE_COLORS, piv, years[0], years[-1],
+        _visible_races(df_race), RACE_SHORT, RACE_COLORS,
+        piv, years[0], years[-1],
     )
 
 
@@ -777,7 +793,8 @@ def _mpl_race_proportion_table(fig, bbox, df_race, years):
     )
     max_pct = piv.max().max() if not piv.empty else 1.0
 
-    n_rows = len(RACE_ORDER) + 1  # +1 header
+    visible = _visible_races(df_race)
+    n_rows = len(visible) + 1  # +1 header
     row_h = 1.0 / n_rows
     label_col_w = 0.30
     data_col_w = (1.0 - label_col_w) / len(years)
@@ -790,7 +807,7 @@ def _mpl_race_proportion_table(fig, bbox, df_race, years):
                 ha="center", va="center", fontsize=7, fontweight="bold")
 
     # Data rows
-    for r, race in enumerate(RACE_ORDER):
+    for r, race in enumerate(visible):
         y = 1.0 - (r + 2) * row_h
         label = RACE_SHORT.get(race, race)
         ax.text(label_col_w - 0.01, y + row_h / 2, label,
@@ -868,7 +885,8 @@ def _mpl_race_summary(fig, bbox, df_race, years):
         index="race_description", columns="academic_year",
         values="count", aggfunc="first",
     )
-    _mpl_summary_table(fig, bbox, RACE_ORDER, RACE_SHORT, RACE_COLORS,
+    _mpl_summary_table(fig, bbox, _visible_races(df_race),
+                       RACE_SHORT, RACE_COLORS,
                        piv, years[0], years[-1])
 
 

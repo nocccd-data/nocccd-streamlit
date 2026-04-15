@@ -96,7 +96,23 @@ def _aggregate_campus(df):
 
 
 def _aggregate_race(df):
-    return _mean_by(df, ["academic_year", "race_description"])
+    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
+    return (
+        stu.groupby(["academic_year", "race_description"])
+        .agg(
+            avg_units=("sum_hours_earned", "mean"),
+            count=("pidm", "nunique"),
+        )
+        .reset_index()
+    )
+
+
+def _visible_races(df_race, threshold=10):
+    """Races whose max count across years >= threshold."""
+    if df_race.empty or "count" not in df_race.columns:
+        return list(RACE_ORDER)
+    max_by_race = df_race.groupby("race_description")["count"].max()
+    return [r for r in RACE_ORDER if max_by_race.get(r, 0) >= threshold]
 
 
 def _aggregate_gender(df):
@@ -220,7 +236,7 @@ def _build_race_html(df_race, years):
             f"border-bottom:2px solid #555;'>{yr}</th>"
         )
     rows.append("</tr></thead><tbody>")
-    for race in RACE_ORDER:
+    for race in _visible_races(df_race):
         label = RACE_SHORT.get(race, race)
         bar_color = RACE_COLORS.get(race, "#888")
         rows.append("<tr>")
@@ -322,7 +338,8 @@ def _build_race_summary(df_race, years):
         values="avg_units", aggfunc="first",
     )
     return _build_summary_html(
-        RACE_ORDER, RACE_SHORT, RACE_COLORS, piv, years[0], years[-1],
+        _visible_races(df_race), RACE_SHORT, RACE_COLORS,
+        piv, years[0], years[-1],
     )
 
 
@@ -538,7 +555,8 @@ def _mpl_race_table(fig, bbox, df_race, years):
     )
     max_val = piv.max().max() if not piv.empty else 1.0
 
-    n_rows = len(RACE_ORDER) + 1
+    visible = _visible_races(df_race)
+    n_rows = len(visible) + 1
     row_h = 1.0 / n_rows
     label_col_w = 0.30
     data_col_w = (1.0 - label_col_w) / len(years)
@@ -549,7 +567,7 @@ def _mpl_race_table(fig, bbox, df_race, years):
         ax.text(x + data_col_w / 2, y_top + row_h / 2, yr,
                 ha="center", va="center", fontsize=7, fontweight="bold")
 
-    for r, race in enumerate(RACE_ORDER):
+    for r, race in enumerate(visible):
         y = 1.0 - (r + 2) * row_h
         label = RACE_SHORT.get(race, race)
         ax.text(label_col_w - 0.01, y + row_h / 2, label,
@@ -631,7 +649,8 @@ def _mpl_race_summary(fig, bbox, df_race, years):
         index="race_description", columns="academic_year",
         values="avg_units", aggfunc="first",
     )
-    _mpl_summary_table(fig, bbox, RACE_ORDER, RACE_SHORT, RACE_COLORS,
+    _mpl_summary_table(fig, bbox, _visible_races(df_race),
+                       RACE_SHORT, RACE_COLORS,
                        piv, years[0], years[-1])
 
 

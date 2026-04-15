@@ -1,7 +1,10 @@
 import streamlit as st
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal1_students, fetch_bot_goal2_cert_nc
+from src.scripts.data_provider import (
+    fetch_bot_goal2_cert_nc,
+    fetch_bot_goal2_cert_nc_denom,
+)
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal2_cert_nc"]
@@ -54,11 +57,9 @@ def render():
             return
         sorted_acyrs = tuple(sorted(selected_acyrs))
         fetch_bot_goal2_cert_nc.clear()
-        fetch_bot_goal1_students.clear()
+        fetch_bot_goal2_cert_nc_denom.clear()
         df = fetch_bot_goal2_cert_nc(sorted_acyrs)
-        base = fetch_bot_goal1_students(sorted_acyrs)
-        # Noncredit-only scope: denominator should match (NOCE)
-        base = base[base["site"] == "Noncredit"]
+        base = fetch_bot_goal2_cert_nc_denom(sorted_acyrs)
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
