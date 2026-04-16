@@ -142,10 +142,14 @@ RACE_MIN_COUNT = CATEGORY_MIN_COUNT
 
 def _visible_categories(df, key_col, order,
                         threshold: int = CATEGORY_MIN_COUNT) -> list:
-    """Return *order* filtered to categories where first-year OR last-year count >= threshold.
+    """Return *order* filtered to categories where BOTH boundary years'
+    counts are >= threshold.
 
-    A category is hidden only when BOTH the first and last year's counts
-    are below the threshold; middle years are ignored by this rule.
+    A category is hidden when EITHER the first or the last year's count
+    is below the threshold (because the 5-yr % change in the summary
+    table is computed from those two values and would be unreliable if
+    either side is a small sample). Middle years are ignored by this
+    rule.
     """
     if df is None or df.empty or "count" not in df.columns:
         return list(order)
@@ -166,7 +170,7 @@ def _visible_categories(df, key_col, order,
     def _keep(c):
         fc = first_counts.get(c, 0) or 0
         lc = last_counts.get(c, 0) or 0
-        return fc >= threshold or lc >= threshold
+        return fc >= threshold and lc >= threshold
 
     return [c for c in order if _keep(c)]
 

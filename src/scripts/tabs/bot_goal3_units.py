@@ -108,10 +108,11 @@ def _aggregate_race(df):
 
 
 def _visible_categories(df, key_col, order, threshold=10):
-    """Filter *order* by first-year OR last-year count >= threshold.
+    """Filter *order* by BOTH first-year AND last-year count >= threshold.
 
-    A category is hidden only when BOTH the first and last year's counts
-    are below the threshold.
+    A category is hidden if EITHER the first or last year's count is
+    below the threshold (the 5-yr % change is computed from those two
+    values, so it would be unreliable if either side is small).
     """
     if df.empty or "count" not in df.columns:
         return list(order)
@@ -130,7 +131,7 @@ def _visible_categories(df, key_col, order, threshold=10):
     def _keep(c):
         fc = first_counts.get(c, 0) or 0
         lc = last_counts.get(c, 0) or 0
-        return fc >= threshold or lc >= threshold
+        return fc >= threshold and lc >= threshold
 
     return [c for c in order if _keep(c)]
 
