@@ -23,8 +23,7 @@ WITH
 
     next_acyr_not_exist AS (
         SELECT DISTINCT
-            sfrstcr.sfrstcr_pidm,
-            SUBSTR(sfrstcr.sfrstcr_camp_code, 1, 1) AS camp_code
+            sfrstcr.sfrstcr_pidm
         FROM saturn.sfrstcr@banner.nocccd.edu sfrstcr
             LEFT JOIN saturn.stvrsts@banner.nocccd.edu stvrsts
                 ON (sfrstcr.sfrstcr_rsts_code = stvrsts.stvrsts_code)
@@ -108,8 +107,9 @@ WITH
             INNER JOIN spbpers@banner.nocccd.edu d
                 ON (r.sfrstcr_pidm = d.spbpers_pidm)
         WHERE t.stvterm_acyr_code = :acyr_code
-          AND SUBSTR(r.sfrstcr_camp_code, 1, 1) IN ('1', '2')
-          AND v.stvrsts_voice_type IN ('R', 'W')
+          AND ((SUBSTR(r.sfrstcr_camp_code, 1, 1) IN ('1', '2')
+            AND v.stvrsts_voice_type IN ('R', 'W'))
+            OR (v.stvrsts_apport_ind = 'Y' AND SUBSTR(r.sfrstcr_camp_code, 1, 1) = '3'))
 
 
     )
@@ -139,7 +139,6 @@ WHERE NOT EXISTS
         z.sfrstcr_pidm
     FROM next_acyr_not_exist z
     WHERE a.pidm = z.sfrstcr_pidm
-      AND z.camp_code IN ('1', '2')
 )
   AND NOT EXISTS
 (

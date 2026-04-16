@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 
 from src.pipeline.config import DATASETS
@@ -43,6 +44,31 @@ _TITLES = {
 }
 
 
+def _shift_academic_year(y):
+    """Shift a 'YYYY-YY' string forward by one year.
+
+    Living-wage data is reported 1 year in arrears: when querying
+    acyr_code '2023' (the 2023-24 cohort), the resulting wage outcomes
+    represent students measured in 2024-25. Display labels are shifted
+    so the tab aligns with how other BOT tabs label the same cohort.
+    """
+    if not isinstance(y, str) or "-" not in y:
+        return y
+    try:
+        start, end = y.split("-", 1)
+        return f"{int(start) + 1}-{(int(end) + 1) % 100:02d}"
+    except ValueError:
+        return y
+
+
+def _shift_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty or "academic_year" not in df.columns:
+        return df
+    out = df.copy()
+    out["academic_year"] = out["academic_year"].map(_shift_academic_year)
+    return out
+
+
 def render():
     st.header("BOT Goal 2 - Living Wage")
 
@@ -66,8 +92,11 @@ def render():
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
-        st.session_state["bg2w_df"] = df
-        st.session_state["bg2w_base"] = base
+        # Wage is measured 1 year after the cohort; shift display labels
+        # forward so they align with other BOT tabs. Both df and base
+        # must shift together so the rate-metric merge still matches.
+        st.session_state["bg2w_df"] = _shift_df(df)
+        st.session_state["bg2w_base"] = _shift_df(base)
 
     if "bg2w_df" in st.session_state:
         pdf_bytes = generate_bot_pdf(
