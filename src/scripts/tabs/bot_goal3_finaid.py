@@ -15,9 +15,9 @@ _TITLES = {
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Students Receiving Financial Aid",
     "headcount_caption": (
-        "The unduplicated number of students receiving financial aid "
-        "(Pell Grant or Board of Governors Grant) at Cypress College and "
-        "Fullerton College in the reporting year."
+        "The unduplicated number of students enrolled in Cypress and "
+        "Fullerton Colleges who received a Pell Grant or California "
+        "College Promise Grant in the reporting year."
     ),
     "race_title": "Proportion of Students Receiving Financial Aid by Race/Ethnicity",
     "race_caption": (

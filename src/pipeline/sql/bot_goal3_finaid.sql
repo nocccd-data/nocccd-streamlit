@@ -35,7 +35,8 @@ WITH
             OR a.tbraccd_detail_code LIKE '%BA%'
             OR a.tbraccd_detail_code LIKE '%BB%'
             OR a.tbraccd_detail_code LIKE '%BC%'
-            OR a.tbraccd_detail_code LIKE '%BG%')
+            OR a.tbraccd_detail_code LIKE '%BG%'
+            OR a.tbraccd_detail_code LIKE '%BF%')
         HAVING SUM(a.tbraccd_amount) > 0
         GROUP BY
             a.tbraccd_pidm,
