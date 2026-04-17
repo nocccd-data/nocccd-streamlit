@@ -37,10 +37,7 @@ _TITLES = {
         "Colleges in the reporting year, the proportion who achieved a "
         "living wage, by first-generation college status."
     ),
-    "firstgen_note": (
-        "Note: NOCE data are excluded from the first-generation chart due "
-        "to the large number of unknown cases."
-    ),
+    "firstgen_note": None,
 }
 
 
