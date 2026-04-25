@@ -1,10 +1,11 @@
 name: Mail Reports
 
 on:
-  # Scheduled: 9am PST weekdays (5pm UTC, or 4pm UTC during DST)
-  # Using 4pm UTC = 9am PDT (March-November)
-  schedule:
-    - cron: '0 16 * * 1-5'
+  # Scheduled run paused — uncomment to resume.
+  # 9am PST weekdays (5pm UTC, or 4pm UTC during DST).
+  # Using 4pm UTC = 9am PDT (March-November).
+  # schedule:
+  #   - cron: '0 16 * * 1-5'
 
   # Manual trigger for testing
   workflow_dispatch:
