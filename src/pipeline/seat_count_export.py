@@ -1,8 +1,9 @@
 """On-demand bulk PDF export for the Seat Count Report.
 
 Reads ``src/pipeline/hyper/seat_count_report.hyper`` and writes one PDF per
-``(term, campus, division)`` combination found in the data, into the local
-OneDrive folder defined by ``EXPORT_ROOT``. Existing files are overwritten.
+``(term, campus, division)`` combination found in the data, into a
+date-stamped subfolder under ``EXPORT_ROOT`` so each run leaves a daily
+snapshot. Same-day re-runs overwrite the existing day's PDFs.
 
 Usage:
     python -m src.pipeline.seat_count_export
@@ -11,6 +12,7 @@ Usage:
 import logging
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 # Silence Streamlit's "no runtime found" warnings BEFORE we import any module
@@ -26,9 +28,10 @@ from src.pipeline.config import HYPER_DIR  # noqa: E402
 from src.scripts.tabs.seat_count_report import _compute_totals, _generate_pdf  # noqa: E402
 
 
-# Destination root on OneDrive. Campus subfolders (Cypress, Fullerton, NOCE)
-# and Season subfolders (Fall, Spring, Summer) are expected to exist already
-# but will be created if missing.
+# Destination root on OneDrive. Each run creates a date-stamped subfolder
+# (YYYYMMDD) underneath, then Campus / Season subfolders within that.
+# Same-day re-runs overwrite the existing day's PDFs; new days create new
+# snapshots so daily enrollment numbers can be retained.
 EXPORT_ROOT = Path(
     "/Users/hoonywise/Library/CloudStorage/"
     "OneDrive-NorthOrangeCountyCommunityCollegeDistrict/"
@@ -72,7 +75,10 @@ def main() -> int:
         )
         return 1
 
+    today = date.today().strftime("%Y%m%d")
+    snapshot_root = EXPORT_ROOT / today
     print(f"Reading {hyper_path} ...")
+    print(f"Writing snapshot to {snapshot_root}")
     df_all = pantab.frame_from_hyper(hyper_path, table="Extract")
     df_all["term_code"] = df_all["term_code"].astype(str)
 
@@ -111,7 +117,7 @@ def main() -> int:
                     failed += 1
                     continue
 
-                out_dir = EXPORT_ROOT / campus / season
+                out_dir = snapshot_root / campus / season
                 out_dir.mkdir(parents=True, exist_ok=True)
                 fname = (
                     f"{term_code}_{_slug(campus)}_{season.lower()}_"
@@ -122,7 +128,7 @@ def main() -> int:
                 written += 1
                 print(f"  wrote {out_path.relative_to(EXPORT_ROOT)}")
 
-    print(f"\nDone. Wrote {written} PDFs to {EXPORT_ROOT}")
+    print(f"\nDone. Wrote {written} PDFs to {snapshot_root}")
     if failed:
         print(f"Skipped {failed} due to errors (see above).", file=sys.stderr)
         return 1

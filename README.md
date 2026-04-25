@@ -189,10 +189,10 @@ python -m src.pipeline.seat_count_export
 ```
 
 - **Source**: reads `src/pipeline/hyper/seat_count_report.hyper` directly. Run the pipeline first if the Hyper file is missing or stale.
-- **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/Seat Count Report/<Campus>/<Season>/`
+- **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/Seat Count Report/<YYYYMMDD>/<Campus>/<Season>/`
 - **Filename**: `<term>_<campus>_<season>_<division>.pdf` (lowercase, non-alphanumerics collapsed to underscores), e.g. `202510_cypress_fall_business.pdf`
 - **Term → season**: term-code suffixes `10`/`15` → Fall, `20`/`35` → Spring, `30`/`05` → Summer
-- **Behavior**: existing files are overwritten. Run any time.
+- **Daily snapshots**: each run nests its output under a `YYYYMMDD` folder based on the run date. Same-day re-runs overwrite that day's PDFs; the next calendar day creates a new snapshot directory, so historical exports accumulate naturally.
 
 The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/seat_count_export.py` — change it there if your OneDrive path differs.
 
