@@ -18,23 +18,16 @@ _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
-# Columns to display in the banded HTML table
-_DISPLAY_COLS = [
-    "crn",
-    "start_date", "end_date", "crosslist_group",
-    "enroll_max", "current_enroll_count", "current_enroll_fillrate",
-    "census_1_enroll_count", "census_1_enroll_fillrate",
-    "first_day_morning_enroll_count", "first_day_morning_enroll_fillrate",
-    "first_day_evening_enroll_count", "first_day_evening_enroll_fillrate",
-    "first_day_no_hours_enroll_count", "first_day_no_hours_enroll_fillrate",
-]
-
 _COL_LABELS = [
     "CRN", "Schedule",
-    "Start", "End", "XList",
-    "Max", "Enrolled", "Fill %",
-    "Census", "Census %",
+    "Start", "End",
+    "Mtg Days", "Start Time", "End Time",
+    "Instructor", "XList",
+    "Max",
     "1st Day", "1st Day %",
+    "Census", "Census %",
+    "Enrolled", "Fill %",
+    "Wait",
 ]
 
 
@@ -71,9 +64,21 @@ def _fmt_date(val) -> str:
 
 
 def _safe(val) -> str:
-    if pd.isna(val):
+    if val is None or pd.isna(val):
         return ""
     return escape(str(val))
+
+
+def _fmt_time(val) -> str:
+    """Format a Banner HHMM time string as HH:MM. Blank/NULL → ''."""
+    if val is None or pd.isna(val):
+        return ""
+    s = str(val).strip()
+    if not s:
+        return ""
+    if len(s) == 4 and s.isdigit():
+        return f"{s[:2]}:{s[2:]}"
+    return escape(s)
 
 
 def _first_day_combined(row) -> tuple[int, float]:
@@ -113,12 +118,28 @@ def _compute_totals(df: pd.DataFrame) -> dict:
     deduped = _dedup_for_totals(df)
     total_max = int(deduped["enroll_max"].sum())
     total_enrolled = int(deduped["current_enroll_count"].sum())
-    fill = total_enrolled / total_max if total_max > 0 else 0.0
+    total_census = int(deduped["census_1_enroll_count"].fillna(0).sum())
+    total_wait = int(deduped["wait_count"].fillna(0).sum()) if "wait_count" in deduped.columns else 0
+    fd_cols = [
+        "first_day_morning_enroll_count",
+        "first_day_evening_enroll_count",
+        "first_day_no_hours_enroll_count",
+    ]
+    total_first_day = int(deduped[fd_cols].fillna(0).sum().sum())
+
+    def _rate(num: int) -> float:
+        return num / total_max if total_max > 0 else 0.0
+
     return {
         "sections": df["crn"].nunique(),
         "max": total_max,
         "enrolled": total_enrolled,
-        "fill": fill,
+        "fill": _rate(total_enrolled),
+        "census": total_census,
+        "census_fill": _rate(total_census),
+        "first_day": total_first_day,
+        "first_day_fill": _rate(total_first_day),
+        "wait": total_wait,
     }
 
 
@@ -189,39 +210,56 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td>{_safe(r['scheduling_desc'])}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_date(r['start_date'])}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_date(r['end_date'])}</td>")
+                rows.append(f"<td style='text-align:center'>{_safe(r.get('days'))}</td>")
+                rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('begin_time'))}</td>")
+                rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('end_time'))}</td>")
+                rows.append(f"<td>{_safe(r.get('pri_instructor'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_safe(r['crosslist_group'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['enroll_max'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
-                rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_1_enroll_count'])}</td>")
-                rows.append(f"<td class='{census_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(fd_count)}</td>")
                 rows.append(f"<td class='{fd_class}' style='text-align:right'>{_fmt_pct(fd_rate)}</td>")
+                rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_1_enroll_count'])}</td>")
+                rows.append(f"<td class='{census_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
+                rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
+                rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
+                rows.append(f"<td style='text-align:right'>{_fmt_int(r.get('wait_count', 0))}</td>")
                 rows.append("</tr>")
 
             # Course subtotal
             ct = _compute_totals(df_course)
             ct_fill_class = _fillrate_css_class(ct["fill"])
+            ct_census_class = _fillrate_css_class(ct["census_fill"])
+            ct_fd_class = _fillrate_css_class(ct["first_day_fill"])
             rows.append('<tr class="subtotal-row">')
-            rows.append('<td colspan="5" style="text-align:right">Course Total:</td>')
+            rows.append('<td colspan="9" style="text-align:right">Course Total:</td>')
             rows.append(f"<td style='text-align:right'>{ct['max']:,}</td>")
+            rows.append(f"<td style='text-align:right'>{ct['first_day']:,}</td>")
+            rows.append(f"<td class='{ct_fd_class}' style='text-align:right'>{_fmt_pct(ct['first_day_fill'])}</td>")
+            rows.append(f"<td style='text-align:right'>{ct['census']:,}</td>")
+            rows.append(f"<td class='{ct_census_class}' style='text-align:right'>{_fmt_pct(ct['census_fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['enrolled']:,}</td>")
             rows.append(f"<td class='{ct_fill_class}' style='text-align:right'>{_fmt_pct(ct['fill'])}</td>")
-            rows.append('<td colspan="4"></td>')
+            rows.append(f"<td style='text-align:right'>{ct['wait']:,}</td>")
             rows.append("</tr>")
 
         # Department subtotal
         dt = _compute_totals(df_dept)
         dt_fill_class = _fillrate_css_class(dt["fill"])
+        dt_census_class = _fillrate_css_class(dt["census_fill"])
+        dt_fd_class = _fillrate_css_class(dt["first_day_fill"])
         rows.append('<tr class="dept-total">')
         rows.append(
-            f'<td colspan="5" style="text-align:right">'
+            f'<td colspan="9" style="text-align:right">'
             f"Dept Total &mdash; {escape(dept)}:</td>"
         )
         rows.append(f"<td style='text-align:right'>{dt['max']:,}</td>")
+        rows.append(f"<td style='text-align:right'>{dt['first_day']:,}</td>")
+        rows.append(f"<td class='{dt_fd_class}' style='text-align:right'>{_fmt_pct(dt['first_day_fill'])}</td>")
+        rows.append(f"<td style='text-align:right'>{dt['census']:,}</td>")
+        rows.append(f"<td class='{dt_census_class}' style='text-align:right'>{_fmt_pct(dt['census_fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['enrolled']:,}</td>")
         rows.append(f"<td class='{dt_fill_class}' style='text-align:right'>{_fmt_pct(dt['fill'])}</td>")
-        rows.append('<td colspan="4"></td>')
+        rows.append(f"<td style='text-align:right'>{dt['wait']:,}</td>")
         rows.append("</tr>")
 
     rows.append("</tbody></table></div>")
@@ -268,11 +306,23 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     # width_fraction is relative to usable width (PAGE_W - ML - MR)
     usable = PAGE_W - ML - MR
     _cols = [
-        ("CRN",    0.06),  ("Sched",  0.20),  ("Start",  0.10),  ("End", 0.10),
-        ("XList",  0.07),
-        ("Max",    0.06),  ("Enrl",   0.06),  ("Fill\n%", 0.06),
-        ("Cens",   0.07),  ("Cens\n%", 0.06),
-        ("1st\nDay", 0.08),  ("1st Day\n%", 0.08),
+        ("CRN",         0.05),
+        ("Sched",       0.12),
+        ("Start",       0.07),
+        ("End",         0.07),
+        ("Mtg\nDays",   0.05),
+        ("Start\nTime", 0.05),
+        ("End\nTime",   0.05),
+        ("Instructor",  0.14),
+        ("XList",       0.04),
+        ("Max",         0.04),
+        ("1st\nDay",    0.05),
+        ("1st Day\n%",  0.05),
+        ("Cens",        0.04),
+        ("Cens\n%",     0.05),
+        ("Enrl",        0.04),
+        ("Fill\n%",     0.05),
+        ("Wait",        0.04),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -471,21 +521,26 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             str(r.get("scheduling_desc", "")) if pd.notna(r.get("scheduling_desc")) else "",
                             _fmt_date(r["start_date"]),
                             _fmt_date(r["end_date"]),
+                            str(r["days"]) if pd.notna(r.get("days")) else "",
+                            _fmt_time(r.get("begin_time")),
+                            _fmt_time(r.get("end_time")),
+                            str(r["pri_instructor"]) if pd.notna(r.get("pri_instructor")) else "",
                             str(r["crosslist_group"]) if pd.notna(r["crosslist_group"]) else "",
                             _fmt_int(r["enroll_max"]),
-                            _fmt_int(r["current_enroll_count"]),
-                            _fmt_pct(r["current_enroll_fillrate"]),
-                            _fmt_int(r["census_1_enroll_count"]),
-                            _fmt_pct(r["census_1_enroll_fillrate"]),
                             _fmt_int(fd_count),
                             _fmt_pct(fd_rate),
+                            _fmt_int(r["census_1_enroll_count"]),
+                            _fmt_pct(r["census_1_enroll_fillrate"]),
+                            _fmt_int(r["current_enroll_count"]),
+                            _fmt_pct(r["current_enroll_fillrate"]),
+                            _fmt_int(r.get("wait_count", 0)),
                         ]
 
-                        # Fill rate cell backgrounds
+                        # Fill rate cell backgrounds (1st Day %, Census %, Fill %)
                         rates = {
-                            7: r["current_enroll_fillrate"],
-                            9: r["census_1_enroll_fillrate"],
                             11: fd_rate,
+                            13: r["census_1_enroll_fillrate"],
+                            15: r["current_enroll_fillrate"],
                         }
                         for ci, rate in rates.items():
                             from matplotlib.patches import Rectangle as Rect
@@ -495,17 +550,20 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                                 edgecolor="none", zorder=0,
                             ))
 
-                        _CENTER_COLS = {0, 2, 3, 4}  # CRN, Start, End, XList
+                        # CRN, Start, End, Mtg Days, Start Time, End Time, XList center;
+                        # Schedule and Instructor left; enrollment numeric cols right.
+                        _CENTER_COLS = {0, 2, 3, 4, 5, 6, 8}
+                        _LEFT_COLS = {1, 7}
                         for i, val in enumerate(vals):
                             if i in _CENTER_COLS:
                                 ha = "center"
                                 xp = col_x[i] + col_w[i] / 2
-                            elif i >= 5:
-                                ha = "right"
-                                xp = col_x[i] + col_w[i] - 0.03
-                            else:
+                            elif i in _LEFT_COLS:
                                 ha = "left"
                                 xp = col_x[i] + 0.03
+                            else:
+                                ha = "right"
+                                xp = col_x[i] + col_w[i] - 0.03
                             ax.text(
                                 xp, y + ROW_H / 2, val,
                                 ha=ha, va="center", fontsize=FONT_SZ, color="black",
