@@ -613,6 +613,8 @@ def render():
             st.warning("No data returned for the selected term.")
             return
         st.session_state["sc_df"] = df
+        # Force PDF regen on next render in case Hyper refreshed underneath us.
+        st.session_state.pop("_sc_pdf_key", None)
         if "term_title" in df.columns and not df["term_title"].empty:
             st.session_state["sc_term_title"] = df["term_title"].iloc[0]
         else:
@@ -656,12 +658,22 @@ def render():
     if department != "All":
         _scope_parts.append(department)
     _filter_scope = " / ".join(_scope_parts)
-    _summary = _compute_totals(filtered)
-    pdf_bytes = _generate_pdf(filtered, term_title,
-                              filter_scope=_filter_scope, summary=_summary)
+
+    # Memoize PDF bytes per filter combination. Matplotlib embeds a creation
+    # timestamp in every PDF, so regenerating on each rerun yields different
+    # bytes → a different Streamlit media-file hash → the download URL handed
+    # to the browser goes stale before the user can fetch it (saved as HTML).
+    _pdf_key = (selected_term, campus, division, department)
+    if st.session_state.get("_sc_pdf_key") != _pdf_key:
+        _summary = _compute_totals(filtered)
+        st.session_state["_sc_pdf_key"] = _pdf_key
+        st.session_state["_sc_pdf_bytes"] = _generate_pdf(
+            filtered, term_title,
+            filter_scope=_filter_scope, summary=_summary,
+        )
     st.sidebar.download_button(
         "Download PDF",
-        data=pdf_bytes,
+        data=st.session_state["_sc_pdf_bytes"],
         file_name=f"seat_count_{selected_term}.pdf",
         mime="application/pdf",
         key="sc_pdf_btn",
