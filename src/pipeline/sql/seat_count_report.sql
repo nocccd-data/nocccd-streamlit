@@ -15,6 +15,85 @@ WITH
             t.term_title
     ),
 
+    mtg AS (
+        SELECT
+            a.section_key,
+            a.term_code,
+            a.crn,
+            a.meeting_category,
+            a.meeting_begin_time,
+            a.meeting_end_time,
+            -- Collapse multi-char day tokens (Th, Sa, Su) to single chars so we can
+            -- rebuild the canonical union via INSTR without Th colliding with T.
+            REPLACE(REPLACE(REPLACE(a.meeting_days, 'Th', 'h'), 'Sa', 'a'), 'Su', 'u') AS days_tok,
+            b.pidm,
+            b.primary_indicator
+        FROM edw_prod.dim_section_meeting@dwhdb.nocccd.edu a
+            INNER JOIN edw_prod.dim_section_instruct@dwhdb.nocccd.edu b
+                ON (a.section_meeting_key = b.section_meeting_key)
+        WHERE a.term_code = :banner_term_code
+    ),
+    primary_pick AS (
+        -- Pick 1 primary instructor per CRN: if multiple sessions have
+        -- primary_indicator='Y', keep the one from the lowest meeting_category.
+        SELECT
+            term_code,
+            crn,
+            pidm
+        FROM (
+            SELECT
+                term_code,
+                crn,
+                pidm,
+                ROW_NUMBER() OVER (
+                    PARTITION BY term_code, crn
+                    ORDER BY meeting_category ASC
+                    ) AS rn
+            FROM mtg
+            WHERE primary_indicator = 'Y'
+        )
+        WHERE rn = 1
+    ),
+    agg AS (
+        -- Collapse all sessions of a CRN into one row.
+        SELECT
+            term_code,
+            crn,
+            MAX(section_key) AS section_key,
+            MIN(meeting_begin_time) AS meeting_begin_time,
+            MAX(meeting_end_time) AS meeting_end_time,
+            LISTAGG(days_tok, '') WITHIN GROUP (ORDER BY meeting_category) AS days_concat
+        FROM mtg
+        GROUP BY
+            term_code,
+            crn
+    ),
+    section_meeting AS (
+        SELECT
+            a.section_key,
+            a.term_code,
+            a.crn,
+            a.meeting_begin_time,
+            a.meeting_end_time,
+            -- Rebuild meeting_days in canonical M T W Th F Sa Su order.
+            CASE WHEN INSTR(a.days_concat, 'M') > 0 THEN 'M' END
+                || CASE WHEN INSTR(a.days_concat, 'T') > 0 THEN 'T' END
+                || CASE WHEN INSTR(a.days_concat, 'W') > 0 THEN 'W' END
+                || CASE WHEN INSTR(a.days_concat, 'h') > 0 THEN 'Th' END
+                || CASE WHEN INSTR(a.days_concat, 'F') > 0 THEN 'F' END
+                || CASE WHEN INSTR(a.days_concat, 'a') > 0 THEN 'Sa' END
+                || CASE WHEN INSTR(a.days_concat, 'u') > 0 THEN 'Su' END AS meeting_days,
+            p.pidm,
+            s.spriden_first_name || ' ' || s.spriden_last_name AS instructor_name
+        FROM agg a
+            LEFT JOIN primary_pick p
+                ON (a.term_code = p.term_code
+                AND a.crn = p.crn)
+            LEFT JOIN spriden s
+                ON (p.pidm = s.spriden_pidm
+                AND s.spriden_change_ind IS NULL)
+    ),
+
     main AS (
         SELECT
             c.section_key,
@@ -42,6 +121,10 @@ WITH
             c.scheduling_desc,
             c.start_date,
             c.end_date,
+            sm.meeting_begin_time AS begin_time,
+            sm.meeting_end_time AS end_time,
+            sm.meeting_days AS days,
+            sm.instructor_name AS pri_instructor,
             TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) AS crosslist_group,
             CASE
                 WHEN TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) IS NULL THEN c.enroll_max
@@ -59,6 +142,14 @@ WITH
                         TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1))
                     )
             END AS current_enroll_count,
+            CASE
+                WHEN TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) IS NULL THEN c.wait_count
+                ELSE SUM(c.wait_count) OVER (
+                    PARTITION BY
+                        c.term_code,
+                        TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1))
+                    )
+            END AS wait_count,
             CASE
                 WHEN TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) IS NULL THEN c.census_1_enrollment
                 ELSE SUM(c.census_1_enrollment) OVER (
@@ -99,6 +190,8 @@ WITH
                 ON (c.section_key = a.section_key)
             JOIN edw_prod.dim_course@dwhdb.nocccd.edu d
                 ON (c.course_key = d.course_key)
+            JOIN section_meeting sm
+                ON (c.section_key = sm.section_key)
         WHERE c.term_code = :banner_term_code
     )
 
@@ -116,10 +209,15 @@ SELECT
     a.scheduling_desc,
     a.start_date,
     a.end_date,
+    a.begin_time,
+    a.end_time,
+    a.days,
+    a.pri_instructor,
     a.crosslist_group,
     a.enroll_max,
     a.available_seats,
     a.current_enroll_count,
+    a.wait_count,
     ROUND(CASE
               WHEN a.current_enroll_count <= 0 OR a.enroll_max <= 0 THEN 0
               ELSE a.current_enroll_count / a.enroll_max

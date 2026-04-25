@@ -34,9 +34,7 @@ _COL_LABELS = [
     "Start", "End", "XList",
     "Max", "Enrolled", "Fill %",
     "Census", "Census %",
-    "1st Day", "Day %",
-    "1st Eve", "Eve %",
-    "1st NoHrs", "NoHrs %",
+    "1st Day", "1st Day %",
 ]
 
 
@@ -76,6 +74,23 @@ def _safe(val) -> str:
     if pd.isna(val):
         return ""
     return escape(str(val))
+
+
+def _first_day_combined(row) -> tuple[int, float]:
+    """Sum morning + evening + no-hours first-day counts and recompute fill rate."""
+    total = 0
+    for col in (
+        "first_day_morning_enroll_count",
+        "first_day_evening_enroll_count",
+        "first_day_no_hours_enroll_count",
+    ):
+        v = row.get(col)
+        if v is not None and not pd.isna(v):
+            total += int(v)
+    max_seats = row.get("enroll_max")
+    if max_seats is None or pd.isna(max_seats) or max_seats <= 0:
+        return total, 0.0
+    return total, total / max_seats
 
 
 def _dedup_for_totals(df: pd.DataFrame) -> pd.DataFrame:
@@ -166,9 +181,8 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             for _, r in df_course.iterrows():
                 fill_class = _fillrate_css_class(r["current_enroll_fillrate"])
                 census_class = _fillrate_css_class(r["census_1_enroll_fillrate"])
-                am_class = _fillrate_css_class(r["first_day_morning_enroll_fillrate"])
-                pm_class = _fillrate_css_class(r["first_day_evening_enroll_fillrate"])
-                nohrs_class = _fillrate_css_class(r["first_day_no_hours_enroll_fillrate"])
+                fd_count, fd_rate = _first_day_combined(r)
+                fd_class = _fillrate_css_class(fd_rate)
 
                 rows.append("<tr>")
                 rows.append(f"<td style='text-align:center'>{_safe(r['crn'])}</td>")
@@ -181,12 +195,8 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_1_enroll_count'])}</td>")
                 rows.append(f"<td class='{census_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['first_day_morning_enroll_count'])}</td>")
-                rows.append(f"<td class='{am_class}' style='text-align:right'>{_fmt_pct(r['first_day_morning_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['first_day_evening_enroll_count'])}</td>")
-                rows.append(f"<td class='{pm_class}' style='text-align:right'>{_fmt_pct(r['first_day_evening_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['first_day_no_hours_enroll_count'])}</td>")
-                rows.append(f"<td class='{nohrs_class}' style='text-align:right'>{_fmt_pct(r['first_day_no_hours_enroll_fillrate'])}</td>")
+                rows.append(f"<td style='text-align:right'>{_fmt_int(fd_count)}</td>")
+                rows.append(f"<td class='{fd_class}' style='text-align:right'>{_fmt_pct(fd_rate)}</td>")
                 rows.append("</tr>")
 
             # Course subtotal
@@ -197,7 +207,7 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             rows.append(f"<td style='text-align:right'>{ct['max']:,}</td>")
             rows.append(f"<td style='text-align:right'>{ct['enrolled']:,}</td>")
             rows.append(f"<td class='{ct_fill_class}' style='text-align:right'>{_fmt_pct(ct['fill'])}</td>")
-            rows.append('<td colspan="8"></td>')
+            rows.append('<td colspan="4"></td>')
             rows.append("</tr>")
 
         # Department subtotal
@@ -211,7 +221,7 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         rows.append(f"<td style='text-align:right'>{dt['max']:,}</td>")
         rows.append(f"<td style='text-align:right'>{dt['enrolled']:,}</td>")
         rows.append(f"<td class='{dt_fill_class}' style='text-align:right'>{_fmt_pct(dt['fill'])}</td>")
-        rows.append('<td colspan="8"></td>')
+        rows.append('<td colspan="4"></td>')
         rows.append("</tr>")
 
     rows.append("</tbody></table></div>")
@@ -247,7 +257,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
         "text.color": "black",
     })
 
-    PAGE_W, PAGE_H = 8.5, 11.0
+    PAGE_W, PAGE_H = 11.0, 8.5
     ML, MR = 0.50, 0.50  # left/right margins in inches
     MT = 0.70             # top margin
     MB = 0.55             # bottom margin (room for footer)
@@ -258,13 +268,11 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     # width_fraction is relative to usable width (PAGE_W - ML - MR)
     usable = PAGE_W - ML - MR
     _cols = [
-        ("CRN",   0.05),  ("Sched", 0.12),  ("Start", 0.10),  ("End", 0.10),
-        ("XList", 0.05),
-        ("Max",   0.05),  ("Enrl",  0.05),  ("Fill%", 0.05),
-        ("Cens",  0.05),  ("Cens%", 0.05),
-        ("1st\nDay",  0.05),  ("Day\n%",  0.05),
-        ("1st\nEve",  0.05),  ("Eve\n%",  0.05),
-        ("1st\nNoHr", 0.05),  ("NoHr\n%", 0.05),
+        ("CRN",    0.06),  ("Sched",  0.20),  ("Start",  0.10),  ("End", 0.10),
+        ("XList",  0.07),
+        ("Max",    0.06),  ("Enrl",   0.06),  ("Fill\n%", 0.06),
+        ("Cens",   0.07),  ("Cens\n%", 0.06),
+        ("1st\nDay", 0.08),  ("1st Day\n%", 0.08),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -457,6 +465,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                         y = cursor - ROW_H
                         _draw_gridlines(y)
 
+                        fd_count, fd_rate = _first_day_combined(r)
                         vals = [
                             str(r["crn"]),
                             str(r.get("scheduling_desc", "")) if pd.notna(r.get("scheduling_desc")) else "",
@@ -468,21 +477,15 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             _fmt_pct(r["current_enroll_fillrate"]),
                             _fmt_int(r["census_1_enroll_count"]),
                             _fmt_pct(r["census_1_enroll_fillrate"]),
-                            _fmt_int(r["first_day_morning_enroll_count"]),
-                            _fmt_pct(r["first_day_morning_enroll_fillrate"]),
-                            _fmt_int(r["first_day_evening_enroll_count"]),
-                            _fmt_pct(r["first_day_evening_enroll_fillrate"]),
-                            _fmt_int(r["first_day_no_hours_enroll_count"]),
-                            _fmt_pct(r["first_day_no_hours_enroll_fillrate"]),
+                            _fmt_int(fd_count),
+                            _fmt_pct(fd_rate),
                         ]
 
                         # Fill rate cell backgrounds
                         rates = {
                             7: r["current_enroll_fillrate"],
                             9: r["census_1_enroll_fillrate"],
-                            11: r["first_day_morning_enroll_fillrate"],
-                            13: r["first_day_evening_enroll_fillrate"],
-                            15: r["first_day_no_hours_enroll_fillrate"],
+                            11: fd_rate,
                         }
                         for ci, rate in rates.items():
                             from matplotlib.patches import Rectangle as Rect
