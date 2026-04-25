@@ -18,8 +18,13 @@ from pathlib import Path
 # Silence Streamlit's "no runtime found" warnings BEFORE we import any module
 # that uses @st.cache_data — the decorator emits a warning per definition when
 # evaluated outside a Streamlit session, and the tab module we import below
-# pulls in data_provider which has ~25 of them.
-logging.getLogger("streamlit").setLevel(logging.ERROR)
+# pulls in data_provider which has ~25 of them. Setting the level on the
+# parent "streamlit" logger doesn't work because Streamlit initializes the
+# leaf logger "streamlit.runtime.caching.cache_data_api" with its own level,
+# so we attach a message-text filter directly to that leaf.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
+    lambda record: "No runtime found" not in record.getMessage()
+)
 
 import pandas as pd  # noqa: E402
 import pantab  # noqa: E402
