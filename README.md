@@ -251,29 +251,20 @@ The **Mail Admin** tab in the Streamlit app provides an interactive interface to
 
 ## Running the Streamlit App
 
-### Local mode (Oracle)
-
-Queries Oracle directly using `config.ini` credentials:
+The app reads pre-extracted Hyper files from Tableau Cloud — no Oracle access needed at runtime. Tableau Cloud credentials must be present in `.streamlit/secrets.toml` (or in the Streamlit Cloud Secrets dashboard for the deployed app).
 
 ```bash
 streamlit run src/scripts/streamlit_app.py
 ```
 
-### Local mode with forced cloud data path
-
-Reads from Tableau Cloud instead of Oracle, useful for testing the cloud data path end-to-end:
+To refresh the data the app sees, run the pipeline:
 
 ```bash
-FORCE_CLOUD=1 streamlit run src/scripts/streamlit_app.py
+python -m src.pipeline.run            # all datasets
+python -m src.pipeline.run <dataset>  # one dataset
 ```
 
-### How mode detection works
-
-`data_provider.py` decides which mode to use:
-
-1. If `FORCE_CLOUD=1` env var is set, use cloud mode
-2. If `src/pipeline/libs/config.ini` does not exist, use cloud mode (Streamlit Cloud)
-3. Otherwise, use local Oracle mode
+The pipeline is the only path that touches Oracle.
 
 ## Streamlit Cloud Deployment
 
@@ -338,8 +329,6 @@ See `CLAUDE.md` for detailed theme gotchas, color reference table, and guidance 
    ```python
    @st.cache_data(ttl=600, show_spinner="Loading data...")
    def fetch_your_dataset(acyrs: tuple[str, ...]) -> pd.DataFrame:
-       if _is_cloud():
-           return _download_and_read("your_dataset", "acyr_id", acyrs)
-       return _query_oracle(_SQL_DIR / "your_dataset.sql", acyrs)
+       return _download_and_read("your_dataset", "acyr_id", acyrs)
    ```
 4. Run `python -m src.pipeline.run your_dataset` to extract and publish

@@ -4,11 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Streamlit dashboards for NOCCCD (North Orange County Community College District) data reporting and analytics — the **NOCCCD Data Hub**. The app runs in two modes:
-- **Local**: queries Oracle EDW directly via `oracledb` + SQLAlchemy
-- **Cloud** (Streamlit Cloud): downloads pre-extracted `.hyper` files from Tableau Cloud
-
-A pipeline (`src/pipeline/`) handles the ETL: Oracle → Hyper → Tableau Cloud.
+Streamlit dashboards for NOCCCD (North Orange County Community College District) data reporting and analytics — the **NOCCCD Data Hub**. The app reads pre-extracted `.hyper` files from Tableau Cloud at runtime; it never queries Oracle directly. Oracle access is confined to the pipeline (`src/pipeline/`), which extracts data from Oracle EDW and publishes Hyper files to Tableau Cloud on a daily schedule.
 
 ## Workflow: notebooks → nocccd-streamlit
 
@@ -20,7 +16,7 @@ New analyses start as Jupyter notebooks in either **nocccd-scff** (SCFF/funding 
 
 **What gets ported:**
 - **SQL queries**: source repo SQL → `src/pipeline/sql/` (adapted for pipeline extraction with acyr/term placeholders)
-- **SQL parameterization**: `expand_in_clause()` originated in `nocccd-scff/libs/notebook_utils.py` — the same multi-acyr `IN (:t1...)` regex expansion is used in `data_provider.py` and `extract.py`
+- **SQL parameterization**: `expand_in_clause()` originated in `nocccd-scff/libs/notebook_utils.py` — the same multi-acyr `IN (:t1...)` regex expansion is used in `extract.py`
 - **Crosstab tables**: `build_expandable_crosstab()` in notebook_utils was ported to `_build_expandable_crosstab()` in tab modules for expandable HTML pivot tables
 - **Funding status categories**: `derive_funding_status()` (Pell/CCPG/Both/Neither) — same logic in both repos
 - **Plotly visualizations**: Interactive charts (e.g. `px.imshow()` heatmaps) are ported directly; PDF export uses matplotlib recreations
@@ -30,11 +26,8 @@ When starting a new analysis, prototype in a notebook first, then follow the "Ad
 ## Commands
 
 ```bash
-# Run the Streamlit app (local/Oracle mode)
+# Run the Streamlit app (reads Hyper files from Tableau Cloud)
 streamlit run src/scripts/streamlit_app.py
-
-# Run the app forcing cloud mode (reads from Tableau Cloud instead of Oracle)
-FORCE_CLOUD=1 streamlit run src/scripts/streamlit_app.py
 
 # Pipeline: extract all datasets from Oracle → .hyper → Tableau Cloud
 python -m src.pipeline.run
@@ -70,9 +63,9 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
                                               (downloads .hyper at runtime)
 ```
 
-### Dual-mode data access (`data_provider.py`)
+### Data access (`data_provider.py`)
 
-`_is_cloud()` decides the mode: returns `True` if `FORCE_CLOUD=1` env var is set OR `config.ini` doesn't exist (Streamlit Cloud has no Oracle access). Each public `fetch_*()` function is a thin `@st.cache_data(ttl=600)` wrapper around a `_fetch_*_raw()` helper. The `_raw` helpers are un-decorated and can be called without a Streamlit runtime. Note: the mail pipeline does **not** use these `_raw` helpers — it fetches directly from Tableau Cloud Hyper files via `_fetch_from_hyper()` in `mail_config.py` to avoid Oracle and `st.secrets` dependencies.
+Each public `fetch_*()` function is an `@st.cache_data(ttl=600)` wrapper that calls `_download_and_read(dataset_name, filter_col, values)` — which downloads the dataset's Hyper extract from Tableau Cloud, reads it via `pantab.frame_from_hyper()`, and filters in-memory to the requested values. Tableau credentials come from `st.secrets`. The mail pipeline has its own `_fetch_from_hyper()` in `mail_config.py` that loads Tableau credentials directly from `secrets.toml` instead of `st.secrets`, so it can run outside a Streamlit runtime.
 
 ### Pipeline flow (`src/pipeline/`)
 
@@ -107,7 +100,7 @@ Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`no
 **Adding a new dataset + tab (full checklist):**
 1. Add SQL file to `src/pipeline/sql/`
 2. Register dataset in `src/pipeline/config.py` (name, sql_file, param_name, values under semantic key, db_section)
-3. Add a `fetch_*()` function in `data_provider.py` — use `_query_oracle()` for multi-acyr SQL or `_query_oracle_single_acyr()` for single-acyr SQL. Pass `db_section=` matching the config entry.
+3. Add a `fetch_*()` function in `data_provider.py` — one line: `return _download_and_read("<dataset_name>", "<filter_col>", values)`, wrapped with `@st.cache_data(ttl=600, show_spinner="Loading data...")`. `<filter_col>` is the column the Hyper file is filtered on (e.g. `"acyr_code"`, `"mis_term_id"`).
 4. Create tab module in `src/scripts/tabs/` with a `render()` function
 5. **Default values**: Import from `config.py` (`from src.pipeline.config import DATASETS`) — never hardcode value lists in tab files. Look up via the dataset's `param_name`. Example: `cfg = DATASETS["your_dataset"]; _DEFAULT_VALS = cfg[cfg["param_name"]]`
 6. **Widget keys**: Use a unique prefix for all `st.session_state` keys and widget `key=` params to avoid collisions between tabs
@@ -219,9 +212,11 @@ Widget prefix: `"bg1_"` (Goal 1), use `"bg2_"`, `"bg3_"`, etc. for subsequent go
 
 ### SQL parameterization
 
-Two patterns are supported:
-- **Multi-acyr**: SQL uses `IN (:t1...)`. Both `extract.py` and `data_provider.py` dynamically expand the placeholder list to match the number of acyrs via case-insensitive regex substitution (`re.IGNORECASE`). Use `_query_oracle()` in `data_provider.py`. SQL files may use uppercase `IN` or lowercase `in` — both work.
-- **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. `extract.py` detects this (no `IN` expansion match) and loops over each acyr, concatenating results. Use `_query_oracle_single_acyr()` in `data_provider.py`.
+Two patterns are supported by `extract.py`:
+- **Multi-acyr**: SQL uses `IN (:t1...)`. The placeholder list is expanded to match the number of acyrs via case-insensitive regex substitution (`re.IGNORECASE`). SQL files may use uppercase `IN` or lowercase `in` — both work.
+- **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. The runner detects this (no `IN` expansion match) and loops over each acyr, concatenating results.
+
+`extract.py` auto-dispatches between these two shapes by checking the SQL for the `IN (:t1` pattern, so a SQL file's parameterization style is the single source of truth — no per-caller flag.
 
 **Bind variable arithmetic gotcha**: Avoid `:acyr_code + 1` when the target column is VARCHAR2. The Python-bound `:acyr_code` is VARCHAR2; `+ 1` forces an implicit conversion to NUMBER, and Oracle then applies another implicit conversion to the compared column — **disabling index use and causing full table scans**. Use `TO_CHAR(TO_NUMBER(:acyr_code) + 1)` to keep both sides VARCHAR2 explicitly. See `bot_goal2_wage_denom.sql` for a working example.
 
