@@ -171,7 +171,7 @@ def _fetch_seat_count_report_raw(term_codes: tuple[str, ...]) -> pd.DataFrame:
     if _is_cloud():
         return _download_and_read("seat_count_report", "term_code", term_codes)
     return _query_oracle_single_acyr(
-        _SQL_DIR / "seat_count_report.sql", term_codes, "banner_term_code", db_section="dwhdb")
+        _SQL_DIR / "seat_count_report.sql", term_codes, "banner_term_code", db_section="rept")
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ def _fetch_bot_goal2_wage_denom_raw(acyr_codes: tuple[str, ...]) -> pd.DataFrame
         return _download_and_read("bot_goal2_wage_denom", "acyr_code", acyr_codes)
     return _query_oracle_single_acyr(
         _SQL_DIR / "bot_goal2_wage_denom.sql", acyr_codes, "acyr_code",
-        db_section="rept")
+        db_section="dwhdb")
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
