@@ -52,6 +52,10 @@ python -m src.pipeline.mail seat_count_fall2025_by_campus --recipient "Test Reci
 
 # Mail: send to all recipients
 python -m src.pipeline.mail seat_count_fall2025_by_campus
+
+# Bulk PDF export of the Seat Count Report to OneDrive
+# (one PDF per term × campus × division, overwrites existing files)
+python -m src.pipeline.seat_count_export
 ```
 
 ## Architecture
@@ -92,6 +96,17 @@ Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`no
 **Email credentials**: Stored in `.streamlit/secrets.toml` under `[email]` section. Uses a dedicated Gmail account (`nocccd.reports@gmail.com`) with App Password (2-Step Verification must be enabled on the Google account). Tableau Cloud credentials in the same file are used to download Hyper data.
 
 **Scheduled delivery**: `.github/workflows/mail-reports.yml` runs at 9am PDT weekdays via GitHub Actions cron. Also supports manual trigger from the Actions tab. Secrets are stored in GitHub repo settings (Settings > Secrets), mapped to `secrets.toml` keys at runtime by the workflow.
+
+### Bulk PDF export (`src/pipeline/seat_count_export.py`)
+
+On-demand bulk export of the Seat Count Report to a local OneDrive folder. Each run reads `src/pipeline/hyper/seat_count_report.hyper` (already produced by the standard pipeline) and writes one PDF per `(term, campus, division)` combination present in the data, overwriting any existing file. Run `python -m src.pipeline.seat_count_export` whenever a refresh is wanted; there is no scheduler.
+
+- **Source**: local Hyper only — no Tableau Cloud download, no `secrets.toml` needed. If the Hyper file is missing (rare, e.g. when bringing up a brand-new dataset), the script fails fast and tells you to run `python -m src.pipeline.run seat_count_report` first.
+- **Destination root**: `EXPORT_ROOT` constant at the top of the module — `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/Seat Count Report`. Layout: `<EXPORT_ROOT>/<Campus>/<Season>/<filename>.pdf`. Campus values (`Cypress`, `Fullerton`, `NOCE`) match `campus_desc` from the SQL exactly.
+- **Term-code → season**: last two digits of the banner term code drive the season subfolder — `10`/`15` → `Fall`, `20`/`35` → `Spring`, `30`/`05` → `Summer`. Encoded in `_SEASON_BY_SUFFIX` at the top of the module; an unknown suffix logs a warning and skips that term rather than failing the whole run.
+- **Filename slug**: `<term_code>_<campus_lower>_<season_lower>_<division_slug>.pdf`, e.g. `202510_cypress_fall_business.pdf`. Slugging via `_slug()` lowercases and collapses any non-alphanumeric run to a single underscore.
+- **Reused code**: imports `_compute_totals` and `_generate_pdf` from `src/scripts/tabs/seat_count_report.py` so the bulk-exported PDFs are byte-identical to what the user sees when they pick the same filters interactively. The Streamlit `@st.cache_data` decorators in `data_provider.py` emit "No runtime found" warnings when imported outside Streamlit; the module sets `logging.getLogger("streamlit").setLevel(logging.ERROR)` *before* the tab import to quiet most of them.
+- **Failure handling**: per-PDF errors are caught, logged, and counted; the rest of the run continues. The exit code is non-zero if anything was skipped.
 
 ### Tab system (`src/scripts/tabs/`)
 

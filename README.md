@@ -24,6 +24,7 @@ nocccd-streamlit/
 │   │   ├── extract.py            # Query Oracle, write .hyper files
 │   │   ├── publish.py            # Upload/download Hyper to/from Tableau Cloud
 │   │   ├── run.py                # CLI entry point for pipeline
+│   │   ├── seat_count_export.py  # Bulk Seat Count Report PDF export to OneDrive
 │   │   ├── mail/                 # Mass mailing system
 │   │   │   ├── mail_config.py    # Campaign definitions + report registry
 │   │   │   ├── report_generator.py  # Fetch → filter → PDF → send orchestrator
@@ -38,7 +39,7 @@ nocccd-streamlit/
 │   │       └── config.ini.template
 │   ├── scripts/                  # Streamlit app
 │   │   ├── streamlit_app.py      # Main entry point
-│   │   ├── data_provider.py      # Dual-mode data access (Oracle / Cloud)
+│   │   ├── data_provider.py      # Cloud-only data access (Hyper from Tableau)
 │   │   ├── home_config.py        # Project card config (descriptions, metrics)
 │   │   ├── admin_config.py       # Protected tabs configuration
 │   │   ├── auth.py               # Admin authentication gate
@@ -178,6 +179,22 @@ launchctl unload ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
 # Re-enable it
 launchctl load ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
 ```
+
+## Bulk PDF Export: Seat Count Report → OneDrive
+
+For the Seat Count Report, an on-demand bulk export writes one PDF per (term × campus × division) combination to a local OneDrive folder. The output PDFs match what the Streamlit tab produces when the same filters are selected interactively.
+
+```bash
+python -m src.pipeline.seat_count_export
+```
+
+- **Source**: reads `src/pipeline/hyper/seat_count_report.hyper` directly. Run the pipeline first if the Hyper file is missing or stale.
+- **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/Seat Count Report/<Campus>/<Season>/`
+- **Filename**: `<term>_<campus>_<season>_<division>.pdf` (lowercase, non-alphanumerics collapsed to underscores), e.g. `202510_cypress_fall_business.pdf`
+- **Term → season**: term-code suffixes `10`/`15` → Fall, `20`/`35` → Spring, `30`/`05` → Summer
+- **Behavior**: existing files are overwritten. Run any time.
+
+The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/seat_count_export.py` — change it there if your OneDrive path differs.
 
 ## Mass Mailing: Filtered PDF Reports
 
