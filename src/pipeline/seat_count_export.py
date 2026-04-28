@@ -125,7 +125,7 @@ def main() -> int:
                 out_dir = snapshot_root / campus / season
                 out_dir.mkdir(parents=True, exist_ok=True)
                 fname = (
-                    f"{term_code}_{_slug(campus)}_{season.lower()}_"
+                    f"{_slug(term_title)}_{_slug(campus)}_{season.lower()}_"
                     f"{_slug(division)}.pdf"
                 )
                 out_path = out_dir / fname
