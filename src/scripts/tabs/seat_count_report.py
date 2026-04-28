@@ -19,7 +19,7 @@ _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
 _COL_LABELS = [
-    "CRN", "INSM Code",
+    "CRN", "INSM",
     "Start", "End",
     "Mtg Days", "Start Time", "End Time",
     "Instructor", "XList",
