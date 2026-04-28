@@ -112,7 +112,29 @@ WITH
                 WHEN SUBSTR(c.campus_code, 1, 1) = '3' THEN 'NOCE'
             END AS campus_desc,
             c.division_code,
-            c.division_desc,
+            CASE
+                WHEN SUBSTR(c.campus_code, 1, 1) = '3' THEN (
+                    CASE
+                        WHEN c.subject_code LIKE 'IHS%'
+                            OR c.subject_code LIKE 'ABE%'
+                                AND fz_get_course_division(c.subject_code, c.course_number, c.term_code) != 'EMER'
+                            THEN 'Basic Skills'
+                        WHEN fz_get_course_division(c.subject_code, c.course_number, c.term_code)
+                            IN ('VBMT', 'VMDC', 'CPLB', 'COMP', 'VECE', 'VELE', 'VFSR', 'VMED', 'VPHM', 'VMDA', 'VBOT',
+                                'WFPR',
+                                'PARN',
+                                'VBSK', 'VCIS', 'VBUS', 'VBSO', 'MEDO')
+                            THEN 'CTE'
+                        WHEN fz_get_course_division(c.subject_code, c.course_number, c.term_code)
+                            IN ('DSPS', 'DSPB', 'VBRT')
+                            THEN 'DSS'
+                        WHEN c.subject_code IN ('ESLA', 'ESLM')
+                            THEN 'ESL'
+                        WHEN fz_get_course_division(c.subject_code, c.course_number, c.term_code) IN ('EMER', 'LEAP')
+                            THEN 'LEAP'
+                    END)
+                ELSE c.division_desc
+            END AS division_desc,
             c.department_code,
             c.department_desc,
             c.subject_code,
@@ -158,6 +180,14 @@ WITH
                         TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1))
                     )
             END AS census_1_enroll_count,
+            CASE
+                WHEN TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) IS NULL THEN c.census_2_enrollment
+                ELSE SUM(c.census_2_enrollment) OVER (
+                    PARTITION BY
+                        c.term_code,
+                        TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1))
+                    )
+            END AS census_2_enroll_count,
             CASE
                 WHEN TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) IS NULL
                     THEN a.first_day_morning_enroll_count
@@ -227,6 +257,11 @@ SELECT
               WHEN a.census_1_enroll_count <= 0 OR a.enroll_max <= 0 THEN 0
               ELSE a.census_1_enroll_count / a.enroll_max
           END, 2) AS census_1_enroll_fillrate,
+    a.census_2_enroll_count,
+    ROUND(CASE
+              WHEN a.census_2_enroll_count <= 0 OR a.enroll_max <= 0 THEN 0
+              ELSE a.census_2_enroll_count / a.enroll_max
+          END, 2) AS census_2_enroll_fillrate,
     a.first_day_morning_enroll_count,
     ROUND(CASE
               WHEN a.first_day_morning_enroll_count <= 0 OR a.enroll_max <= 0 THEN 0

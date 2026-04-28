@@ -25,7 +25,8 @@ _COL_LABELS = [
     "Instructor", "XList",
     "Max",
     "1st Day", "1st Day %",
-    "Census", "Census %",
+    "Census 1", "Census 1 %",
+    "Census 2", "Census 2 %",
     "Enrolled", "Fill %",
     "Wait",
 ]
@@ -118,7 +119,8 @@ def _compute_totals(df: pd.DataFrame) -> dict:
     deduped = _dedup_for_totals(df)
     total_max = int(deduped["enroll_max"].sum())
     total_enrolled = int(deduped["current_enroll_count"].sum())
-    total_census = int(deduped["census_1_enroll_count"].fillna(0).sum())
+    total_census_1 = int(deduped["census_1_enroll_count"].fillna(0).sum())
+    total_census_2 = int(deduped["census_2_enroll_count"].fillna(0).sum()) if "census_2_enroll_count" in deduped.columns else 0
     total_wait = int(deduped["wait_count"].fillna(0).sum()) if "wait_count" in deduped.columns else 0
     fd_cols = [
         "first_day_morning_enroll_count",
@@ -135,8 +137,10 @@ def _compute_totals(df: pd.DataFrame) -> dict:
         "max": total_max,
         "enrolled": total_enrolled,
         "fill": _rate(total_enrolled),
-        "census": total_census,
-        "census_fill": _rate(total_census),
+        "census_1": total_census_1,
+        "census_1_fill": _rate(total_census_1),
+        "census_2": total_census_2,
+        "census_2_fill": _rate(total_census_2),
         "first_day": total_first_day,
         "first_day_fill": _rate(total_first_day),
         "wait": total_wait,
@@ -201,7 +205,8 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             # CRN detail rows
             for _, r in df_course.iterrows():
                 fill_class = _fillrate_css_class(r["current_enroll_fillrate"])
-                census_class = _fillrate_css_class(r["census_1_enroll_fillrate"])
+                c1_class = _fillrate_css_class(r["census_1_enroll_fillrate"])
+                c2_class = _fillrate_css_class(r["census_2_enroll_fillrate"])
                 fd_count, fd_rate = _first_day_combined(r)
                 fd_class = _fillrate_css_class(fd_rate)
 
@@ -219,7 +224,9 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td style='text-align:right'>{_fmt_int(fd_count)}</td>")
                 rows.append(f"<td class='{fd_class}' style='text-align:right'>{_fmt_pct(fd_rate)}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_1_enroll_count'])}</td>")
-                rows.append(f"<td class='{census_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
+                rows.append(f"<td class='{c1_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
+                rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_2_enroll_count'])}</td>")
+                rows.append(f"<td class='{c2_class}' style='text-align:right'>{_fmt_pct(r['census_2_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
                 rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r.get('wait_count', 0))}</td>")
@@ -228,15 +235,18 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             # Course subtotal
             ct = _compute_totals(df_course)
             ct_fill_class = _fillrate_css_class(ct["fill"])
-            ct_census_class = _fillrate_css_class(ct["census_fill"])
+            ct_c1_class = _fillrate_css_class(ct["census_1_fill"])
+            ct_c2_class = _fillrate_css_class(ct["census_2_fill"])
             ct_fd_class = _fillrate_css_class(ct["first_day_fill"])
             rows.append('<tr class="subtotal-row">')
             rows.append('<td colspan="9" style="text-align:right">Course Total:</td>')
             rows.append(f"<td style='text-align:right'>{ct['max']:,}</td>")
             rows.append(f"<td style='text-align:right'>{ct['first_day']:,}</td>")
             rows.append(f"<td class='{ct_fd_class}' style='text-align:right'>{_fmt_pct(ct['first_day_fill'])}</td>")
-            rows.append(f"<td style='text-align:right'>{ct['census']:,}</td>")
-            rows.append(f"<td class='{ct_census_class}' style='text-align:right'>{_fmt_pct(ct['census_fill'])}</td>")
+            rows.append(f"<td style='text-align:right'>{ct['census_1']:,}</td>")
+            rows.append(f"<td class='{ct_c1_class}' style='text-align:right'>{_fmt_pct(ct['census_1_fill'])}</td>")
+            rows.append(f"<td style='text-align:right'>{ct['census_2']:,}</td>")
+            rows.append(f"<td class='{ct_c2_class}' style='text-align:right'>{_fmt_pct(ct['census_2_fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['enrolled']:,}</td>")
             rows.append(f"<td class='{ct_fill_class}' style='text-align:right'>{_fmt_pct(ct['fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['wait']:,}</td>")
@@ -245,7 +255,8 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         # Department subtotal
         dt = _compute_totals(df_dept)
         dt_fill_class = _fillrate_css_class(dt["fill"])
-        dt_census_class = _fillrate_css_class(dt["census_fill"])
+        dt_c1_class = _fillrate_css_class(dt["census_1_fill"])
+        dt_c2_class = _fillrate_css_class(dt["census_2_fill"])
         dt_fd_class = _fillrate_css_class(dt["first_day_fill"])
         rows.append('<tr class="dept-total">')
         rows.append(
@@ -255,8 +266,10 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         rows.append(f"<td style='text-align:right'>{dt['max']:,}</td>")
         rows.append(f"<td style='text-align:right'>{dt['first_day']:,}</td>")
         rows.append(f"<td class='{dt_fd_class}' style='text-align:right'>{_fmt_pct(dt['first_day_fill'])}</td>")
-        rows.append(f"<td style='text-align:right'>{dt['census']:,}</td>")
-        rows.append(f"<td class='{dt_census_class}' style='text-align:right'>{_fmt_pct(dt['census_fill'])}</td>")
+        rows.append(f"<td style='text-align:right'>{dt['census_1']:,}</td>")
+        rows.append(f"<td class='{dt_c1_class}' style='text-align:right'>{_fmt_pct(dt['census_1_fill'])}</td>")
+        rows.append(f"<td style='text-align:right'>{dt['census_2']:,}</td>")
+        rows.append(f"<td class='{dt_c2_class}' style='text-align:right'>{_fmt_pct(dt['census_2_fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['enrolled']:,}</td>")
         rows.append(f"<td class='{dt_fill_class}' style='text-align:right'>{_fmt_pct(dt['fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['wait']:,}</td>")
@@ -307,19 +320,21 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     usable = PAGE_W - ML - MR
     _cols = [
         ("CRN",         0.05),
-        ("Sched",       0.12),
-        ("Start",       0.07),
-        ("End",         0.07),
+        ("Sched",       0.09),
+        ("Start",       0.06),
+        ("End",         0.06),
         ("Mtg\nDays",   0.05),
         ("Start\nTime", 0.05),
         ("End\nTime",   0.05),
-        ("Instructor",  0.14),
+        ("Instructor",  0.10),
         ("XList",       0.04),
         ("Max",         0.04),
         ("1st\nDay",    0.05),
         ("1st Day\n%",  0.05),
-        ("Cens",        0.04),
-        ("Cens\n%",     0.05),
+        ("Cens 1",      0.04),
+        ("Cens 1\n%",   0.05),
+        ("Cens 2",      0.04),
+        ("Cens 2\n%",   0.05),
         ("Enrl",        0.04),
         ("Fill\n%",     0.05),
         ("Wait",        0.04),
@@ -531,16 +546,19 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             _fmt_pct(fd_rate),
                             _fmt_int(r["census_1_enroll_count"]),
                             _fmt_pct(r["census_1_enroll_fillrate"]),
+                            _fmt_int(r["census_2_enroll_count"]),
+                            _fmt_pct(r["census_2_enroll_fillrate"]),
                             _fmt_int(r["current_enroll_count"]),
                             _fmt_pct(r["current_enroll_fillrate"]),
                             _fmt_int(r.get("wait_count", 0)),
                         ]
 
-                        # Fill rate cell backgrounds (1st Day %, Census %, Fill %)
+                        # Fill rate cell backgrounds (1st Day %, Census 1 %, Census 2 %, Fill %)
                         rates = {
                             11: fd_rate,
                             13: r["census_1_enroll_fillrate"],
-                            15: r["current_enroll_fillrate"],
+                            15: r["census_2_enroll_fillrate"],
+                            17: r["current_enroll_fillrate"],
                         }
                         for ci, rate in rates.items():
                             from matplotlib.patches import Rectangle as Rect
