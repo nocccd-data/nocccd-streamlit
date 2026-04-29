@@ -169,7 +169,7 @@ WITH
             c.course_number,
             d.course_title,
             c.scheduling_desc,
-            g.gtvinsm_desc as insm,
+            g.gtvinsm_desc AS insm,
             c.start_date,
             c.end_date,
             sm.meeting_begin_time AS begin_time,
@@ -252,9 +252,10 @@ WITH
                 ON (c.course_key = d.course_key)
             JOIN section_meeting sm
                 ON (c.section_key = sm.section_key)
-            left join gtvinsm g
-        on (c.instruction_mode_code = g.gtvinsm_code)
+            LEFT JOIN gtvinsm g
+                ON (c.instruction_mode_code = g.gtvinsm_code)
         WHERE c.term_code = :banner_term_code
+          AND c.section_status_code = 'A'
     )
 
 SELECT
