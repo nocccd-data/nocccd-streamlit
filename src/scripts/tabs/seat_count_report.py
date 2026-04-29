@@ -28,7 +28,6 @@ _COL_LABELS = [
     "Census 1", "Census 1 %",
     "Census 2", "Census 2 %",
     "Enrolled", "Fill %",
-    "Wait",
 ]
 
 
@@ -229,7 +228,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td class='{c2_class}' style='text-align:right'>{_fmt_pct(r['census_2_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
                 rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r.get('wait_count', 0))}</td>")
                 rows.append("</tr>")
 
             # Course subtotal
@@ -249,7 +247,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             rows.append(f"<td class='{ct_c2_class}' style='text-align:right'>{_fmt_pct(ct['census_2_fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['enrolled']:,}</td>")
             rows.append(f"<td class='{ct_fill_class}' style='text-align:right'>{_fmt_pct(ct['fill'])}</td>")
-            rows.append(f"<td style='text-align:right'>{ct['wait']:,}</td>")
             rows.append("</tr>")
 
         # Department subtotal
@@ -272,7 +269,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         rows.append(f"<td class='{dt_c2_class}' style='text-align:right'>{_fmt_pct(dt['census_2_fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['enrolled']:,}</td>")
         rows.append(f"<td class='{dt_fill_class}' style='text-align:right'>{_fmt_pct(dt['fill'])}</td>")
-        rows.append(f"<td style='text-align:right'>{dt['wait']:,}</td>")
         rows.append("</tr>")
 
     rows.append("</tbody></table></div>")
@@ -320,7 +316,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     usable = PAGE_W - ML - MR
     _cols = [
         ("CRN",         0.05),
-        ("Sched",       0.04),
+        ("Sched",       0.09),
         ("Start",       0.07),
         ("End",         0.07),
         ("Mtg\nDays",   0.05),
@@ -329,7 +325,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
         ("Instructor",  0.17),
         ("XList",       0.04),
         ("Max",         0.04),
-        ("1st\nDay",    0.05),
+        ("1st\nDay",    0.04),
         ("1st Day\n%",  0.04),
         ("Cens 1",      0.04),
         ("Cens 1\n%",   0.04),
@@ -337,7 +333,6 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
         ("Cens 2\n%",   0.04),
         ("Enrl",        0.04),
         ("Fill\n%",     0.04),
-        ("Wait",        0.04),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -550,7 +545,6 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             _fmt_pct(r["census_2_enroll_fillrate"]),
                             _fmt_int(r["current_enroll_count"]),
                             _fmt_pct(r["current_enroll_fillrate"]),
-                            _fmt_int(r.get("wait_count", 0)),
                         ]
 
                         # Fill rate cell backgrounds (1st Day %, Census 1 %, Census 2 %, Fill %)
