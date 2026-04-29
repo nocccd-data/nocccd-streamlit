@@ -66,13 +66,13 @@ def _layout_for_campus(campus_mode: str) -> dict:
         # 16 columns: includes Building (after End Time) and Census 2.
         pdf_cols = [
             ("CRN",         0.05),
-            ("INSM",        0.12),
+            ("INSM",        0.14),
             ("Start",       0.08),
             ("End",         0.08),
             ("Mtg\nDays",   0.06),
             ("Start\nTime", 0.06),
             ("End\nTime",   0.06),
-            ("Building",    0.17),
+            ("Building",    0.15),
             ("XList",       0.04),
             ("Max",         0.04),
             ("1st\nDay",    0.04),
