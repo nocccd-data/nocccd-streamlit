@@ -18,16 +18,85 @@ _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
-_COL_LABELS = [
-    "CRN", "INSM",
-    "Start", "End",
-    "Mtg Days", "Start Time", "End Time",
-    "XList",
-    "Max",
-    "1st Day", "1st Day %",
-    "Census 1", "Census 1 %",
-    "Census 2", "Census 2 %",
-]
+def _layout_for_campus(campus_mode: str) -> dict:
+    """Per-campus column layout.
+
+    Cypress and Fullerton (credit colleges, campus codes 1/2) hide the
+    Census 2 count + % columns. NOCE (campus code 3) adds a Building
+    column. "All" or any other value falls back to the union — both
+    Building and Census 2 visible — which is what the in-tab download
+    uses when no specific campus is selected.
+    """
+    is_credit_only = campus_mode in ("Cypress", "Fullerton")
+    show_building = not is_credit_only
+    show_census_2 = not is_credit_only
+
+    html_labels = ["CRN", "INSM", "Start", "End",
+                   "Mtg Days", "Start Time", "End Time"]
+    if show_building:
+        html_labels.append("Building")
+    html_labels.extend(["XList", "Max", "1st Day", "1st Day %",
+                        "Census 1", "Census 1 %"])
+    if show_census_2:
+        html_labels.extend(["Census 2", "Census 2 %"])
+
+    if is_credit_only:
+        # 13 columns: distribute removed Building/Census 2 width to INSM
+        # and the date columns so descriptions fit comfortably.
+        pdf_cols = [
+            ("CRN",         0.05),
+            ("INSM",        0.27),
+            ("Start",       0.12),
+            ("End",         0.12),
+            ("Mtg\nDays",   0.06),
+            ("Start\nTime", 0.06),
+            ("End\nTime",   0.06),
+            ("XList",       0.05),
+            ("Max",         0.05),
+            ("1st\nDay",    0.04),
+            ("1st Day\n%",  0.04),
+            ("Cens 1",      0.04),
+            ("Cens 1\n%",   0.04),
+        ]
+        pdf_rate_indices = (10, 12)         # 1st Day %, Census 1 %
+        pdf_center_cols = {0, 2, 3, 4, 5, 6, 7}
+        pdf_left_cols = {1}
+        subtotal_label_colspan = 8           # CRN..XList
+    else:
+        # 16 columns: includes Building (after End Time) and Census 2.
+        pdf_cols = [
+            ("CRN",         0.05),
+            ("INSM",        0.18),
+            ("Start",       0.10),
+            ("End",         0.10),
+            ("Mtg\nDays",   0.06),
+            ("Start\nTime", 0.06),
+            ("End\nTime",   0.06),
+            ("Building",    0.05),
+            ("XList",       0.05),
+            ("Max",         0.05),
+            ("1st\nDay",    0.04),
+            ("1st Day\n%",  0.04),
+            ("Cens 1",      0.04),
+            ("Cens 1\n%",   0.04),
+            ("Cens 2",      0.04),
+            ("Cens 2\n%",   0.04),
+        ]
+        pdf_rate_indices = (11, 13, 15)      # 1st Day %, Census 1 %, Census 2 %
+        pdf_center_cols = {0, 2, 3, 4, 5, 6, 8}
+        pdf_left_cols = {1, 7}               # INSM, Building
+        subtotal_label_colspan = 9           # CRN..XList (XList shifted right by Building)
+
+    return {
+        "html_labels": html_labels,
+        "pdf_cols": pdf_cols,
+        "pdf_rate_indices": pdf_rate_indices,
+        "pdf_center_cols": pdf_center_cols,
+        "pdf_left_cols": pdf_left_cols,
+        "show_building": show_building,
+        "show_census_2": show_census_2,
+        "subtotal_label_colspan": subtotal_label_colspan,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -149,15 +218,27 @@ def _compute_totals(df: pd.DataFrame) -> dict:
 # Banded HTML builder
 # ---------------------------------------------------------------------------
 
-def _build_banded_html(df_division: pd.DataFrame) -> str:
-    """Build an HTML banded table for a single division."""
+def _build_banded_html(df_division: pd.DataFrame, campus_mode: str = "All") -> str:
+    """Build an HTML banded table for a single division.
+
+    The column set varies by campus_mode:
+      - Cypress, Fullerton: drop Census 2 count + %
+      - NOCE: include Building between End Time and XList
+      - All / anything else: union (Building + Census 2 visible)
+    """
+    layout = _layout_for_campus(campus_mode)
+    show_building = layout["show_building"]
+    show_census_2 = layout["show_census_2"]
+    label_count = len(layout["html_labels"])
+    label_colspan = layout["subtotal_label_colspan"]
+
     rows: list[str] = []
 
     # Table header
     rows.append('<div style="overflow-x:auto;">')
     rows.append('<table class="sc-banded">')
     rows.append("<thead><tr>")
-    for label in _COL_LABELS:
+    for label in layout["html_labels"]:
         rows.append(f"<th>{label}</th>")
     rows.append("</tr></thead>")
     rows.append("<tbody>")
@@ -169,7 +250,7 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
 
         # Department header band
         rows.append(
-            f'<tr class="dept-header"><td colspan="{len(_COL_LABELS)}">'
+            f'<tr class="dept-header"><td colspan="{label_count}">'
             f"{escape(dept)}</td></tr>"
         )
 
@@ -195,7 +276,7 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             # Course header — use crse_alias (already includes course_number or alias)
             display_num = escape(str(alias)) if pd.notna(alias) and str(alias).strip() else escape(str(cnum))
             rows.append(
-                f'<tr class="course-header"><td colspan="{len(_COL_LABELS)}">'
+                f'<tr class="course-header"><td colspan="{label_count}">'
                 f"{escape(str(subj))} {display_num} &mdash; "
                 f"{escape(str(ctitle))}</td></tr>"
             )
@@ -203,7 +284,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             # CRN detail rows
             for _, r in df_course.iterrows():
                 c1_class = _fillrate_css_class(r["census_1_enroll_fillrate"])
-                c2_class = _fillrate_css_class(r["census_2_enroll_fillrate"])
                 fd_count, fd_rate = _first_day_combined(r)
                 fd_class = _fillrate_css_class(fd_rate)
 
@@ -215,40 +295,44 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td style='text-align:center'>{_safe(r.get('days'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('begin_time'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('end_time'))}</td>")
+                if show_building:
+                    rows.append(f"<td>{_safe(r.get('building'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_safe(r['crosslist_group'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['enroll_max'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(fd_count)}</td>")
                 rows.append(f"<td class='{fd_class}' style='text-align:right'>{_fmt_pct(fd_rate)}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_1_enroll_count'])}</td>")
                 rows.append(f"<td class='{c1_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_2_enroll_count'])}</td>")
-                rows.append(f"<td class='{c2_class}' style='text-align:right'>{_fmt_pct(r['census_2_enroll_fillrate'])}</td>")
+                if show_census_2:
+                    c2_class = _fillrate_css_class(r["census_2_enroll_fillrate"])
+                    rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_2_enroll_count'])}</td>")
+                    rows.append(f"<td class='{c2_class}' style='text-align:right'>{_fmt_pct(r['census_2_enroll_fillrate'])}</td>")
                 rows.append("</tr>")
 
             # Course subtotal
             ct = _compute_totals(df_course)
             ct_c1_class = _fillrate_css_class(ct["census_1_fill"])
-            ct_c2_class = _fillrate_css_class(ct["census_2_fill"])
             ct_fd_class = _fillrate_css_class(ct["first_day_fill"])
             rows.append('<tr class="subtotal-row">')
-            rows.append('<td colspan="8" style="text-align:right">Course Total:</td>')
+            rows.append(f'<td colspan="{label_colspan}" style="text-align:right">Course Total:</td>')
             rows.append(f"<td style='text-align:right'>{ct['max']:,}</td>")
             rows.append(f"<td style='text-align:right'>{ct['first_day']:,}</td>")
             rows.append(f"<td class='{ct_fd_class}' style='text-align:right'>{_fmt_pct(ct['first_day_fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['census_1']:,}</td>")
             rows.append(f"<td class='{ct_c1_class}' style='text-align:right'>{_fmt_pct(ct['census_1_fill'])}</td>")
-            rows.append(f"<td style='text-align:right'>{ct['census_2']:,}</td>")
-            rows.append(f"<td class='{ct_c2_class}' style='text-align:right'>{_fmt_pct(ct['census_2_fill'])}</td>")
+            if show_census_2:
+                ct_c2_class = _fillrate_css_class(ct["census_2_fill"])
+                rows.append(f"<td style='text-align:right'>{ct['census_2']:,}</td>")
+                rows.append(f"<td class='{ct_c2_class}' style='text-align:right'>{_fmt_pct(ct['census_2_fill'])}</td>")
             rows.append("</tr>")
 
         # Department subtotal
         dt = _compute_totals(df_dept)
         dt_c1_class = _fillrate_css_class(dt["census_1_fill"])
-        dt_c2_class = _fillrate_css_class(dt["census_2_fill"])
         dt_fd_class = _fillrate_css_class(dt["first_day_fill"])
         rows.append('<tr class="dept-total">')
         rows.append(
-            f'<td colspan="8" style="text-align:right">'
+            f'<td colspan="{label_colspan}" style="text-align:right">'
             f"Dept Total &mdash; {escape(dept)}:</td>"
         )
         rows.append(f"<td style='text-align:right'>{dt['max']:,}</td>")
@@ -256,8 +340,10 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         rows.append(f"<td class='{dt_fd_class}' style='text-align:right'>{_fmt_pct(dt['first_day_fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['census_1']:,}</td>")
         rows.append(f"<td class='{dt_c1_class}' style='text-align:right'>{_fmt_pct(dt['census_1_fill'])}</td>")
-        rows.append(f"<td style='text-align:right'>{dt['census_2']:,}</td>")
-        rows.append(f"<td class='{dt_c2_class}' style='text-align:right'>{_fmt_pct(dt['census_2_fill'])}</td>")
+        if show_census_2:
+            dt_c2_class = _fillrate_css_class(dt["census_2_fill"])
+            rows.append(f"<td style='text-align:right'>{dt['census_2']:,}</td>")
+            rows.append(f"<td class='{dt_c2_class}' style='text-align:right'>{_fmt_pct(dt['census_2_fill'])}</td>")
         rows.append("</tr>")
 
     rows.append("</tbody></table></div>")
@@ -282,11 +368,15 @@ def _fillrate_mpl_color(rate: float) -> str:
 
 
 def _generate_pdf(df: pd.DataFrame, term_title: str,
-                   filter_scope: str = "", summary: dict | None = None) -> bytes:
+                   filter_scope: str = "", summary: dict | None = None,
+                   campus_mode: str = "All") -> bytes:
     """Render a continuous banded report as a multi-page PDF.
 
     Rows flow continuously across pages (no per-department clipping).
     Uses matplotlib text drawing for precise row-by-row control.
+
+    The column set varies by campus_mode (see _layout_for_campus):
+    Cypress/Fullerton drop Census 2; NOCE adds Building; All shows both.
     """
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
@@ -300,26 +390,16 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     ROW_H = 0.16          # row height in inches
     FONT_SZ = 7.0
 
-    # Column definitions: (label, width_fraction, align)
-    # width_fraction is relative to usable width (PAGE_W - ML - MR)
+    layout = _layout_for_campus(campus_mode)
+    show_building = layout["show_building"]
+    show_census_2 = layout["show_census_2"]
+    _cols = layout["pdf_cols"]
+    pdf_rate_indices = layout["pdf_rate_indices"]
+    pdf_center_cols = layout["pdf_center_cols"]
+    pdf_left_cols = layout["pdf_left_cols"]
+
+    # Column geometry — width_fraction is relative to usable width.
     usable = PAGE_W - ML - MR
-    _cols = [
-        ("CRN",         0.05),
-        ("INSM",        0.20),
-        ("Start",       0.10),
-        ("End",         0.10),
-        ("Mtg\nDays",   0.07),
-        ("Start\nTime", 0.07),
-        ("End\nTime",   0.07),
-        ("XList",       0.05),
-        ("Max",         0.05),
-        ("1st\nDay",    0.04),
-        ("1st Day\n%",  0.04),
-        ("Cens 1",      0.04),
-        ("Cens 1\n%",   0.04),
-        ("Cens 2",      0.04),
-        ("Cens 2\n%",   0.04),
-    ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
     col_x = []
@@ -520,23 +600,30 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             str(r["days"]) if pd.notna(r.get("days")) else "",
                             _fmt_time(r.get("begin_time")),
                             _fmt_time(r.get("end_time")),
+                        ]
+                        if show_building:
+                            vals.append(str(r["building"]) if pd.notna(r.get("building")) else "")
+                        vals.extend([
                             str(r["crosslist_group"]) if pd.notna(r["crosslist_group"]) else "",
                             _fmt_int(r["enroll_max"]),
                             _fmt_int(fd_count),
                             _fmt_pct(fd_rate),
                             _fmt_int(r["census_1_enroll_count"]),
                             _fmt_pct(r["census_1_enroll_fillrate"]),
-                            _fmt_int(r["census_2_enroll_count"]),
-                            _fmt_pct(r["census_2_enroll_fillrate"]),
-                        ]
+                        ])
+                        if show_census_2:
+                            vals.append(_fmt_int(r["census_2_enroll_count"]))
+                            vals.append(_fmt_pct(r["census_2_enroll_fillrate"]))
 
-                        # Fill rate cell backgrounds (1st Day %, Census 1 %, Census 2 %)
-                        rates = {
-                            10: fd_rate,
-                            12: r["census_1_enroll_fillrate"],
-                            14: r["census_2_enroll_fillrate"],
-                        }
-                        for ci, rate in rates.items():
+                        # Fill rate cell backgrounds — indices come from layout
+                        # (1st Day %, Census 1 %, optional Census 2 %).
+                        rate_values = [
+                            fd_rate,
+                            r["census_1_enroll_fillrate"],
+                        ]
+                        if show_census_2:
+                            rate_values.append(r["census_2_enroll_fillrate"])
+                        for ci, rate in zip(pdf_rate_indices, rate_values):
                             from matplotlib.patches import Rectangle as Rect
                             ax.add_patch(Rect(
                                 (col_x[ci], y), col_w[ci], ROW_H,
@@ -544,15 +631,11 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                                 edgecolor="none", zorder=0,
                             ))
 
-                        # CRN, Start, End, Mtg Days, Start Time, End Time, XList center;
-                        # INSM left (free-text description); enrollment numeric cols right.
-                        _CENTER_COLS = {0, 2, 3, 4, 5, 6, 7}
-                        _LEFT_COLS = {1}
                         for i, val in enumerate(vals):
-                            if i in _CENTER_COLS:
+                            if i in pdf_center_cols:
                                 ha = "center"
                                 xp = col_x[i] + col_w[i] / 2
-                            elif i in _LEFT_COLS:
+                            elif i in pdf_left_cols:
                                 ha = "left"
                                 xp = col_x[i] + 0.03
                             else:
@@ -578,8 +661,10 @@ def generate_report_pdf(df: pd.DataFrame, params: dict) -> bytes:
     """Public API for the mail system. params must include 'term_title'."""
     term_title = params.get("term_title", "")
     filter_scope = params.get("filter_scope", term_title)
+    campus_mode = params.get("campus_mode", "All")
     summary = _compute_totals(df)
-    return _generate_pdf(df, term_title, filter_scope=filter_scope, summary=summary)
+    return _generate_pdf(df, term_title, filter_scope=filter_scope,
+                         summary=summary, campus_mode=campus_mode)
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +749,7 @@ def render():
         st.session_state["_sc_pdf_bytes"] = _generate_pdf(
             filtered, term_title,
             filter_scope=_filter_scope, summary=_summary,
+            campus_mode=campus,  # "All" / "Cypress" / "Fullerton" / "NOCE"
         )
     st.sidebar.download_button(
         "Download PDF",
@@ -710,5 +796,5 @@ def render():
             f"{_fmt_pct(div_totals['fill'])} fill"
         )
         with st.expander(label):
-            html = _build_banded_html(df_div)
+            html = _build_banded_html(df_div, campus_mode=campus)
             st.markdown(html, unsafe_allow_html=True)

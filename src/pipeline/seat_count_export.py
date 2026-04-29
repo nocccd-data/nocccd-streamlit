@@ -115,6 +115,7 @@ def main() -> int:
                     pdf_bytes = _generate_pdf(
                         df_div, term_title,
                         filter_scope=filter_scope, summary=summary,
+                        campus_mode=campus,
                     )
                 except Exception as e:  # noqa: BLE001 — we want to keep going
                     print(f"  ! generate failed for {term_code}/{campus}/{division}: {e}",
