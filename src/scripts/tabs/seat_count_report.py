@@ -22,12 +22,11 @@ _COL_LABELS = [
     "CRN", "INSM",
     "Start", "End",
     "Mtg Days", "Start Time", "End Time",
-    "Instructor", "XList",
+    "XList",
     "Max",
     "1st Day", "1st Day %",
     "Census 1", "Census 1 %",
     "Census 2", "Census 2 %",
-    "Enrolled", "Fill %",
 ]
 
 
@@ -203,7 +202,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
 
             # CRN detail rows
             for _, r in df_course.iterrows():
-                fill_class = _fillrate_css_class(r["current_enroll_fillrate"])
                 c1_class = _fillrate_css_class(r["census_1_enroll_fillrate"])
                 c2_class = _fillrate_css_class(r["census_2_enroll_fillrate"])
                 fd_count, fd_rate = _first_day_combined(r)
@@ -217,7 +215,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td style='text-align:center'>{_safe(r.get('days'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('begin_time'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_time(r.get('end_time'))}</td>")
-                rows.append(f"<td>{_safe(r.get('pri_instructor'))}</td>")
                 rows.append(f"<td style='text-align:center'>{_safe(r['crosslist_group'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['enroll_max'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(fd_count)}</td>")
@@ -226,18 +223,15 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
                 rows.append(f"<td class='{c1_class}' style='text-align:right'>{_fmt_pct(r['census_1_enroll_fillrate'])}</td>")
                 rows.append(f"<td style='text-align:right'>{_fmt_int(r['census_2_enroll_count'])}</td>")
                 rows.append(f"<td class='{c2_class}' style='text-align:right'>{_fmt_pct(r['census_2_enroll_fillrate'])}</td>")
-                rows.append(f"<td style='text-align:right'>{_fmt_int(r['current_enroll_count'])}</td>")
-                rows.append(f"<td class='{fill_class}' style='text-align:right'>{_fmt_pct(r['current_enroll_fillrate'])}</td>")
                 rows.append("</tr>")
 
             # Course subtotal
             ct = _compute_totals(df_course)
-            ct_fill_class = _fillrate_css_class(ct["fill"])
             ct_c1_class = _fillrate_css_class(ct["census_1_fill"])
             ct_c2_class = _fillrate_css_class(ct["census_2_fill"])
             ct_fd_class = _fillrate_css_class(ct["first_day_fill"])
             rows.append('<tr class="subtotal-row">')
-            rows.append('<td colspan="9" style="text-align:right">Course Total:</td>')
+            rows.append('<td colspan="8" style="text-align:right">Course Total:</td>')
             rows.append(f"<td style='text-align:right'>{ct['max']:,}</td>")
             rows.append(f"<td style='text-align:right'>{ct['first_day']:,}</td>")
             rows.append(f"<td class='{ct_fd_class}' style='text-align:right'>{_fmt_pct(ct['first_day_fill'])}</td>")
@@ -245,19 +239,16 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
             rows.append(f"<td class='{ct_c1_class}' style='text-align:right'>{_fmt_pct(ct['census_1_fill'])}</td>")
             rows.append(f"<td style='text-align:right'>{ct['census_2']:,}</td>")
             rows.append(f"<td class='{ct_c2_class}' style='text-align:right'>{_fmt_pct(ct['census_2_fill'])}</td>")
-            rows.append(f"<td style='text-align:right'>{ct['enrolled']:,}</td>")
-            rows.append(f"<td class='{ct_fill_class}' style='text-align:right'>{_fmt_pct(ct['fill'])}</td>")
             rows.append("</tr>")
 
         # Department subtotal
         dt = _compute_totals(df_dept)
-        dt_fill_class = _fillrate_css_class(dt["fill"])
         dt_c1_class = _fillrate_css_class(dt["census_1_fill"])
         dt_c2_class = _fillrate_css_class(dt["census_2_fill"])
         dt_fd_class = _fillrate_css_class(dt["first_day_fill"])
         rows.append('<tr class="dept-total">')
         rows.append(
-            f'<td colspan="9" style="text-align:right">'
+            f'<td colspan="8" style="text-align:right">'
             f"Dept Total &mdash; {escape(dept)}:</td>"
         )
         rows.append(f"<td style='text-align:right'>{dt['max']:,}</td>")
@@ -267,8 +258,6 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
         rows.append(f"<td class='{dt_c1_class}' style='text-align:right'>{_fmt_pct(dt['census_1_fill'])}</td>")
         rows.append(f"<td style='text-align:right'>{dt['census_2']:,}</td>")
         rows.append(f"<td class='{dt_c2_class}' style='text-align:right'>{_fmt_pct(dt['census_2_fill'])}</td>")
-        rows.append(f"<td style='text-align:right'>{dt['enrolled']:,}</td>")
-        rows.append(f"<td class='{dt_fill_class}' style='text-align:right'>{_fmt_pct(dt['fill'])}</td>")
         rows.append("</tr>")
 
     rows.append("</tbody></table></div>")
@@ -316,23 +305,20 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     usable = PAGE_W - ML - MR
     _cols = [
         ("CRN",         0.05),
-        ("INSM",        0.09),
-        ("Start",       0.07),
-        ("End",         0.07),
-        ("Mtg\nDays",   0.05),
-        ("Start\nTime", 0.05),
-        ("End\nTime",   0.05),
-        ("Instructor",  0.17),
-        ("XList",       0.04),
-        ("Max",         0.04),
+        ("INSM",        0.20),
+        ("Start",       0.10),
+        ("End",         0.10),
+        ("Mtg\nDays",   0.07),
+        ("Start\nTime", 0.07),
+        ("End\nTime",   0.07),
+        ("XList",       0.05),
+        ("Max",         0.05),
         ("1st\nDay",    0.04),
         ("1st Day\n%",  0.04),
         ("Cens 1",      0.04),
         ("Cens 1\n%",   0.04),
         ("Cens 2",      0.04),
         ("Cens 2\n%",   0.04),
-        ("Enrl",        0.04),
-        ("Fill\n%",     0.04),
     ]
     col_labels = [c[0] for c in _cols]
     col_w = [c[1] * usable for c in _cols]
@@ -534,7 +520,6 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             str(r["days"]) if pd.notna(r.get("days")) else "",
                             _fmt_time(r.get("begin_time")),
                             _fmt_time(r.get("end_time")),
-                            str(r["pri_instructor"]) if pd.notna(r.get("pri_instructor")) else "",
                             str(r["crosslist_group"]) if pd.notna(r["crosslist_group"]) else "",
                             _fmt_int(r["enroll_max"]),
                             _fmt_int(fd_count),
@@ -543,16 +528,13 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             _fmt_pct(r["census_1_enroll_fillrate"]),
                             _fmt_int(r["census_2_enroll_count"]),
                             _fmt_pct(r["census_2_enroll_fillrate"]),
-                            _fmt_int(r["current_enroll_count"]),
-                            _fmt_pct(r["current_enroll_fillrate"]),
                         ]
 
-                        # Fill rate cell backgrounds (1st Day %, Census 1 %, Census 2 %, Fill %)
+                        # Fill rate cell backgrounds (1st Day %, Census 1 %, Census 2 %)
                         rates = {
-                            11: fd_rate,
-                            13: r["census_1_enroll_fillrate"],
-                            15: r["census_2_enroll_fillrate"],
-                            17: r["current_enroll_fillrate"],
+                            10: fd_rate,
+                            12: r["census_1_enroll_fillrate"],
+                            14: r["census_2_enroll_fillrate"],
                         }
                         for ci, rate in rates.items():
                             from matplotlib.patches import Rectangle as Rect
@@ -563,9 +545,9 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                             ))
 
                         # CRN, Start, End, Mtg Days, Start Time, End Time, XList center;
-                        # Schedule and Instructor left; enrollment numeric cols right.
-                        _CENTER_COLS = {0, 2, 3, 4, 5, 6, 8}
-                        _LEFT_COLS = {1, 7}
+                        # INSM left (free-text description); enrollment numeric cols right.
+                        _CENTER_COLS = {0, 2, 3, 4, 5, 6, 7}
+                        _LEFT_COLS = {1}
                         for i, val in enumerate(vals):
                             if i in _CENTER_COLS:
                                 ha = "center"
