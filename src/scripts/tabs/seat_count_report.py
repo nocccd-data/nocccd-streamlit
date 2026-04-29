@@ -18,14 +18,35 @@ _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
+def _resolve_layout_mode(campus: str, term_code: str) -> str:
+    """Pick the column-layout mode given the campus filter and the term.
+
+    Banner term codes ending in '0' (e.g. 202310, 202320, 202330) are credit
+    colleges only — Cypress and Fullerton — and end in '5' (e.g. 202315,
+    202335, 202405) are NOCE only. So when the user picks campus "All",
+    the layout follows the term's suffix:
+
+      - term ends in '0' → credit-college layout (13 cols, no Building/C2)
+      - term ends in '5' → NOCE layout (16 cols, with Building + C2)
+
+    Specific campus selections always pin to their matching layout.
+    """
+    if campus in ("Cypress", "Fullerton", "NOCE"):
+        return campus
+    # "All" or anything unexpected: defer to the term suffix.
+    if term_code and term_code[-1] == "5":
+        return "NOCE"
+    return "Cypress"  # any "credit" sentinel works — both produce the same layout
+
+
 def _layout_for_campus(campus_mode: str) -> dict:
     """Per-campus column layout.
 
     Cypress and Fullerton (credit colleges, campus codes 1/2) hide the
     Census 2 count + % columns. NOCE (campus code 3) adds a Building
-    column. "All" or any other value falls back to the union — both
-    Building and Census 2 visible — which is what the in-tab download
-    uses when no specific campus is selected.
+    column. The "All" view is resolved upstream by ``_resolve_layout_mode``,
+    which picks credit vs NOCE based on the term-code suffix, so this
+    function only ever sees a concrete campus name.
     """
     is_credit_only = campus_mode in ("Cypress", "Fullerton")
     show_building = not is_credit_only
@@ -742,6 +763,9 @@ def render():
     # timestamp in every PDF, so regenerating on each rerun yields different
     # bytes → a different Streamlit media-file hash → the download URL handed
     # to the browser goes stale before the user can fetch it (saved as HTML).
+    # When campus="All", resolve to credit-vs-NOCE layout based on the
+    # term-code suffix — credit terms end in '0', NOCE terms in '5'.
+    _layout_mode = _resolve_layout_mode(campus, selected_term)
     _pdf_key = (selected_term, campus, division, department)
     if st.session_state.get("_sc_pdf_key") != _pdf_key:
         _summary = _compute_totals(filtered)
@@ -749,7 +773,7 @@ def render():
         st.session_state["_sc_pdf_bytes"] = _generate_pdf(
             filtered, term_title,
             filter_scope=_filter_scope, summary=_summary,
-            campus_mode=campus,  # "All" / "Cypress" / "Fullerton" / "NOCE"
+            campus_mode=_layout_mode,
         )
     st.sidebar.download_button(
         "Download PDF",
@@ -796,5 +820,5 @@ def render():
             f"{_fmt_pct(div_totals['fill'])} fill"
         )
         with st.expander(label):
-            html = _build_banded_html(df_div, campus_mode=campus)
+            html = _build_banded_html(df_div, campus_mode=_layout_mode)
             st.markdown(html, unsafe_allow_html=True)
