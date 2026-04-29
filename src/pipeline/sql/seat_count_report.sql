@@ -26,6 +26,7 @@ WITH
             -- Collapse multi-char day tokens (Th, Sa, Su) to single chars so we can
             -- rebuild the canonical union via INSTR without Th colliding with T.
             REPLACE(REPLACE(REPLACE(a.meeting_days, 'Th', 'h'), 'Sa', 'a'), 'Su', 'u') AS days_tok,
+            a.building_desc,
             b.pidm,
             b.primary_indicator
         FROM edw_prod.dim_section_meeting@dwhdb.nocccd.edu a
@@ -51,6 +52,29 @@ WITH
                     ) AS rn
             FROM mtg
             WHERE primary_indicator = 'Y'
+        )
+        WHERE rn = 1
+    ),
+    building_pick AS (
+        -- Pick the building from the lowest meeting_category that has a
+        -- non-null building_desc. Sessions with NULL building (e.g., online
+        -- modes) are skipped, so a CRN whose 01 session is online and 02
+        -- session is on-campus reports the on-campus building.
+        SELECT
+            term_code,
+            crn,
+            building_desc
+        FROM (
+            SELECT
+                term_code,
+                crn,
+                building_desc,
+                ROW_NUMBER() OVER (
+                    PARTITION BY term_code, crn
+                    ORDER BY meeting_category ASC
+                    ) AS rn
+            FROM mtg
+            WHERE building_desc IS NOT NULL
         )
         WHERE rn = 1
     ),
@@ -83,12 +107,16 @@ WITH
                 || CASE WHEN INSTR(a.days_concat, 'F') > 0 THEN 'F' END
                 || CASE WHEN INSTR(a.days_concat, 'a') > 0 THEN 'Sa' END
                 || CASE WHEN INSTR(a.days_concat, 'u') > 0 THEN 'Su' END AS meeting_days,
+            bp.building_desc,
             p.pidm,
             s.spriden_first_name || ' ' || s.spriden_last_name AS instructor_name
         FROM agg a
             LEFT JOIN primary_pick p
                 ON (a.term_code = p.term_code
                 AND a.crn = p.crn)
+            LEFT JOIN building_pick bp
+                ON (a.term_code = bp.term_code
+                AND a.crn = bp.crn)
             LEFT JOIN spriden s
                 ON (p.pidm = s.spriden_pidm
                 AND s.spriden_change_ind IS NULL)
@@ -141,12 +169,13 @@ WITH
             c.course_number,
             d.course_title,
             c.scheduling_desc,
-            c.instruction_mode_code,
+            g.gtvinsm_desc as insm,
             c.start_date,
             c.end_date,
             sm.meeting_begin_time AS begin_time,
             sm.meeting_end_time AS end_time,
             sm.meeting_days AS days,
+            sm.building_desc AS building,
             sm.instructor_name AS pri_instructor,
             TRIM(REGEXP_SUBSTR(c.crosslist, '(.*?)\{', 1, 1, NULL, 1)) AS crosslist_group,
             CASE
@@ -223,6 +252,8 @@ WITH
                 ON (c.course_key = d.course_key)
             JOIN section_meeting sm
                 ON (c.section_key = sm.section_key)
+            left join gtvinsm g
+        on (c.instruction_mode_code = g.gtvinsm_code)
         WHERE c.term_code = :banner_term_code
     )
 
@@ -238,12 +269,13 @@ SELECT
     a.crse_alias,
     a.course_title,
     a.scheduling_desc,
-    a.instruction_mode_code,
+    a.insm,
     a.start_date,
     a.end_date,
     a.begin_time,
     a.end_time,
     a.days,
+    a.building,
     a.pri_instructor,
     a.crosslist_group,
     a.enroll_max,
