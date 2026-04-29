@@ -19,7 +19,7 @@ _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
 _COL_LABELS = [
-    "CRN", "INSM",
+    "CRN", "Schedule",
     "Start", "End",
     "Mtg Days", "Start Time", "End Time",
     "Instructor", "XList",
@@ -212,7 +212,7 @@ def _build_banded_html(df_division: pd.DataFrame) -> str:
 
                 rows.append("<tr>")
                 rows.append(f"<td style='text-align:center'>{_safe(r['crn'])}</td>")
-                rows.append(f"<td style='text-align:center'>{_safe(r.get('instruction_mode_code'))}</td>")
+                rows.append(f"<td>{_safe(r['scheduling_desc'])}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_date(r['start_date'])}</td>")
                 rows.append(f"<td style='text-align:center'>{_fmt_date(r['end_date'])}</td>")
                 rows.append(f"<td style='text-align:center'>{_safe(r.get('days'))}</td>")
@@ -320,7 +320,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
     usable = PAGE_W - ML - MR
     _cols = [
         ("CRN",         0.05),
-        ("INSM",        0.04),
+        ("Sched",       0.04),
         ("Start",       0.07),
         ("End",         0.07),
         ("Mtg\nDays",   0.05),
@@ -533,7 +533,7 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                         fd_count, fd_rate = _first_day_combined(r)
                         vals = [
                             str(r["crn"]),
-                            str(r.get("instruction_mode_code", "")) if pd.notna(r.get("instruction_mode_code")) else "",
+                            str(r.get("scheduling_desc", "")) if pd.notna(r.get("scheduling_desc")) else "",
                             _fmt_date(r["start_date"]),
                             _fmt_date(r["end_date"]),
                             str(r["days"]) if pd.notna(r.get("days")) else "",
@@ -568,10 +568,10 @@ def _generate_pdf(df: pd.DataFrame, term_title: str,
                                 edgecolor="none", zorder=0,
                             ))
 
-                        # CRN, INSM, Start, End, Mtg Days, Start Time, End Time,
-                        # XList center; Instructor left; enrollment numeric cols right.
-                        _CENTER_COLS = {0, 1, 2, 3, 4, 5, 6, 8}
-                        _LEFT_COLS = {7}
+                        # CRN, Start, End, Mtg Days, Start Time, End Time, XList center;
+                        # Schedule and Instructor left; enrollment numeric cols right.
+                        _CENTER_COLS = {0, 2, 3, 4, 5, 6, 8}
+                        _LEFT_COLS = {1, 7}
                         for i, val in enumerate(vals):
                             if i in _CENTER_COLS:
                                 ha = "center"
