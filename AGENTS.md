@@ -134,6 +134,16 @@ The Seat Count Report tab (`seat_count_report.py`) uses cascading dynamic filter
 
 This pattern is suitable for any tab where the full dataset fits in memory and users need hierarchical drill-down.
 
+### Per-campus column layout (Seat Count Report)
+
+The Seat Count Report shows a different column set per campus, in both the banded HTML table and the PDF (interactive download + bulk export):
+
+- **Cypress, Fullerton** (credit colleges, campus codes 1/2): 13 columns. **Census 2 count + % are hidden** — these campuses don't run a second census.
+- **NOCE** (campus code 3): 16 columns. **Building column is added** between End Time and XList — names like "Anaheim Campus" or "NOCE Cypress Tech Ed 2" come from `dim_section_meeting.building_desc`, picked from the lowest `meeting_category` whose value is non-null (see `building_pick` CTE in `seat_count_report.sql`).
+- **"All"** (mixed-campus filter): does **not** show a union. Instead, `_resolve_layout_mode(campus, term_code)` looks at the term-code suffix and picks credit vs NOCE — Banner term codes ending in `0` (e.g. 202310, 202320, 202330) are credit-only, codes ending in `5` (e.g. 202315, 202335, 202405) are NOCE-only, and the two never overlap. This is what you want for "All" because the data only contains one set of campuses for any given term.
+
+`_layout_for_campus(campus_mode)` returns the per-mode metadata (`html_labels`, `pdf_cols` with widths summing to 1.0, rate-color indices, alignment sets, and visibility flags) used by `_build_banded_html` and `_generate_pdf`. PDF widths differ between credit (13 cols, INSM 0.27, no Building) and NOCE (16 cols, INSM 0.14, Building 0.19); both sum to 1.000. The bulk export passes the per-PDF campus directly so each `<Campus>/<Season>/*.pdf` lands in its correct layout automatically.
+
 ### Persistence projections (`persistence_by_styp.py`)
 
 The Persistence by Student Type tab supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
@@ -273,6 +283,8 @@ if query_btn:
 if "xx_data" in st.session_state:
     st.sidebar.download_button("Download PDF", data=..., key="xx_pdf_btn")
 ```
+
+**Memoize PDF bytes per filter combination**: `st.download_button` registers `data` in an in-memory media-file store keyed by a content hash, then hands the browser a URL like `/media/<hash>.pdf`. Matplotlib **embeds a creation timestamp in every PDF**, so calling the generator on each rerun (every sidebar widget change triggers one) yields different bytes → different hash → the URL the browser is about to fetch is already invalid. The browser then silently saves Streamlit's 404 HTML response under the `.pdf` filename, producing the "downloaded an HTML file" symptom. Fix: cache the bytes in `st.session_state` keyed by the active filter tuple and only regenerate when that key changes — see `seat_count_report.py` for the pattern (`_sc_pdf_key` / `_sc_pdf_bytes`). The Query handler also `pop`s the cache key so a fresh fetch triggers a fresh PDF. Apply the same pattern to any tab whose PDF inputs change in response to widget interaction.
 
 **PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. Two patterns exist:
 - **Table-based**: `ax.table()` renders a DataFrame as a table on a matplotlib axes. Good for small/medium tables. See `fast_facts.py` and `class_schedule_heatmap.py`.
