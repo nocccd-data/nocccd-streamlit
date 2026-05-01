@@ -538,7 +538,7 @@ def _draw_section_source(fig, y):
 def _draw_section_note(fig, y, note):
     note_wrapped = textwrap.fill(note, width=140)
     fig.text(0.06, y, note_wrapped,
-             fontsize=6, color="grey", va="top", style="italic")
+             fontsize=6, color="grey", va="top")
 
 
 def _mpl_campus(fig, bbox, df_agg, df_pct):
