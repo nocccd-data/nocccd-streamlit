@@ -10,6 +10,35 @@ from .config import DATASETS, SQL_DIR, HYPER_DIR
 from .libs.sql import get_engine
 
 
+def _concat_query_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Concatenate per-parameter query results without pandas dtype warnings."""
+    if not frames:
+        return pd.DataFrame()
+
+    columns = list(dict.fromkeys(col for frame in frames for col in frame.columns))
+    populated_frames = [
+        frame.dropna(axis=1, how="all")
+        for frame in frames
+        if not frame.empty
+    ]
+
+    if not populated_frames:
+        return frames[0].iloc[0:0].copy()
+
+    df = pd.concat(populated_frames, ignore_index=True)
+    for col in columns:
+        if col in df.columns:
+            continue
+
+        dtype = next(frame[col].dtype for frame in frames if col in frame.columns)
+        try:
+            df[col] = pd.Series(pd.NA, index=df.index, dtype=dtype)
+        except (TypeError, ValueError):
+            df[col] = pd.Series(pd.NA, index=df.index)
+
+    return df.reindex(columns=columns)
+
+
 def extract_dataset(name: str) -> Path:
     """Query Oracle for a dataset and write the result to a .hyper file.
 
@@ -36,7 +65,7 @@ def extract_dataset(name: str) -> Path:
         with engine.connect() as conn:
             for t in values:
                 frames.append(pd.read_sql(base_sql, conn, params={param_name: t}))
-        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        df = _concat_query_frames(frames)
 
     HYPER_DIR.mkdir(parents=True, exist_ok=True)
     hyper_path = HYPER_DIR / f"{name}.hyper"
