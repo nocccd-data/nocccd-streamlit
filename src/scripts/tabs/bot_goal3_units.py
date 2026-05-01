@@ -868,7 +868,7 @@ def _generate_pdf(df) -> bytes:
             pad=0.005,
         )
         race_note = _TITLES.get("race_note")
-        rc_off = 0.03 if race_note else 0
+        rc_off = 0.02 if race_note else 0  # match bot_helpers NOTE_OFFSET
         rc_bottom = 0.06 + rc_off
         _mpl_race_table(fig, (0.06, rc_bottom, 0.54, y_after - rc_bottom),
                         df_race, years)
