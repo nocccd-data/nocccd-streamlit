@@ -1129,10 +1129,10 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
 
     # Per-section note presence shifts that section's chart and Source
     # line up by NOTE_OFFSET so the note fits beneath the Source line.
-    # NOTE_OFFSET is the gap between the Source line and the note,
-    # matching the (Source y=0.085, firstgen_note y=0.065) spacing on
-    # the BOT Goal 1 first-gen chart.
-    NOTE_OFFSET = 0.02
+    # NOTE_OFFSET equals the y-coord gap between the Source line and
+    # the note. 0.01 matches the firstgen_note spacing on Goal 1 (the
+    # canonical reference) and is uniform across every BOT section.
+    NOTE_OFFSET = 0.01
     headcount_note = titles.get("headcount_note")
     race_note = titles.get("race_note")
     gender_note = titles.get("gender_note")
@@ -1226,7 +1226,7 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
             # balanced gaps. Same layout across all tabs.
             _draw_section_source(fig, 0.085, source)
             if firstgen_note:
-                _draw_section_note(fig, 0.065, firstgen_note)
+                _draw_section_note(fig, 0.075, firstgen_note)
 
             _add_pdf_footer(fig)
             pdf.savefig(fig)

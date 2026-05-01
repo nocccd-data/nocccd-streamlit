@@ -56,6 +56,10 @@ python -m src.pipeline.mail seat_count_fall2025_by_campus
 # Bulk PDF export of the Seat Count Report to OneDrive
 # (one PDF per term × campus × division, overwrites existing files)
 python -m src.pipeline.seat_count_export
+
+# Combined BOT tabs PDF export to OneDrive
+# (single multi-page PDF, all BOT tabs concatenated, overwrites same-day file)
+python -m src.pipeline.bot_export
 ```
 
 ## Architecture
@@ -107,6 +111,18 @@ On-demand bulk export of the Seat Count Report to a local OneDrive folder. Each 
 - **Filename slug**: `<term_title_slug>_<campus_lower>_<season_lower>_<division_slug>.pdf`, e.g. `fall_2025_cypress_fall_business.pdf`. The term portion uses `term_title` from the data (e.g. "Fall 2025", "NOCE Spring 2024", "Winter/Spring 2024") rather than the numeric `term_code`. Slugging via `_slug()` lowercases and collapses any non-alphanumeric run to a single underscore.
 - **Reused code**: imports `_compute_totals` and `_generate_pdf` from `src/scripts/tabs/seat_count_report.py` so the bulk-exported PDFs are byte-identical to what the user sees when they pick the same filters interactively. The Streamlit `@st.cache_data` decorators in `data_provider.py` emit "No runtime found" warnings when imported outside Streamlit; the module sets `logging.getLogger("streamlit").setLevel(logging.ERROR)` *before* the tab import to quiet most of them.
 - **Failure handling**: per-PDF errors are caught, logged, and counted; the rest of the run continues. The exit code is non-zero if anything was skipped.
+
+### Bulk PDF export — BOT tabs (`src/pipeline/bot_export.py`)
+
+On-demand bulk export of every BOT (Board of Trustees) tab into a **single combined multi-page PDF** under a local OneDrive folder. Each run reads each `src/pipeline/hyper/bot_*.hyper` file (already produced by the standard pipeline), generates the same PDF each tab's `Download PDF` button produces in the Streamlit app, and concatenates them with `pypdf` into one output PDF. Run `python -m src.pipeline.bot_export` whenever a refresh is wanted; there is no scheduler.
+
+- **Source**: local Hyper only — no Tableau Cloud download, no `secrets.toml` needed. Each per-tab builder reads the relevant `bot_*.hyper` file(s) directly. If a Hyper file is missing, that tab errors out and is reported, but the run continues with the remaining tabs.
+- **Destination layout**: `<EXPORT_ROOT>/<YYYYMMDD>/bot_export_<acyr_min>_to_<acyr_max>.pdf`. `EXPORT_ROOT` is a module-level constant pointing to `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/PDF Export`. Same-day re-runs overwrite; new calendar days create new snapshot directories.
+- **Filename min/max**: derived from `DATASETS["bot_goal1_students"]["acyr_code"]` only — other BOT datasets sometimes cover a different 5-year window (e.g. `bot_goal2_wage` is shifted back by one year), so the filename is anchored to the canonical Goal 1 range to keep it stable run-to-run.
+- **Reused code**: each per-tab builder imports the corresponding tab module's `_TITLES` (and any `_normalize` / `_shift_df` helper, e.g. `bot_goal2_xfer._normalize`, `bot_goal2_wage._shift_df`) and calls `bot_helpers.generate_bot_pdf(df, _TITLES, base_df=…)` — except `bot_goal3_units`, which has its own self-contained `_generate_pdf(df)` since it's an average-metric tab. The `base_df` denominator filtering (e.g. `base[base["site"] == "Credit"]` for the credit-only tabs, `bot_goal2_cert_nc_denom` for noncredit, `bot_goal2_wage_denom` shifted forward by 1 year for living-wage) mirrors each tab's `render()` Query block exactly so the bulk PDF is byte-equivalent to a manual interactive download with the full default acyr range.
+- **Tab order**: Goal 1 Students → Goal 2 ADT → Associate Degrees → Bachelor's → Certificates → Noncredit Certificates → Living Wage → Transfers → Goal 3 Financial Aid → Average Units (encoded in `_TAB_BUILDERS`).
+- **Merging**: each tab's PDF is rendered to bytes via matplotlib `PdfPages`, then `pypdf.PdfReader` reads the bytes and `PdfWriter.add_page()` appends each page to a single output writer. `pypdf` is added to `requirements.txt` for this purpose.
+- **Failure handling**: per-tab errors are caught, logged, and counted; the rest of the run continues. The exit code is non-zero if anything was skipped.
 
 ### Tab system (`src/scripts/tabs/`)
 
@@ -267,7 +283,7 @@ Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Per
 - Page 2 Section 3 (Gender): chart_bbox left=0.12, width=0.48, bottom=0.56. Source at y=0.52.
 - Page 2 Section 4 (First-Gen): chart_bbox bottom=0.13 (raised so the legend has room above the Source footer). Source at y=0.085.
 
-**Per-section optional note**: Each of the 4 sections accepts an optional `_note` titles key (`headcount_note`, `race_note`, `gender_note`, `firstgen_note`). When present, the section's chart bottom and Source line shift up by `0.03` (paper coords) so the italic-grey wrapped note can be drawn just below the new Source position. When absent, the section keeps its baseline coordinates (above). The note is written via `_draw_section_note(fig, y, text)`, which uses `textwrap.fill(width=140)` and `fontsize=6, color="grey", style="italic"`. The first-gen section is the exception: its baseline already has a 0.02-tall gap reserved between Source (y=0.085) and the page footer for `firstgen_note` at y=0.065, so it does **not** apply the 0.03 offset. The Goal 3 Average Units tab has its own self-contained PDF generator that mirrors this offset logic for `race_note` only (the only section in that tab that currently has a note).
+**Per-section optional note**: Each of the 4 sections accepts an optional `_note` titles key (`headcount_note`, `race_note`, `gender_note`, `firstgen_note`). When present, the section's chart bottom and Source line shift up by `NOTE_OFFSET` (currently `0.01` paper coords — uniform across every section) so the italic-grey wrapped note can be drawn just below the new Source position. When absent, the section keeps its baseline coordinates (above). The note is written via `_draw_section_note(fig, y, text)`, which uses `textwrap.fill(width=140)` and `fontsize=6, color="grey", style="italic"`. The first-gen section is the exception: it doesn't apply the offset (chart bottom and Source y are already fixed); when `firstgen_note` is present it renders at y=0.075, exactly 0.01 below Source y=0.085 so the gap matches the other sections. The Goal 3 Average Units tab has its own self-contained PDF generator that mirrors this offset logic for `race_note` only (the only section in that tab that currently has a note).
 
 **First-gen line chart y-axis zoom**: Both the Plotly interactive chart and the matplotlib PDF chart zoom the y-axis to `[max(0, min - 0.25×range), max + 0.25×range]` (with a small minimum pad) so clustered values (e.g. 3-5%) are visually separated instead of compressed at the bottom of a wide 0-100% range.
 
