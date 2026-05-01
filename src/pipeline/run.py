@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import sys
 import tomllib
 from pathlib import Path
 
@@ -21,7 +22,7 @@ def _load_secrets() -> dict:
         return tomllib.load(f)
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Oracle → Hyper → Tableau Cloud pipeline")
     parser.add_argument("datasets", nargs="*", help="Dataset names (default: all)")
     parser.add_argument("--extract-only", action="store_true", help="Only create .hyper files, skip upload")
@@ -32,15 +33,16 @@ def main():
         if name not in DATASETS:
             print(f"Unknown dataset: {name}")
             print(f"Available: {', '.join(DATASETS.keys())}")
-            return
+            return 2
 
-    secrets = _load_secrets()
+    secrets = None if args.extract_only else _load_secrets()
 
     for name in names:
         print(f"[{name}] Extracting from Oracle...")
         hyper_path = extract_dataset(name)
 
         if not args.extract_only:
+            assert secrets is not None
             print(f"[{name}] Publishing to Tableau Cloud...")
             publish_hyper(
                 name,
@@ -52,7 +54,8 @@ def main():
             )
 
     print("Done.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

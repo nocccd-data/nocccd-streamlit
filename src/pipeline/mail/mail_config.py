@@ -15,6 +15,8 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+import pandas as pd
+
 
 def _load_tableau_secrets() -> dict:
     """Load Tableau Cloud credentials from secrets.toml (CLI-safe, no st.secrets)."""
@@ -23,9 +25,8 @@ def _load_tableau_secrets() -> dict:
         return tomllib.load(f)
 
 
-def _fetch_from_hyper(dataset_name: str, filter_col: str, filter_values: tuple[str, ...]) -> "pd.DataFrame":
+def _fetch_from_hyper(dataset_name: str, filter_col: str, filter_values: tuple[str, ...]) -> pd.DataFrame:
     """Download a Hyper file from Tableau Cloud and return a filtered DataFrame."""
-    import pandas as pd
     import pantab
     from src.pipeline.publish import download_hyper
 
@@ -41,9 +42,13 @@ def _fetch_from_hyper(dataset_name: str, filter_col: str, filter_values: tuple[s
         )
         df = pantab.frame_from_hyper(hyper_path, table="Extract")
 
-    if filter_col in df.columns:
-        df = df[df[filter_col].astype(str).isin(filter_values)]
-    return df
+    if filter_col not in df.columns:
+        available = ", ".join(map(str, df.columns))
+        raise KeyError(
+            f"Expected filter column {filter_col!r} in {dataset_name!r} Hyper extract. "
+            f"Available columns: {available}"
+        )
+    return df[df[filter_col].astype(str).isin(filter_values)]
 
 
 # ---------------------------------------------------------------------------

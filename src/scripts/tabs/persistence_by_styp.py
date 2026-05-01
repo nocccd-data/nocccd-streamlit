@@ -11,6 +11,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_persistence_by_styp
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 
 _CFG = DATASETS["persistence_by_styp"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
@@ -560,6 +561,7 @@ def render():
         df_prepared = _prepare_data(df)
         st.session_state["pbs_df"] = df_prepared
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
+        clear_pdf_cache("pbs")
 
     # --- PDF download in sidebar (after query block) ---
     if "pbs_df" in st.session_state:
@@ -585,14 +587,25 @@ def render():
                 pdf_proj_by_styp = _compute_projections(
                     df_v, rate_col, ["campus", "styp_label"], proj_method)
 
-        pdf_bytes = _generate_pdf(
-            st.session_state["pbs_df"],
-            st.session_state["pbs_df_overall"],
-            campus_val,
-            ptype_val,
-            proj_overall=pdf_proj_overall,
-            proj_by_styp=pdf_proj_by_styp,
-            proj_method=proj_method if show_projection else None,
+        pdf_bytes = cached_pdf_bytes(
+            "pbs",
+            (
+                id(st.session_state["pbs_df"]),
+                id(st.session_state["pbs_df_overall"]),
+                campus_val,
+                ptype_val,
+                show_projection,
+                proj_method,
+            ),
+            lambda: _generate_pdf(
+                st.session_state["pbs_df"],
+                st.session_state["pbs_df_overall"],
+                campus_val,
+                ptype_val,
+                proj_overall=pdf_proj_overall,
+                proj_by_styp=pdf_proj_by_styp,
+                proj_method=proj_method if show_projection else None,
+            ),
         )
         st.sidebar.download_button(
             "Download PDF",

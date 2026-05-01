@@ -8,6 +8,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_fast_facts_stu, fetch_fast_facts_emp
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 
 _DEFAULT_ACYR_CODES = DATASETS["fast_facts_stu"]["acyr_code"]
 _DEFAULT_FISC_YEARS = DATASETS["fast_facts_emp"]["fisc_year"]
@@ -274,10 +275,15 @@ def render():
             return
 
         st.session_state["ff_data"] = _process(df_stu, df_emp, fisc_year)
+        clear_pdf_cache("ff")
 
     # --- PDF download in sidebar (only when data is loaded) ---
     if "ff_data" in st.session_state:
-        pdf_bytes = _generate_pdf(st.session_state["ff_data"])
+        pdf_bytes = cached_pdf_bytes(
+            "ff",
+            id(st.session_state["ff_data"]),
+            lambda: _generate_pdf(st.session_state["ff_data"]),
+        )
         st.sidebar.download_button(
             "Download PDF",
             data=pdf_bytes,
@@ -303,4 +309,3 @@ def render():
     for df, title in datasets[6:]:
         st.caption(title)
         st.dataframe(df, hide_index=True, use_container_width=True)
-

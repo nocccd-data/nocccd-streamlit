@@ -6,8 +6,6 @@ from pathlib import Path
 
 import tableauserverclient as TSC
 
-from .config import HYPER_DIR
-
 
 def _sign_in(server_url: str, site_name: str, pat_name: str, pat_value: str) -> tuple:
     """Create a Tableau Server client and sign-in context manager."""
@@ -43,14 +41,18 @@ def download_hyper(name: str, dest_dir: Path, server_url: str, site_name: str,
     """Download a datasource from Tableau Cloud and extract the .hyper file."""
     server, auth = _sign_in(server_url, site_name, pat_name, pat_value)
     with server.auth.sign_in(auth):
+        project_id = _find_project(server, _TARGET_PROJECT)
+
         # Find the datasource by name
         ds_item = None
         for ds in TSC.Pager(server.datasources):
-            if ds.name == name:
+            if ds.name == name and ds.project_id == project_id:
                 ds_item = ds
                 break
         if ds_item is None:
-            raise FileNotFoundError(f"Datasource '{name}' not found on Tableau Cloud")
+            raise FileNotFoundError(
+                f"Datasource '{name}' not found in Tableau Cloud project '{_TARGET_PROJECT}'"
+            )
 
         # Download returns a .tdsx file (ZIP containing .hyper)
         with tempfile.TemporaryDirectory() as tmp:

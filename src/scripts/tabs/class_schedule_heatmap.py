@@ -10,6 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_class_schedule_heatmap
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 
 _CFG = DATASETS["class_schedule_heatmap"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
@@ -354,6 +355,7 @@ def render():
             st.warning("No data returned for the selected terms.")
             return
         st.session_state["csh_df"] = _prepare_heatmap_data(df)
+        clear_pdf_cache("csh")
 
     # --- PDF download in sidebar (only when data is loaded) ---
     if "csh_df" in st.session_state:
@@ -361,7 +363,11 @@ def render():
         terms = sorted(df_heatmap["academic_term"].dropna().unique())
         sel = st.session_state.get("csh_term", terms[0] if terms else None)
         if sel:
-            pdf_bytes = _generate_pdf(df_heatmap, sel)
+            pdf_bytes = cached_pdf_bytes(
+                "csh",
+                (id(df_heatmap), sel),
+                lambda: _generate_pdf(df_heatmap, sel),
+            )
             st.sidebar.download_button(
                 "Download PDF",
                 data=pdf_bytes,

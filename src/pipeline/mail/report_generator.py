@@ -29,12 +29,32 @@ def _build_filter_desc(filters: dict[str, str]) -> str:
     return " / ".join(filters.values())
 
 
-def _apply_filters(df: pd.DataFrame, filters: dict[str, str]) -> pd.DataFrame:
+def _apply_filters(
+    df: pd.DataFrame,
+    filters: dict[str, str],
+    allowed_columns: list[str] | None = None,
+) -> pd.DataFrame:
     """Apply equality filters to a DataFrame."""
+    if allowed_columns is not None:
+        allowed = set(allowed_columns)
+        unexpected = sorted(set(filters) - allowed)
+        if unexpected:
+            raise ValueError(
+                "Unexpected filter column(s): "
+                f"{', '.join(unexpected)}. Allowed: {', '.join(sorted(allowed))}"
+            )
+
+    missing = [col for col in filters if col not in df.columns]
+    if missing:
+        available = ", ".join(map(str, df.columns))
+        raise KeyError(
+            f"Missing filter column(s): {', '.join(missing)}. "
+            f"Available columns: {available}"
+        )
+
     filtered = df
     for col, value in filters.items():
-        if col in filtered.columns:
-            filtered = filtered[filtered[col] == value]
+        filtered = filtered[filtered[col] == value]
     return filtered
 
 
@@ -110,7 +130,11 @@ def run_campaign(
 
         try:
             # Filter data for this recipient
-            filtered_df = _apply_filters(df, filters)
+            filtered_df = _apply_filters(
+                df,
+                filters,
+                registry.get("filter_columns"),
+            )
 
             if filtered_df.empty:
                 results.append(SendResult(

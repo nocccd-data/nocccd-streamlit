@@ -33,9 +33,13 @@ def _download_and_read(dataset_name: str, filter_col: str, values: tuple[str, ..
         )
         df = pantab.frame_from_hyper(hyper_path, table="Extract")
 
-    if filter_col in df.columns:
-        df = df[df[filter_col].astype(str).isin(values)]
-    return df
+    if filter_col not in df.columns:
+        available = ", ".join(map(str, df.columns))
+        raise KeyError(
+            f"Expected filter column {filter_col!r} in {dataset_name!r} Hyper extract. "
+            f"Available columns: {available}"
+        )
+    return df[df[filter_col].astype(str).isin(values)]
 
 
 # ---------------------------------------------------------------------------

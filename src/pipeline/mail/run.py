@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import sys
 import tomllib
 from pathlib import Path
 
@@ -21,7 +22,7 @@ def _load_secrets() -> dict:
         return tomllib.load(f)
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Generate and email filtered PDF reports")
     parser.add_argument("campaign", nargs="?", help="Campaign name (omit to list all)")
     parser.add_argument("--dry-run", action="store_true", help="Generate PDFs but don't send emails")
@@ -33,19 +34,19 @@ def main():
         for name, cfg in CAMPAIGNS.items():
             n = len(cfg["recipients"])
             print(f"  {name}: {cfg['report_type']} -> {n} recipient(s)")
-        return
+        return 0
 
     if args.campaign not in CAMPAIGNS:
         print(f"Unknown campaign: {args.campaign}")
         print(f"Available: {', '.join(CAMPAIGNS)}")
-        return
+        return 2
 
     secrets = _load_secrets()
     email_config = secrets.get("email", {})
 
     if not args.dry_run and not email_config.get("smtp_password"):
         print("Error: [email] section in .streamlit/secrets.toml is missing or incomplete.")
-        return
+        return 1
 
     mode = "DRY RUN" if args.dry_run else "SENDING"
     print(f"[{args.campaign}] {mode}")
@@ -68,7 +69,8 @@ def main():
     for r in results:
         status = "OK" if r.success else f"FAILED: {r.error}"
         print(f"  {r.recipient_name} <{r.recipient_email}> ({r.filter_desc}): {status}")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -5,6 +5,7 @@ from src.scripts.data_provider import (
     fetch_bot_goal2_cert_nc,
     fetch_bot_goal2_cert_nc_denom,
 )
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal2_cert_nc"]
@@ -75,11 +76,17 @@ def render():
             return
         st.session_state["bg2nc_df"] = df
         st.session_state["bg2nc_base"] = base
+        clear_pdf_cache("bg2nc")
 
     if "bg2nc_df" in st.session_state:
-        pdf_bytes = generate_bot_pdf(
-            st.session_state["bg2nc_df"], _TITLES,
-            base_df=st.session_state.get("bg2nc_base"),
+        pdf_bytes = cached_pdf_bytes(
+            "bg2nc",
+            (id(st.session_state["bg2nc_df"]), id(st.session_state.get("bg2nc_base"))),
+            lambda: generate_bot_pdf(
+                st.session_state["bg2nc_df"],
+                _TITLES,
+                base_df=st.session_state.get("bg2nc_base"),
+            ),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
