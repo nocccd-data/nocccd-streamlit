@@ -257,7 +257,7 @@ def aggregate_firstgen(
     count(df) / count(base_df) per first-gen status per year.
     """
     subset = df[df["site"] == "Credit"].copy() if credit_only else df.copy()
-    stu = subset.drop_duplicates(subset=["pidm", "academic_year"])
+    stu = subset.drop_duplicates(subset=["pidm", "academic_year"]).copy()
     stu["fg"] = stu["first_gen_ind"].where(
         stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
     )
@@ -268,7 +268,9 @@ def aggregate_firstgen(
     )
     if base_df is not None:
         base_subset = base_df[base_df["site"] == "Credit"].copy() if credit_only else base_df.copy()
-        base_stu = base_subset.drop_duplicates(subset=["pidm", "academic_year"])
+        base_stu = base_subset.drop_duplicates(
+            subset=["pidm", "academic_year"],
+        ).copy()
         base_stu["fg"] = base_stu["first_gen_ind"].where(
             base_stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
         )
