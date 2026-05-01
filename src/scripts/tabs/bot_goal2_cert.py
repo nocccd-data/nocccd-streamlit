@@ -10,26 +10,33 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 2 - Certificates",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Credit Certificates Awarded",
+    "headcount_title": "Headcount of Students who Earned a CCCCO-Approved Credit Certificate",
     "headcount_caption": (
-        "The unduplicated number of students awarded credit certificates "
-        "at Cypress College and Fullerton College in the reporting year."
+        "The unduplicated number of students enrolled in Cypress and Fullerton "
+        "Colleges who earned a Chancellor's Office approved credit certificate "
+        "in the reporting year."
     ),
-    "race_title": "Proportion of Certificate Recipients by Race/Ethnicity",
+    "race_title": "Proportion of Students Who Earned a CCCCO-Approved Credit Certificate by Race/Ethnicity",
     "race_caption": (
-        "Among all unduplicated students awarded credit certificates in "
-        "NOCCCD in the reporting year, the proportion by race/ethnicity."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned a Chancellor's "
+        "Office approved credit certificate."
     ),
-    "gender_title": "Proportion of Certificate Recipients by Gender",
+    "gender_title": "Proportion of Students Who Earned a CCCCO-Approved Credit Certificate by Gender",
     "gender_caption": (
-        "Among all unduplicated students awarded credit certificates in "
-        "NOCCCD in the reporting year, the proportion by gender."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned a Chancellor's "
+        "Office approved credit certificate."
     ),
-    "firstgen_title": "Proportion of Certificate Recipients by First-Generation College Status",
+    "firstgen_title": "Proportion of Students Who Earned a CCCCO-Approved Credit Certificate by First-Generation College Status",
     "firstgen_caption": (
-        "Among all unduplicated students awarded credit certificates in "
-        "Cypress and Fullerton Colleges in the reporting year, the proportion "
-        "who reported neither parent/guardian had ever attended college."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned a Chancellor's "
+        "Office approved credit certificate."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
     "firstgen_note": None,
 }

@@ -10,29 +10,32 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 2 - ADT",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Associate Degrees for Transfer Awarded",
+    "headcount_title": "Headcount of Students who Earned an Associate Degree for Transfer",
     "headcount_caption": (
-        "The unduplicated number of students awarded associate degrees "
-        "for transfer at Cypress College and Fullerton College in the "
-        "reporting year."
+        "The unduplicated number of students enrolled in Cypress and Fullerton "
+        "Colleges who earned an Associate Degree for Transfer in the reporting year."
     ),
-    "race_title": "Proportion of ADT Recipients by Race/Ethnicity",
+    "race_title": "Proportion of Students Who Earned an Associate Degree for Transfer by Race/Ethnicity",
     "race_caption": (
-        "Among all unduplicated students awarded associate degrees for "
-        "transfer in NOCCCD in the reporting year, the proportion by "
-        "race/ethnicity."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned an Associate "
+        "Degree for Transfer."
     ),
-    "gender_title": "Proportion of ADT Recipients by Gender",
+    "gender_title": "Proportion of Students Who Earned an Associate Degree for Transfer by Gender",
     "gender_caption": (
-        "Among all unduplicated students awarded associate degrees for "
-        "transfer in NOCCCD in the reporting year, the proportion by gender."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned an Associate "
+        "Degree for Transfer."
     ),
-    "firstgen_title": "Proportion of ADT Recipients by First-Generation College Status",
+    "firstgen_title": "Proportion of Students Who Earned an Associate Degree for Transfer by First-Generation College Status",
     "firstgen_caption": (
-        "Among all unduplicated students awarded associate degrees for "
-        "transfer in Cypress and Fullerton Colleges in the reporting year, "
-        "the proportion who reported neither parent/guardian had ever "
-        "attended college."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "selected year, the proportion of students who earned an Associate "
+        "Degree for Transfer."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
     "firstgen_note": None,
 }

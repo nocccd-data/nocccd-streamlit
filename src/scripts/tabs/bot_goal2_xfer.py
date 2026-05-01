@@ -14,31 +14,43 @@ _SITE_MAP = {"1": "Credit", "2": "Credit", "3": "Noncredit"}
 _TITLES = {
     "tab_title": "BOT Goal 2 - Transfers",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Transfers to 4-Year Institutions",
+    "headcount_title": "Headcount of Students Who Transferred to a Four-year Institution",
     "headcount_caption": (
-        "The unduplicated number of students from Cypress College and "
-        "Fullerton College who transferred to 4-year institutions in "
-        "the reporting year."
+        "The number of students who completed at least 12 credit units, exited "
+        "the community college system, and then enrolled in a four-year "
+        "institution in the reporting year."
     ),
-    "race_title": "Proportion of Transfers by Race/Ethnicity",
+    "race_title": "Proportion of Students Who Transferred by Race/Ethnicity",
     "race_caption": (
-        "Among all unduplicated students from NOCCCD who transferred to "
-        "4-year institutions in the reporting year, the proportion by "
-        "race/ethnicity."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "year prior to the reporting year, the proportion who completed at "
+        "least 12 credit units, exited the community college system, and "
+        "enrolled in a four-year institution in the reporting year."
     ),
-    "gender_title": "Proportion of Transfers by Gender",
+    "gender_title": "Proportion of Students Who Transferred by Gender",
     "gender_caption": (
-        "Among all unduplicated students from NOCCCD who transferred to "
-        "4-year institutions in the reporting year, the proportion by gender."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "year prior to the reporting year, the proportion who completed at "
+        "least 12 credit units, exited the community college system, and "
+        "enrolled in a four-year institution in the reporting year."
     ),
-    "firstgen_title": "Proportion of Transfers by First-Generation College Status",
+    "firstgen_title": "Proportion of Students Who Transferred by First-Generation College Status",
     "firstgen_caption": (
-        "Among all unduplicated students from Cypress and Fullerton "
-        "Colleges who transferred to 4-year institutions in the reporting "
-        "year, the proportion who reported neither parent/guardian had "
-        "ever attended college."
+        "Among all students enrolled in Cypress and Fullerton Colleges in the "
+        "year prior to the reporting year, the proportion who completed at "
+        "least 12 credit units, exited the community college system, and "
+        "enrolled in a four-year institution in the reporting year."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
+    ),
+    "gender_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
     "firstgen_note": None,
+    "source": "CCCCO Supplemental & Success Data for the SCFF files; Banner",
 }
 
 

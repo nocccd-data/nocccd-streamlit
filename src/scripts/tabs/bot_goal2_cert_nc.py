@@ -12,29 +12,37 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Noncredit Certificates",
-    "org": "NOCE",
-    "headcount_title": "Noncredit Certificates Awarded",
+    "org": "North Orange Continuing Education",
+    "headcount_title": "Headcount of Students who Earned a Noncredit Certificate",
     "headcount_caption": (
-        "The unduplicated number of students awarded noncredit certificates "
-        "at North Orange Continuing Education in the reporting year."
+        "The unduplicated number of students enrolled in NOCE who earned a "
+        "noncredit certificate in the reporting year."
     ),
-    "race_title": "Proportion of Certificate Recipients by Race/Ethnicity",
+    "race_title": "Proportion of Students Who Earned a Noncredit Certificate by Race/Ethnicity",
     "race_caption": (
         "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
         "courses in the selected year, the proportion who received a "
         "noncredit certificate in the reporting year."
     ),
-    "gender_title": "Proportion of Certificate Recipients by Gender",
+    "gender_title": "Proportion of Students Who Earned a Noncredit Certificate by Gender",
     "gender_caption": (
         "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
         "courses in the selected year, the proportion who received a "
         "noncredit certificate in the reporting year."
     ),
-    "firstgen_title": "Proportion of Certificate Recipients by First-Generation College Status",
+    "firstgen_title": "Proportion of Students Who Earned a Noncredit Certificate by First-Generation College Status",
     "firstgen_caption": (
         "Among all NOCE students who enrolled in Basic Skills, CTE, or ESL "
         "courses in the selected year, the proportion who received a "
         "noncredit certificate in the reporting year."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
+    ),
+    "gender_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
     "firstgen_note": None,
     "include_nocccd": False,

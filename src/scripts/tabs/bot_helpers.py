@@ -615,6 +615,15 @@ _SOURCE_FOOTER = (
 )
 
 
+def _source_html(titles: dict) -> str:
+    """Render the Source footer line, honoring an optional ``source`` override.
+
+    The ``source`` value is the suffix after ``Source: `` (default ``Banner``).
+    """
+    src = titles.get("source", "Banner")
+    return f"<div style='text-align:left'><small>Source: {src}</small></div>"
+
+
 def render_bot_charts(
     df: pd.DataFrame, titles: dict,
     base_df: pd.DataFrame | None = None,
@@ -631,7 +640,9 @@ def render_bot_charts(
         gender_title, gender_caption,
         firstgen_org (optional, defaults to org),
         firstgen_title, firstgen_caption,
-        firstgen_note (optional, None to skip)
+        headcount_note, race_note, gender_note, firstgen_note
+            (optional per-section footer notes; None to skip)
+        source (optional, default "Banner") — text after "Source: " in section footers
         include_nocccd (optional, default True) — show NOCCCD unduplicated bar
         credit_only_firstgen (optional, default True) — filter first-gen to credit
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
@@ -662,7 +673,9 @@ def render_bot_charts(
             )
         else:
             st.info("Need at least 2 years for % change.")
-    st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+    st.markdown(_source_html(titles), unsafe_allow_html=True)
+    if titles.get("headcount_note"):
+        st.caption(titles["headcount_note"])
 
     if titles.get("headcount_only"):
         return
@@ -684,7 +697,9 @@ def render_bot_charts(
         html = build_race_summary_html(df_race, years)
         if html:
             st.markdown(html, unsafe_allow_html=True)
-    st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+    st.markdown(_source_html(titles), unsafe_allow_html=True)
+    if titles.get("race_note"):
+        st.caption(titles["race_note"])
 
     # --- Chart 3: Proportion by Gender ---
     st.divider()
@@ -703,7 +718,9 @@ def render_bot_charts(
         html = build_gender_summary_html(df_gender, years)
         if html:
             st.markdown(html, unsafe_allow_html=True)
-    st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+    st.markdown(_source_html(titles), unsafe_allow_html=True)
+    if titles.get("gender_note"):
+        st.caption(titles["gender_note"])
 
     # --- Chart 4: Proportion by First-Generation Status ---
     st.divider()
@@ -726,7 +743,7 @@ def render_bot_charts(
         html = build_firstgen_summary_html(df_fg, years)
         if html:
             st.markdown(html, unsafe_allow_html=True)
-    st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+    st.markdown(_source_html(titles), unsafe_allow_html=True)
     if titles.get("firstgen_note"):
         st.caption(titles["firstgen_note"])
 
@@ -770,8 +787,15 @@ def _draw_section_header(fig, section_top, org, title, year_range, caption,
     return y_after_caption - pad
 
 
-def _draw_section_source(fig, y):
-    fig.text(0.06, y, "Source: Banner", fontsize=7, color="grey", va="top")
+def _draw_section_source(fig, y, source: str = "Banner"):
+    fig.text(0.06, y, f"Source: {source}", fontsize=7, color="grey", va="top")
+
+
+def _draw_section_note(fig, y, note):
+    """Render an italic grey footnote under a section's Source line."""
+    note_wrapped = textwrap.fill(note, width=140)
+    fig.text(0.06, y, note_wrapped,
+             fontsize=6, color="grey", va="top", style="italic")
 
 
 def _mpl_headcount(fig, bbox, df_agg, df_pct):
@@ -1103,6 +1127,19 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
             df, credit_only=titles.get("credit_only_firstgen", True),
             base_df=base_df)
 
+    # Per-section note presence shifts that section's chart and Source
+    # line up by NOTE_OFFSET so the note fits beneath the Source line.
+    NOTE_OFFSET = 0.03
+    headcount_note = titles.get("headcount_note")
+    race_note = titles.get("race_note")
+    gender_note = titles.get("gender_note")
+    firstgen_note = titles.get("firstgen_note")
+    hc_off = NOTE_OFFSET if headcount_note else 0
+    rc_off = NOTE_OFFSET if race_note else 0
+    gn_off = NOTE_OFFSET if gender_note else 0
+
+    source = titles.get("source", "Banner")
+
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         # --- Page 1 ---
@@ -1117,12 +1154,15 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
             fig, 0.935, titles["org"], titles["headcount_title"],
             year_range, titles["headcount_caption"],
         )
+        hc_bottom = 0.58 + hc_off
         _mpl_headcount(
             fig,
-            (0.06, 0.58, 0.88, y_after_header - 0.58),
+            (0.06, hc_bottom, 0.88, y_after_header - hc_bottom),
             df_agg, df_pct,
         )
-        _draw_section_source(fig, 0.54)
+        _draw_section_source(fig, 0.54 + hc_off, source)
+        if headcount_note:
+            _draw_section_note(fig, 0.54, headcount_note)
 
         if not headcount_only:
             # Section 2: Race (bottom half) — top raised to 0.50 to use
@@ -1133,11 +1173,14 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
                 year_range, titles["race_caption"],
                 pad=0.005,
             )
-            chart_bbox = (0.06, 0.06, 0.54, y_after_header - 0.06)
+            rc_bottom = 0.06 + rc_off
+            chart_bbox = (0.06, rc_bottom, 0.54, y_after_header - rc_bottom)
             _mpl_race_proportion_table(fig, chart_bbox, df_race, years)
-            table_bbox = (0.62, 0.06, 0.32, y_after_header - 0.06)
+            table_bbox = (0.62, rc_bottom, 0.32, y_after_header - rc_bottom)
             _mpl_race_summary(fig, table_bbox, df_race, years)
-            _draw_section_source(fig, 0.04)
+            _draw_section_source(fig, 0.04 + rc_off, source)
+            if race_note:
+                _draw_section_note(fig, 0.04, race_note)
 
         _add_pdf_footer(fig)
         pdf.savefig(fig)
@@ -1155,11 +1198,14 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
                 fig, 0.935, titles["org"], titles["gender_title"],
                 year_range, titles["gender_caption"],
             )
-            chart_bbox = (0.12, 0.56, 0.48, y_after_header - 0.56)
+            gn_bottom = 0.56 + gn_off
+            chart_bbox = (0.12, gn_bottom, 0.48, y_after_header - gn_bottom)
             _mpl_gender_chart(fig, chart_bbox, df_gender, years)
-            table_bbox = (0.62, 0.56, 0.32, y_after_header - 0.56)
+            table_bbox = (0.62, gn_bottom, 0.32, y_after_header - gn_bottom)
             _mpl_gender_summary(fig, table_bbox, df_gender, years)
-            _draw_section_source(fig, 0.52)
+            _draw_section_source(fig, 0.52 + gn_off, source)
+            if gender_note:
+                _draw_section_note(fig, 0.52, gender_note)
 
             # Section 4: First-Gen (bottom half) — raise chart bottom to
             # 0.13 so the legend has room below before "Source: Banner".
@@ -1175,12 +1221,9 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
 
             # Source sits between the legend and the page footer with
             # balanced gaps. Same layout across all tabs.
-            _draw_section_source(fig, 0.085)
-            if titles.get("firstgen_note"):
-                note_wrapped = textwrap.fill(
-                    titles["firstgen_note"], width=140)
-                fig.text(0.06, 0.065, note_wrapped,
-                         fontsize=6, color="grey", va="top", style="italic")
+            _draw_section_source(fig, 0.085, source)
+            if firstgen_note:
+                _draw_section_note(fig, 0.065, firstgen_note)
 
             _add_pdf_footer(fig)
             pdf.savefig(fig)

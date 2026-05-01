@@ -39,27 +39,33 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 3 - Average Units",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Average Number of Units Earned by ADT Recipients",
+    "headcount_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners",
     "headcount_caption": (
-        "The average cumulative units earned by students awarded associate "
-        "degrees for transfer at Cypress College and Fullerton College in "
-        "the reporting year."
+        "Among all students who earned an Associate Degree for Transfer in the "
+        "reporting year, the average number of credit units earned up to and "
+        "including the reporting year."
     ),
-    "race_title": "Average Units Earned by Race/Ethnicity",
+    "race_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners by Race/Ethnicity",
     "race_caption": (
-        "Among students awarded ADTs at NOCCCD credit colleges in the "
-        "reporting year, the average cumulative units earned by race/ethnicity."
+        "Among all students who earned an Associate Degree for Transfer in the "
+        "reporting year, the average number of credit units earned up to and "
+        "including the reporting year."
     ),
-    "gender_title": "Average Units Earned by Gender",
+    "gender_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners by Gender",
     "gender_caption": (
-        "Among students awarded ADTs at NOCCCD credit colleges in the "
-        "reporting year, the average cumulative units earned by gender."
+        "Among all students who earned an Associate Degree for Transfer in the "
+        "reporting year, the average number of credit units earned up to and "
+        "including the reporting year."
     ),
-    "firstgen_title": "Average Units Earned by First-Generation College Status",
+    "firstgen_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners by First-Generation College Status",
     "firstgen_caption": (
-        "Among students awarded ADTs at Cypress and Fullerton Colleges in "
-        "the reporting year, the average cumulative units earned by "
-        "first-generation college status."
+        "Among all students who earned an Associate Degree for Transfer in the "
+        "reporting year, the average number of credit units earned up to and "
+        "including the reporting year."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
 }
 
@@ -529,6 +535,12 @@ def _draw_section_source(fig, y):
     fig.text(0.06, y, "Source: Banner", fontsize=7, color="grey", va="top")
 
 
+def _draw_section_note(fig, y, note):
+    note_wrapped = textwrap.fill(note, width=140)
+    fig.text(0.06, y, note_wrapped,
+             fontsize=6, color="grey", va="top", style="italic")
+
+
 def _mpl_campus(fig, bbox, df_agg, df_pct):
     left, bottom, width, height = bbox
     ax_bar = fig.add_axes([left, bottom, width * 0.55, height])
@@ -847,17 +859,24 @@ def _generate_pdf(df) -> bytes:
         _draw_section_source(fig, 0.54)
 
         # Section 2: raised to 0.50 with tight caption-to-chart padding
-        # since the race table has no axis title to overlap.
+        # since the race table has no axis title to overlap. When a race
+        # note is present, shift the chart and source up by 0.03 to make
+        # room for the note below the source line.
         y_after = _draw_section_header(
             fig, 0.50, _TITLES["org"], _TITLES["race_title"],
             year_range, _TITLES["race_caption"],
             pad=0.005,
         )
-        _mpl_race_table(fig, (0.06, 0.06, 0.54, y_after - 0.06),
+        race_note = _TITLES.get("race_note")
+        rc_off = 0.03 if race_note else 0
+        rc_bottom = 0.06 + rc_off
+        _mpl_race_table(fig, (0.06, rc_bottom, 0.54, y_after - rc_bottom),
                         df_race, years)
-        _mpl_race_summary(fig, (0.62, 0.06, 0.32, y_after - 0.06),
+        _mpl_race_summary(fig, (0.62, rc_bottom, 0.32, y_after - rc_bottom),
                           df_race, years)
-        _draw_section_source(fig, 0.04)
+        _draw_section_source(fig, 0.04 + rc_off)
+        if race_note:
+            _draw_section_note(fig, 0.04, race_note)
 
         _add_pdf_footer(fig)
         pdf.savefig(fig)
@@ -983,6 +1002,8 @@ def render():
         if html:
             st.markdown(html, unsafe_allow_html=True)
     st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
+    if _TITLES.get("race_note"):
+        st.caption(_TITLES["race_note"])
 
     # Chart 3: Avg units by gender
     st.divider()

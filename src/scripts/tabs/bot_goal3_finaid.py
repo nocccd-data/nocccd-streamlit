@@ -13,7 +13,7 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 3 - Financial Aid",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Students Receiving Financial Aid",
+    "headcount_title": "Headcount of Students Who Received Financial Aid",
     "headcount_caption": (
         "The unduplicated number of students enrolled in Cypress and "
         "Fullerton Colleges who received a Pell Grant or California "
@@ -23,19 +23,19 @@ _TITLES = {
     "race_caption": (
         "Among all unduplicated students enrolled in Cypress and Fullerton "
         "Colleges in the reporting year, the proportion by race/ethnicity "
-        "who received financial aid."
+        "who received a Pell Grant or California College Promise Grant."
     ),
     "gender_title": "Proportion of Students Receiving Financial Aid by Gender",
     "gender_caption": (
         "Among all unduplicated students enrolled in Cypress and Fullerton "
         "Colleges in the reporting year, the proportion by gender who "
-        "received financial aid."
+        "received a Pell Grant or California College Promise Grant."
     ),
     "firstgen_title": "Proportion of Students Receiving Financial Aid by First-Generation College Status",
     "firstgen_caption": (
         "Among all unduplicated students enrolled in Cypress and Fullerton "
-        "Colleges in the reporting year, the proportion who received "
-        "financial aid, by first-generation college status."
+        "Colleges in the reporting year, the proportion who received a "
+        "Pell Grant or California College Promise Grant."
     ),
     "firstgen_note": None,
 }

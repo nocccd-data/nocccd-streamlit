@@ -10,10 +10,10 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 2 - Bachelor's Degrees",
     "org": "NOCCCD Credit Colleges",
-    "headcount_title": "Bachelor's Degrees Awarded",
+    "headcount_title": "Headcount of Students who Earned a Baccalaureate Degree",
     "headcount_caption": (
-        "The unduplicated number of students awarded bachelor's degrees "
-        "at Cypress College and Fullerton College in the reporting year."
+        "The number of students enrolled in Cypress College who earned a "
+        "baccalaureate degree in the reporting year."
     ),
     "race_title": "Proportion of Bachelor's Degree Recipients by Race/Ethnicity",
     "race_caption": (

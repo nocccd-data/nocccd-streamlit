@@ -14,30 +14,41 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 _TITLES = {
     "tab_title": "BOT Goal 2 - Living Wage",
     "org": "NOCCCD",
-    "headcount_title": "Students with Living Wage Employment",
+    "headcount_title": "Headcount of Students Who Earned a Living Wage",
     "headcount_caption": (
-        "The unduplicated number of students from Cypress College, "
-        "Fullerton College, and North Orange Continuing Education who "
-        "achieved a living wage in the reporting year."
+        "The unduplicated number of students who left the District without "
+        "transferring and attained the Orange County living wage for a single "
+        "adult in the year after exiting."
     ),
     "race_title": "Proportion of Students Earning a Living Wage by Race/Ethnicity",
     "race_caption": (
-        "Among all unduplicated students enrolled in NOCCCD in the reporting "
-        "year, the proportion by race/ethnicity who achieved a living wage."
+        "Among students who left the District without transferring, the "
+        "proportion who attained the Orange County living wage in the year "
+        "after exiting."
     ),
     "gender_title": "Proportion of Students Earning a Living Wage by Gender",
     "gender_caption": (
-        "Among all unduplicated students enrolled in NOCCCD in the reporting "
-        "year, the proportion by gender who achieved a living wage."
+        "Among students who left the District without transferring, the "
+        "proportion who attained the Orange County living wage in the year "
+        "after exiting."
     ),
     "firstgen_org": "NOCCCD Credit Colleges",
     "firstgen_title": "Proportion of Students Earning a Living Wage by First-Generation College Status",
     "firstgen_caption": (
-        "Among all unduplicated students enrolled in Cypress and Fullerton "
-        "Colleges in the reporting year, the proportion who achieved a "
-        "living wage, by first-generation college status."
+        "Among students who left the District without transferring, the "
+        "proportion who attained the Orange County living wage in the year "
+        "after exiting."
+    ),
+    "race_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
+    ),
+    "gender_note": (
+        "Note: To maintain confidentiality, groups with fewer than 10 students "
+        "are not displayed."
     ),
     "firstgen_note": None,
+    "source": "CCCCO Supplemental & Success Data for the SCFF files; Banner",
 }
 
 
