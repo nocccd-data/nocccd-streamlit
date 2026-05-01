@@ -25,6 +25,7 @@ nocccd-streamlit/
 │   │   ├── publish.py            # Upload/download Hyper to/from Tableau Cloud
 │   │   ├── run.py                # CLI entry point for pipeline
 │   │   ├── seat_count_export.py  # Bulk Seat Count Report PDF export to OneDrive
+│   │   ├── bot_export.py         # Combined BOT tabs PDF export to OneDrive
 │   │   ├── mail/                 # Mass mailing system
 │   │   │   ├── mail_config.py    # Campaign definitions + report registry
 │   │   │   ├── report_generator.py  # Fetch → filter → PDF → send orchestrator
@@ -195,6 +196,22 @@ python -m src.pipeline.seat_count_export
 - **Daily snapshots**: each run nests its output under a `YYYYMMDD` folder based on the run date. Same-day re-runs overwrite that day's PDFs; the next calendar day creates a new snapshot directory, so historical exports accumulate naturally.
 
 The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/seat_count_export.py` — change it there if your OneDrive path differs.
+
+## Bulk PDF Export: BOT Tabs → OneDrive
+
+For the BOT (Board of Trustees) tabs, an on-demand bulk export renders every BOT tab's report into a **single combined PDF** and writes it to a local OneDrive folder. The output pages match what each Streamlit BOT tab produces when its full default academic-year range is selected.
+
+```bash
+python -m src.pipeline.bot_export
+```
+
+- **Source**: reads `src/pipeline/hyper/bot_*.hyper` directly. Run the pipeline first if any BOT Hyper file is missing or stale.
+- **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/PDF Export/<YYYYMMDD>/`
+- **Filename**: `bot_export_<acyr_min>_to_<acyr_max>.pdf`, e.g. `bot_export_2020_to_2024.pdf`. The min/max academic years come from `bot_goal1_students` in `src/pipeline/config.py` — other BOT datasets sometimes cover a different 5-year window (e.g. living-wage is shifted by 1), so the filename is anchored to the canonical Goal 1 range.
+- **Combined PDF**: pages from all 10 BOT tabs are concatenated in this order — Goal 1 Students, Goal 2 ADT, Associate Degrees, Bachelor's, Certificates, Noncredit Certificates, Living Wage, Transfers, Goal 3 Financial Aid, Average Units.
+- **Daily snapshots**: each run nests its output under a `YYYYMMDD` folder based on the run date. Same-day re-runs overwrite that day's PDF; the next calendar day creates a new snapshot directory.
+
+The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/bot_export.py` — change it there if your OneDrive path differs.
 
 ## Mass Mailing: Filtered PDF Reports
 
