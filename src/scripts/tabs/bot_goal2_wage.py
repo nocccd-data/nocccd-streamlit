@@ -6,6 +6,7 @@ from src.scripts.data_provider import (
     fetch_bot_goal2_wage,
     fetch_bot_goal2_wage_denom,
 )
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal2_wage"]
@@ -105,11 +106,17 @@ def render():
         # must shift together so the rate-metric merge still matches.
         st.session_state["bg2w_df"] = _shift_df(df)
         st.session_state["bg2w_base"] = _shift_df(base)
+        clear_pdf_cache("bg2w")
 
     if "bg2w_df" in st.session_state:
-        pdf_bytes = generate_bot_pdf(
-            st.session_state["bg2w_df"], _TITLES,
-            base_df=st.session_state.get("bg2w_base"),
+        pdf_bytes = cached_pdf_bytes(
+            "bg2w",
+            (id(st.session_state["bg2w_df"]), id(st.session_state.get("bg2w_base"))),
+            lambda: generate_bot_pdf(
+                st.session_state["bg2w_df"],
+                _TITLES,
+                base_df=st.session_state.get("bg2w_base"),
+            ),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,

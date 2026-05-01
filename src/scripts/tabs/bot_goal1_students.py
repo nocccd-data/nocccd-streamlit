@@ -2,6 +2,7 @@ import streamlit as st
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_bot_goal1_students
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal1_students"]
@@ -63,9 +64,14 @@ def render():
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg1_df"] = df
+        clear_pdf_cache("bg1")
 
     if "bg1_df" in st.session_state:
-        pdf_bytes = generate_bot_pdf(st.session_state["bg1_df"], _TITLES)
+        pdf_bytes = cached_pdf_bytes(
+            "bg1",
+            id(st.session_state["bg1_df"]),
+            lambda: generate_bot_pdf(st.session_state["bg1_df"], _TITLES),
+        )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
             file_name="bot_goal1_students.pdf", mime="application/pdf",

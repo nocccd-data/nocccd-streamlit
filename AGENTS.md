@@ -75,6 +75,8 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 
 Each public `fetch_*()` function is an `@st.cache_data(ttl=600)` wrapper that calls `_download_and_read(dataset_name, filter_col, values)` — which downloads the dataset's Hyper extract from Tableau Cloud, reads it via `pantab.frame_from_hyper()`, and filters in-memory to the requested values. Tableau credentials come from `st.secrets`. The mail pipeline has its own `_fetch_from_hyper()` in `mail_config.py` that loads Tableau credentials directly from `secrets.toml` instead of `st.secrets`, so it can run outside a Streamlit runtime.
 
+Filter columns are part of the Hyper schema contract. `_download_and_read()`, `_fetch_from_hyper()`, and mail recipient filtering should fail loudly if an expected filter column is missing instead of returning unfiltered data.
+
 ### Pipeline flow (`src/pipeline/`)
 
 1. **`config.py`** — defines datasets: name → SQL file + value list + `param_name` + `db_section`. Each dataset stores its values under a semantic key (e.g. `mis_acyr_id`, `acyr_code`, `fisc_year`) and `param_name` tells extract.py which key to read.
@@ -89,7 +91,7 @@ Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`no
 1. **`mail_config.py`** — `REPORT_REGISTRY` maps report types to fetch/filter/PDF functions. `CAMPAIGNS` defines mail jobs with parameters, subject/body templates, and recipient lists with per-recipient filter overrides. Data is fetched from **Tableau Cloud Hyper files** (same source as Streamlit Cloud), not Oracle — this avoids Oracle dependencies and uses pre-extracted data. The `_fetch_from_hyper()` helper loads Tableau credentials directly from `secrets.toml` (no `st.secrets`).
 2. **`report_generator.py`** — orchestrator: fetches data **once** from Tableau Cloud, then for each recipient applies filters, generates PDF, sends email. Returns `list[SendResult]` with success/failure per recipient. Accepts a `progress_callback` for UI integration.
 3. **`sender.py`** — sends a single email with PDF attachment via Gmail SMTP/TLS (`nocccd.reports@gmail.com`, port 587, app password auth). Rate-limited with `time.sleep(2)` between sends.
-4. **`run.py`** — CLI entry point (`python -m src.pipeline.mail`). Supports `--dry-run` and `--recipient` flags.
+4. **`run.py`** — CLI entry point (`python -m src.pipeline.mail`). Supports `--dry-run` and `--recipient` flags. The package `__main__.py` wrapper must call `sys.exit(main())` so GitHub Actions receives non-zero failure codes.
 
 **Adding a new report type to the mail system:**
 1. Add a `generate_report_pdf(df, params) -> bytes` function in the tab module
@@ -99,7 +101,7 @@ Generates filtered PDF reports and emails them to recipients via Gmail SMTP (`no
 
 **Email credentials**: Stored in `.streamlit/secrets.toml` under `[email]` section. Uses a dedicated Gmail account (`nocccd.reports@gmail.com`) with App Password (2-Step Verification must be enabled on the Google account). Tableau Cloud credentials in the same file are used to download Hyper data.
 
-**Scheduled delivery**: `.github/workflows/mail-reports.yml` runs at 9am PDT weekdays via GitHub Actions cron. Also supports manual trigger from the Actions tab. Secrets are stored in GitHub repo settings (Settings > Secrets), mapped to `secrets.toml` keys at runtime by the workflow.
+**GitHub Actions workflow**: `.github/workflows/mail-reports.yml` supports manual triggers from the Actions tab and maps GitHub repo secrets into `secrets.toml` at runtime. Do not describe any automatic mail schedule as active unless the workflow's `schedule:` block is currently enabled.
 
 ### Bulk PDF export (`src/pipeline/seat_count_export.py`)
 
@@ -304,7 +306,7 @@ if "xx_data" in st.session_state:
     st.sidebar.download_button("Download PDF", data=..., key="xx_pdf_btn")
 ```
 
-**Memoize PDF bytes per filter combination**: `st.download_button` registers `data` in an in-memory media-file store keyed by a content hash, then hands the browser a URL like `/media/<hash>.pdf`. Matplotlib **embeds a creation timestamp in every PDF**, so calling the generator on each rerun (every sidebar widget change triggers one) yields different bytes → different hash → the URL the browser is about to fetch is already invalid. The browser then silently saves Streamlit's 404 HTML response under the `.pdf` filename, producing the "downloaded an HTML file" symptom. Fix: cache the bytes in `st.session_state` keyed by the active filter tuple and only regenerate when that key changes — see `seat_count_report.py` for the pattern (`_sc_pdf_key` / `_sc_pdf_bytes`). The Query handler also `pop`s the cache key so a fresh fetch triggers a fresh PDF. Apply the same pattern to any tab whose PDF inputs change in response to widget interaction.
+**Memoize PDF bytes per filter combination**: `st.download_button` registers `data` in an in-memory media-file store keyed by a content hash, then hands the browser a URL like `/media/<hash>.pdf`. Matplotlib **embeds a creation timestamp in every PDF**, so calling the generator on each rerun (every sidebar widget change triggers one) yields different bytes → different hash → the URL the browser is about to fetch is already invalid. The browser then silently saves Streamlit's 404 HTML response under the `.pdf` filename, producing the "downloaded an HTML file" symptom. Use `cached_pdf_bytes()` and `clear_pdf_cache()` from `src/scripts/pdf_cache.py` for new PDF-enabled tabs; the Query handler should clear the cache so a fresh fetch triggers a fresh PDF. `seat_count_report.py` has an equivalent custom cache pattern because its PDF key depends on cascading filter state.
 
 **PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. Two patterns exist:
 - **Table-based**: `ax.table()` renders a DataFrame as a table on a matplotlib axes. Good for small/medium tables. See `fast_facts.py` and `class_schedule_heatmap.py`.

@@ -19,6 +19,7 @@ from matplotlib.patches import Rectangle
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_bot_goal3_units
+from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 from src.scripts.tabs.bot_helpers import (
     CAMPUS_ORDER,
     COLOR_MAP,
@@ -946,9 +947,14 @@ def render():
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg3u_df"] = df
+        clear_pdf_cache("bg3u")
 
     if "bg3u_df" in st.session_state:
-        pdf_bytes = _generate_pdf(st.session_state["bg3u_df"])
+        pdf_bytes = cached_pdf_bytes(
+            "bg3u",
+            id(st.session_state["bg3u_df"]),
+            lambda: _generate_pdf(st.session_state["bg3u_df"]),
+        )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
             file_name="bot_goal3_units.pdf", mime="application/pdf",
