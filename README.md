@@ -1,9 +1,6 @@
 # nocccd-streamlit
 
-**NOCCCD Data Hub** — Streamlit dashboards for NOCCCD data reporting and analytics. Supports two data modes:
-
-- **Local mode** — queries Oracle EDW directly
-- **Cloud mode** — reads pre-extracted Hyper files from Tableau Cloud (used on Streamlit Cloud)
+**NOCCCD Data Hub** — Streamlit dashboards for NOCCCD data reporting and analytics. The app reads pre-extracted Hyper files from Tableau Cloud at runtime; Oracle access is limited to the pipeline that refreshes and publishes those Hyper files.
 
 ## Architecture
 
@@ -18,21 +15,28 @@ Oracle EDW ──► extract.py ──► .hyper files ──► publish.py ─�
 
 ```
 nocccd-streamlit/
+├── .github/
+│   └── workflows/
+│       └── mail-reports.yml      # Manual GitHub Actions workflow for mail dry-runs/sends
+├── .streamlit/
+│   ├── config.toml               # Streamlit theme settings
+│   └── secrets.toml              # Local Tableau/email secrets (gitignored)
 ├── src/
 │   ├── pipeline/                 # ETL: Oracle → Hyper → Tableau Cloud
-│   │   ├── config.py             # Dataset definitions and acyrs
+│   │   ├── config.py             # Dataset definitions, parameters, and value lists
 │   │   ├── extract.py            # Query Oracle, write .hyper files
 │   │   ├── publish.py            # Upload/download Hyper to/from Tableau Cloud
 │   │   ├── run.py                # CLI entry point for pipeline
 │   │   ├── seat_count_export.py  # Bulk Seat Count Report PDF export to OneDrive
 │   │   ├── bot_export.py         # Combined BOT tabs PDF export to OneDrive
 │   │   ├── mail/                 # Mass mailing system
+│   │   │   ├── __main__.py       # `python -m src.pipeline.mail` entry point wrapper
 │   │   │   ├── mail_config.py    # Campaign definitions + report registry
-│   │   │   ├── report_generator.py  # Fetch → filter → PDF → send orchestrator
+│   │   │   ├── report_generator.py # Fetch → filter → PDF → send orchestrator
 │   │   │   ├── sender.py         # Gmail SMTP/TLS email sender
 │   │   │   └── run.py            # CLI entry point for mail
 │   │   ├── sql/                  # SQL query files (one per dataset)
-│   │   ├── hyper/                # Generated .hyper files (gitignored)
+│   │   ├── hyper/                # Generated local .hyper files (gitignored)
 │   │   └── libs/
 │   │       ├── sql.py            # SQLAlchemy engine factory
 │   │       ├── oracle_db_connector.py      # Oracle thick/thin client init
@@ -44,6 +48,7 @@ nocccd-streamlit/
 │   │   ├── home_config.py        # Project card config (descriptions, metrics)
 │   │   ├── admin_config.py       # Protected tabs configuration
 │   │   ├── auth.py               # Admin authentication gate
+│   │   ├── pdf_cache.py          # Stable Streamlit PDF download-byte cache
 │   │   ├── theme.py              # Light/dark theme CSS overrides
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
@@ -57,41 +62,65 @@ nocccd-streamlit/
 │   │       ├── mis_sp_current_scff.py
 │   │       ├── mis_fa_submitted_scff.py
 │   │       ├── cte_sx_submitted_scff.py
+│   │       ├── bot_helpers.py
+│   │       ├── bot_goal1_students.py
+│   │       ├── bot_goal2_adt.py
+│   │       ├── bot_goal2_assoc.py
+│   │       ├── bot_goal2_bac.py
+│   │       ├── bot_goal2_cert.py
+│   │       ├── bot_goal2_cert_nc.py
+│   │       ├── bot_goal2_wage.py
+│   │       ├── bot_goal2_xfer.py
+│   │       ├── bot_goal3_finaid.py
+│   │       ├── bot_goal3_units.py
 │   │       └── mail_admin.py     # Mail Admin tab (password-protected)
 │   └── static/
 │       └── NOCCCD Logo.jpg
-├── .streamlit/
-│   ├── config.toml              # Theme color palette (light/dark)
-│   └── secrets.toml              # Tableau Cloud PAT credentials
 ├── requirements.txt
 ├── .python-version               # Pins Python 3.13 for Streamlit Cloud
-└── CLAUDE.md
+├── AGENTS.md                     # Codex project guidance
+├── CLAUDE.md                     # Claude/project implementation guidance
+└── README.md
 ```
 
 ## Datasets
 
-| Name | SQL File | Description |
-|------|----------|-------------|
-| `fast_facts_stu` | `fast_facts_stu.sql` | Student demographics by academic year |
-| `fast_facts_emp` | `fast_facts_emp.sql` | Employee demographics by fiscal year |
-| `seat_count_report` | `seat_count_report.sql` | Section seat counts and fill rates |
-| `class_schedule_heatmap` | `class_schedule_heatmap.sql` | Class schedule by day/time for heatmap |
-| `persistence_by_styp` | `persistence_by_styp.sql` | Persistence rates by student type |
-| `coi_nhrdist_val` | `coi_nhrdist_val.sql` | COI vs NHRDIST payroll validation |
-| `deg_scff` | `deg_scff.sql` | SCFF financial aid awards |
-| `deg_sp_submitted` | `deg_sp_submitted.sql` | Degree SP submitted vs SCFF match |
-| `deg_sp_current` | `deg_sp_current.sql` | Degree SP current vs SCFF match |
-| `deg_fa_scff` | `deg_fa_scff.sql` | SCFF FA financial aid awards |
-| `deg_fa_submitted` | `deg_fa_submitted.sql` | FA submitted vs SCFF match |
-| `cte_scff` | `cte_scff.sql` | SCFF CTE awards |
-| `cte_sx_submitted` | `cte_sx_submitted.sql` | CTE SX submitted vs SCFF match |
+Datasets are defined in `src/pipeline/config.py`. Each entry maps a dataset name to its SQL file, parameter key, value list, and Oracle connection section. The pipeline writes one Hyper extract per dataset and publishes it to Tableau Cloud under the same dataset name.
+
+| Dataset | SQL File | Parameter | DB | Used For |
+|---------|----------|-----------|----|----------|
+| `fast_facts_emp` | `fast_facts_emp.sql` | `fisc_year` | `rept` | Fast Facts employee demographics |
+| `fast_facts_stu` | `fast_facts_stu.sql` | `acyr_code` | `rept` | Fast Facts student demographics |
+| `coi_nhrdist_val` | `coi_nhrdist_val.sql` | `mis_term_id` | `dwhdb` | COI vs NHRDIST payroll validation |
+| `deg_scff` | `deg_scff.sql` | `mis_acyr_id` | `dwhdb` | SCFF degree award source comparison |
+| `deg_sp_submitted` | `deg_sp_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS SP submitted degree comparison |
+| `deg_sp_current` | `deg_sp_current.sql` | `mis_acyr_id` | `rept` | MIS SP current degree comparison |
+| `deg_fa_scff` | `deg_fa_scff.sql` | `mis_acyr_id` | `dwhdb` | SCFF financial-aid award source comparison |
+| `deg_fa_submitted` | `deg_fa_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS FA submitted award comparison |
+| `cte_scff` | `cte_scff.sql` | `mis_acyr_id` | `dwhdb` | SCFF CTE award source comparison |
+| `cte_sx_submitted` | `cte_sx_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS SX submitted CTE comparison |
+| `class_schedule_heatmap` | `class_schedule_heatmap.sql` | `mis_term_id` | `dwhdb` | Class Schedule Heatmap tab |
+| `persistence_by_styp` | `persistence_by_styp.sql` | `mis_term_id` | `dwhdb` | Persistence by Student Type tab |
+| `seat_count_report` | `seat_count_report.sql` | `banner_term_code` | `rept` | Seat Count Report tab, mail reports, and bulk PDF export |
+| `bot_goal1_students` | `bot_goal1_students.sql` | `acyr_code` | `rept` | BOT Goal 1 Students tab and shared BOT denominator |
+| `bot_goal2_cert` | `bot_goal2_cert.sql` | `acyr_code` | `rept` | BOT Goal 2 Certificates tab |
+| `bot_goal2_cert_nc` | `bot_goal2_cert_nc.sql` | `acyr_code` | `rept` | BOT Goal 2 Noncredit Certificates tab |
+| `bot_goal2_cert_nc_denom` | `bot_goal2_cert_nc_denom.sql` | `acyr_code` | `rept` | Denominator for noncredit certificate rates |
+| `bot_goal2_assoc` | `bot_goal2_assoc.sql` | `acyr_code` | `rept` | BOT Goal 2 Associate Degrees tab |
+| `bot_goal2_adt` | `bot_goal2_adt.sql` | `acyr_code` | `rept` | BOT Goal 2 ADT tab |
+| `bot_goal2_bac` | `bot_goal2_bac.sql` | `acyr_code` | `rept` | BOT Goal 2 Bachelor's Degrees tab |
+| `bot_goal2_xfer` | `bot_goal2_xfer.sql` | `acyr_code` | `rept` | BOT Goal 2 Transfers tab |
+| `bot_goal2_wage` | `bot_goal2_wage.sql` | `acyr_code` | `rept` | BOT Goal 2 Living Wage tab |
+| `bot_goal2_wage_denom` | `bot_goal2_wage_denom.sql` | `acyr_code` | `dwhdb` | Denominator for living-wage rates |
+| `bot_goal3_finaid` | `bot_goal3_finaid.sql` | `acyr_code` | `rept` | BOT Goal 3 Financial Aid tab |
+| `bot_goal3_units` | `bot_goal3_units.sql` | `acyr_code` | `rept` | BOT Goal 3 Average Units tab |
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.13+
-- Oracle Instant Client (for local Oracle access)
+- Oracle Instant Client (for pipeline extraction from Oracle)
 
 ### Install dependencies
 
@@ -101,7 +130,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Configure Oracle credentials (local mode)
+### Configure Oracle credentials (pipeline extraction)
 
 Copy the template and fill in your Oracle credentials:
 
@@ -339,21 +368,24 @@ See `CLAUDE.md` for detailed theme gotchas, color reference table, and guidance 
 ## Adding a New Dataset
 
 1. Add the SQL query to `src/pipeline/sql/your_dataset.sql`
-   - Use `:t1, :t2, ...` placeholders for acyr filtering: `WHERE acyr_id IN (:t1)`
+   - For multi-value extraction, use the pipeline's expandable placeholder pattern: `WHERE acyr_id IN (:t1...)`
+   - For single-value extraction, use one named bind such as `WHERE acyr_id = :acyr_code`; the runner loops over configured values
 2. Register in `src/pipeline/config.py`:
    ```python
    DATASETS = {
        ...
        "your_dataset": {
            "sql_file": "your_dataset.sql",
-           "acyrs": ["220", "230", "240", "250"],
+           "acyr_code": ["2021", "2022", "2023", "2024"],
+           "param_name": "acyr_code",
+           "db_section": "dwhdb",
        },
    }
    ```
 3. Add a fetch function in `data_provider.py`:
    ```python
    @st.cache_data(ttl=600, show_spinner="Loading data...")
-   def fetch_your_dataset(acyrs: tuple[str, ...]) -> pd.DataFrame:
-       return _download_and_read("your_dataset", "acyr_id", acyrs)
+   def fetch_your_dataset(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+       return _download_and_read("your_dataset", "acyr_code", acyr_codes)
    ```
 4. Run `python -m src.pipeline.run your_dataset` to extract and publish
