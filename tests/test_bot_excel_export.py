@@ -4,21 +4,15 @@ These helpers (_count_summary, _value_summary, _matrix_table, _rate_detail)
 do all the numeric aggregation behind the BOT Excel export. They are pure:
 they take DataFrames in and return DataFrames out. Streamlit, Hyper, and
 Oracle are not involved, so they are unit-testable with synthetic frames.
-"""
 
-import logging
+The exporter installs the streamlit `No runtime found` log filter at module
+import time, so just importing it here is enough — no manual filter setup.
+"""
 
 import pandas as pd
 import pytest
 
-# Silence streamlit's "No runtime found" warning that fires at tab-module
-# import time; the exporter's main() does this via _setup_env(), but pytest
-# imports the module without calling main().
-logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
-    lambda record: "No runtime found" not in record.getMessage()
-)
-
-from src.pipeline.bot_excel_export import (  # noqa: E402
+from src.pipeline.bot_excel_export import (
     _count_summary,
     _matrix_table,
     _rate_detail,
@@ -269,26 +263,28 @@ def test_rate_detail_happy_path():
     assert sorted(out["Race"].tolist()) == ["Apple", "Banana"]
 
 
-def test_rate_detail_missing_source_column_uses_nan_not_keyerror():
-    """Regression guard: with the [[...]] selector this raised KeyError.
-    With reindex(columns=...) the missing column becomes NaN.
+def test_rate_detail_missing_source_column_raises_keyerror():
+    """Per CLAUDE.md ("fail loudly when required schema/filter columns are
+    missing"), `_rate_detail` must raise on a missing required metric rather
+    than silently shipping blank columns to the workbook. The error message
+    must name the missing column so an operator can diagnose the upstream
+    schema regression.
     """
-    # No 'pct' column upstream — reindex must fill it as NaN.
+    # No 'pct' column upstream → must raise.
     df = pd.DataFrame({
         "academic_year": ["2024-25"],
         "race_description": ["A"],
         "count": [10],
         "total": [100],
     })
-    out = _rate_detail(
-        df,
-        key_col="race_description",
-        label_col="Race",
-        order=["A"],
-        label_map={"A": "A"},
-    )
-    assert "Percent" in out.columns
-    assert pd.isna(out.iloc[0]["Percent"])
+    with pytest.raises(KeyError, match="Percent"):
+        _rate_detail(
+            df,
+            key_col="race_description",
+            label_col="Race",
+            order=["A"],
+            label_map={"A": "A"},
+        )
 
 
 def test_rate_detail_filters_to_keys_in_order():

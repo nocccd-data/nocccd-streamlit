@@ -21,32 +21,30 @@ from tempfile import gettempdir
 from typing import Callable
 
 
-def _setup_env() -> None:
-    """Side effects required before tab modules are imported.
+# Matplotlib is imported transitively by the BOT tab modules below, even
+# though this exporter writes tables only. Matplotlib reads MPLCONFIGDIR
+# during its own import, so this MUST run before the tab-module imports —
+# deferring it into main() makes the override a no-op. The setdefault and
+# mkdir calls are idempotent, so importing this module from a test or REPL
+# is safe.
+_MPLCONFIGDIR = Path(gettempdir()) / "nocccd-streamlit-matplotlib"
+_MPLCONFIGDIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(_MPLCONFIGDIR))
 
-    Run from ``main()`` (and from any harness that drives the exporter), not
-    at import time, so that importing this module from a test or REPL does
-    not silently mutate ``os.environ`` or create temp directories.
-    """
-    # Matplotlib is imported by BOT tab modules even though this exporter writes
-    # tables only. Keep its cache out of home-directory paths that may be
-    # sandboxed.
-    mpl_cache = Path(gettempdir()) / "nocccd-streamlit-matplotlib"
-    mpl_cache.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("MPLCONFIGDIR", str(mpl_cache))
-
-    # Silence Streamlit's "no runtime found" warnings emitted by tab modules'
-    # @st.cache_data decorators when evaluated outside a Streamlit session.
-    logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
-        lambda record: "No runtime found" not in record.getMessage()
-    )
+# Silence Streamlit's "no runtime found" warnings emitted by tab modules'
+# @st.cache_data decorators when evaluated outside a Streamlit session.
+# Same constraint: must run before the tab imports below or the warnings
+# escape during decorator evaluation.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
+    lambda record: "No runtime found" not in record.getMessage()
+)
 
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-import pantab  # noqa: E402
 
-from src.pipeline.config import HYPER_DIR, max_acyr_label  # noqa: E402
+from src.pipeline.config import max_acyr_label  # noqa: E402
+from src.pipeline.hyper_cache import HyperCache  # noqa: E402
 from src.scripts.tabs import (  # noqa: E402
     bot_goal1_students,
     bot_goal2_adt,
@@ -103,26 +101,8 @@ class ExcelSection:
 class BotChartSpec:
     dataset_name: str
     sheet_name: str
-    build: Callable[["HyperCache"], tuple[pd.DataFrame, dict, pd.DataFrame | None]]
+    build: Callable[[HyperCache], tuple[pd.DataFrame, dict, pd.DataFrame | None]]
     units_metric: bool = False
-
-
-class HyperCache:
-    """Read each local Hyper file at most once per export run."""
-
-    def __init__(self) -> None:
-        self._frames: dict[str, pd.DataFrame] = {}
-
-    def get(self, name: str) -> pd.DataFrame:
-        if name not in self._frames:
-            path = HYPER_DIR / f"{name}.hyper"
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Hyper file not found at {path}.\n"
-                    f"Run: python -m src.pipeline.run {name}"
-                )
-            self._frames[name] = pantab.frame_from_hyper(path, table="Extract")
-        return self._frames[name]
 
 
 def _credit_goal1_base(cache: HyperCache) -> pd.DataFrame:
@@ -371,16 +351,21 @@ def _rate_detail(
         "total": "Denominator Count",
         "pct": "Percent",
     })
-    # reindex (not [[...]] selection) so a missing source column produces a
-    # NaN column rather than KeyError — keeps the export usable when an
-    # upstream Hyper drops one of count/total/pct.
-    return detail.reindex(columns=[
-        "Academic Year",
-        label_col,
-        "Numerator Count",
-        "Denominator Count",
-        "Percent",
-    ]).sort_values(["Academic Year", label_col])
+    # Fail loudly if an upstream Hyper drops a required metric (count/total/
+    # pct → Numerator/Denominator/Percent). Per project policy, the export
+    # must surface schema regressions, not silently ship blank columns to
+    # the workbook (CLAUDE.md: "Do not return unfiltered data when required
+    # schema/filter columns are missing — fail loudly").
+    required_cols = ["Academic Year", label_col,
+                     "Numerator Count", "Denominator Count", "Percent"]
+    missing = [c for c in required_cols if c not in detail.columns]
+    if missing:
+        raise KeyError(
+            f"_rate_detail: missing required column(s) {missing} in upstream "
+            f"frame (have: {sorted(detail.columns.tolist())}). Check the "
+            f"source Hyper's count/total/pct schema."
+        )
+    return detail[required_cols].sort_values(["Academic Year", label_col])
 
 
 def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
@@ -907,8 +892,6 @@ def _write_chart_sheet(
 
 
 def main() -> int:
-    _setup_env()
-
     if not EXPORT_ROOT.parent.exists():
         print(
             f"Export parent not found: {EXPORT_ROOT.parent}\n"
@@ -924,11 +907,13 @@ def main() -> int:
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = snapshot_dir / f"bot_{today}.xlsx"
-    # Write to a sibling .tmp first, then atomic-rename only on full success.
+    # Write to a sibling tmp file, then atomic-rename only on full success.
     # Without this, a partial failure (e.g. one sheet raises) leaves a
     # truncated workbook at the date-stamped final path, overwriting a valid
-    # same-day export.
-    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+    # same-day export. The tmp file MUST keep the .xlsx suffix because
+    # xlsxwriter validates the extension and rejects anything else (e.g.
+    # bot_YYYYMMDD.xlsx.tmp would raise ValueError before any data is written).
+    tmp_path = out_path.with_name(f"{out_path.stem}.tmp{out_path.suffix}")
     print(f"Writing BOT Excel export to {out_path}")
 
     cache = HyperCache()

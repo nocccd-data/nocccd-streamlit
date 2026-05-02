@@ -27,10 +27,10 @@ logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
 )
 
 import pandas as pd  # noqa: E402
-import pantab  # noqa: E402
 from pypdf import PdfReader, PdfWriter  # noqa: E402
 
-from src.pipeline.config import HYPER_DIR, max_acyr_label  # noqa: E402
+from src.pipeline.config import max_acyr_label  # noqa: E402
+from src.pipeline.hyper_cache import HyperCache  # noqa: E402
 from src.scripts.tabs import (  # noqa: E402
     bot_goal1_students,
     bot_goal2_adt,
@@ -55,24 +55,6 @@ _DEFAULT_EXPORT_ROOT = (
     "Documents - EST Data/BOT Reports/PDF Export"
 )
 EXPORT_ROOT = Path(os.environ.get("BOT_EXPORT_ROOT_PDF", _DEFAULT_EXPORT_ROOT))
-
-
-class HyperCache:
-    """Read each local Hyper file at most once per export run."""
-
-    def __init__(self) -> None:
-        self._frames: dict[str, pd.DataFrame] = {}
-
-    def get(self, name: str) -> pd.DataFrame:
-        if name not in self._frames:
-            path = HYPER_DIR / f"{name}.hyper"
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Hyper file not found at {path}.\n"
-                    f"Run: python -m src.pipeline.run {name}"
-                )
-            self._frames[name] = pantab.frame_from_hyper(path, table="Extract")
-        return self._frames[name]
 
 
 # ---------------------------------------------------------------------------
@@ -173,10 +155,12 @@ def main() -> int:
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = snapshot_dir / f"bot_{today}.pdf"
-    # Write to a sibling .tmp first, then atomic-rename only on full success.
+    # Write to a sibling tmp first, then atomic-rename only on full success.
     # Without this, a partial failure on one tab silently overwrites yesterday's
-    # complete same-day PDF with one missing pages.
-    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+    # complete same-day PDF with one missing pages. Keep the .pdf suffix on the
+    # tmp so any downstream tooling that inspects by extension still recognises
+    # it during the brief moment before os.replace().
+    tmp_path = out_path.with_name(f"{out_path.stem}.tmp{out_path.suffix}")
     print(f"Writing combined BOT PDF to {out_path}")
 
     cache = HyperCache()
@@ -207,9 +191,18 @@ def main() -> int:
             )
         return 1
 
-    with open(tmp_path, "wb") as f:
-        writer.write(f)
-    os.replace(tmp_path, out_path)
+    # Match bot_excel_export.py's symmetric try/finally: a write failure
+    # (disk full, permission, PdfWriter corruption) or a failed os.replace
+    # (e.g. cross-device rename on a CI mount) must not orphan a half-written
+    # tmp file next to the user's good same-day PDF.
+    try:
+        with open(tmp_path, "wb") as f:
+            writer.write(f)
+        os.replace(tmp_path, out_path)
+    except Exception as exc:  # noqa: BLE001 — surface a concise CLI failure
+        tmp_path.unlink(missing_ok=True)
+        print(f"PDF write failed: {exc}", file=sys.stderr)
+        return 1
 
     print(f"\nDone. Wrote {len(writer.pages)} pages to {out_path}")
     return 0
