@@ -4,6 +4,8 @@ venv/
 __pycache__/
 .DS_Store
 .playwright-mcp/
+.claude/
+.claude-octopus/
 config.ini
 .streamlit/secrets.toml
 src/pipeline/hyper/
