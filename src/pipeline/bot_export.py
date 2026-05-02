@@ -2,9 +2,9 @@
 
 Reads each BOT tab's local Hyper file under ``src/pipeline/hyper/`` and
 produces a single combined multi-page PDF containing every BOT tab's
-report, written to a date-stamped subfolder under ``EXPORT_ROOT`` so
-each run leaves a daily snapshot. Same-day re-runs overwrite the
-existing day's PDF.
+report, written under a max-academic-year subfolder of ``EXPORT_ROOT``.
+Each run uses a date-stamped filename, so same-day re-runs overwrite the
+existing day's PDF and later run dates create new files in that folder.
 
 Usage:
     python -m src.pipeline.bot_export
@@ -44,8 +44,8 @@ from src.scripts.tabs import (  # noqa: E402
 from src.scripts.tabs.bot_helpers import generate_bot_pdf  # noqa: E402
 
 
-# Destination root on OneDrive. Each run creates a date-stamped subfolder
-# (YYYYMMDD); same-day re-runs overwrite the existing day's PDF.
+# Destination root on OneDrive. Each run creates/uses a max-academic-year
+# subfolder (e.g. 2024-25) and writes a date-stamped PDF inside it.
 EXPORT_ROOT = Path(
     "/Users/hoonywise/Library/CloudStorage/"
     "OneDrive-NorthOrangeCountyCommunityCollegeDistrict/"
@@ -152,16 +152,17 @@ _TAB_BUILDERS: list[tuple[str, callable]] = [
 ]
 
 
-def _acyr_range_label() -> str:
-    """`<min>_to_<max>` from bot_goal1_students config.
+def _max_acyr_label() -> str:
+    """Academic-year label from the max bot_goal1_students acyr_code.
 
     Other BOT datasets sometimes cover a different 5-year window (e.g.
-    living-wage is shifted by 1), so we anchor the filename on the
-    canonical Goal 1 students range to keep it stable.
+    living-wage is shifted by 1), so we anchor export organization on the
+    canonical Goal 1 students range. Example: ``2024`` -> ``2024-25``.
     """
     cfg = DATASETS["bot_goal1_students"]
-    acyrs = sorted(cfg[cfg["param_name"]])
-    return f"{acyrs[0]}_to_{acyrs[-1]}"
+    max_acyr = max(cfg[cfg["param_name"]], key=lambda value: int(value))
+    start_year = int(max_acyr)
+    return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
 def main() -> int:
@@ -174,10 +175,10 @@ def main() -> int:
         return 1
 
     today = date.today().strftime("%Y%m%d")
-    snapshot_dir = EXPORT_ROOT / today
+    snapshot_dir = EXPORT_ROOT / _max_acyr_label()
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = snapshot_dir / f"bot_export_{_acyr_range_label()}.pdf"
+    out_path = snapshot_dir / f"bot_{today}.pdf"
     print(f"Writing combined BOT PDF to {out_path}")
 
     writer = PdfWriter()

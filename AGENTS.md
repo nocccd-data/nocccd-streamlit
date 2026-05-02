@@ -60,6 +60,10 @@ python -m src.pipeline.seat_count_export
 # Combined BOT tabs PDF export to OneDrive
 # (single multi-page PDF, all BOT tabs concatenated, overwrites same-day file)
 python -m src.pipeline.bot_export
+
+# BOT chart-table Excel export to OneDrive
+# (one workbook with one chart-data sheet per BOT metric tab)
+python -m src.pipeline.bot_excel_export
 ```
 
 ## Architecture
@@ -119,12 +123,22 @@ On-demand bulk export of the Seat Count Report to a local OneDrive folder. Each 
 On-demand bulk export of every BOT (Board of Trustees) tab into a **single combined multi-page PDF** under a local OneDrive folder. Each run reads each `src/pipeline/hyper/bot_*.hyper` file (already produced by the standard pipeline), generates the same PDF each tab's `Download PDF` button produces in the Streamlit app, and concatenates them with `pypdf` into one output PDF. Run `python -m src.pipeline.bot_export` whenever a refresh is wanted; there is no scheduler.
 
 - **Source**: local Hyper only — no Tableau Cloud download, no `secrets.toml` needed. Each per-tab builder reads the relevant `bot_*.hyper` file(s) directly. If a Hyper file is missing, that tab errors out and is reported, but the run continues with the remaining tabs.
-- **Destination layout**: `<EXPORT_ROOT>/<YYYYMMDD>/bot_export_<acyr_min>_to_<acyr_max>.pdf`. `EXPORT_ROOT` is a module-level constant pointing to `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/PDF Export`. Same-day re-runs overwrite; new calendar days create new snapshot directories.
-- **Filename min/max**: derived from `DATASETS["bot_goal1_students"]["acyr_code"]` only — other BOT datasets sometimes cover a different 5-year window (e.g. `bot_goal2_wage` is shifted back by one year), so the filename is anchored to the canonical Goal 1 range to keep it stable run-to-run.
+- **Destination layout**: `<EXPORT_ROOT>/<max_acyr_label>/bot_<YYYYMMDD>.pdf`. `EXPORT_ROOT` is a module-level constant pointing to `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/PDF Export`. The folder label is derived from the max `DATASETS["bot_goal1_students"]["acyr_code"]`, e.g. `2024` -> `2024-25`. Same-day re-runs overwrite that day's PDF; later run dates create new files in the same academic-year folder.
+- **Academic-year folder label**: derived from `DATASETS["bot_goal1_students"]["acyr_code"]` only — other BOT datasets sometimes cover a different 5-year window (e.g. `bot_goal2_wage` is shifted back by one year), so export organization is anchored to the canonical Goal 1 range.
 - **Reused code**: each per-tab builder imports the corresponding tab module's `_TITLES` (and any `_normalize` / `_shift_df` helper, e.g. `bot_goal2_xfer._normalize`, `bot_goal2_wage._shift_df`) and calls `bot_helpers.generate_bot_pdf(df, _TITLES, base_df=…)` — except `bot_goal3_units`, which has its own self-contained `_generate_pdf(df)` since it's an average-metric tab. The `base_df` denominator filtering (e.g. `base[base["site"] == "Credit"]` for the credit-only tabs, `bot_goal2_cert_nc_denom` for noncredit, `bot_goal2_wage_denom` shifted forward by 1 year for living-wage) mirrors each tab's `render()` Query block exactly so the bulk PDF is byte-equivalent to a manual interactive download with the full default acyr range.
 - **Tab order**: Goal 1 Students → Goal 2 ADT → Associate Degrees → Bachelor's → Certificates → Noncredit Certificates → Living Wage → Transfers → Goal 3 Financial Aid → Average Units (encoded in `_TAB_BUILDERS`).
 - **Merging**: each tab's PDF is rendered to bytes via matplotlib `PdfPages`, then `pypdf.PdfReader` reads the bytes and `PdfWriter.add_page()` appends each page to a single output writer. `pypdf` is added to `requirements.txt` for this purpose.
 - **Failure handling**: per-tab errors are caught, logged, and counted; the rest of the run continues. The exit code is non-zero if anything was skipped.
+
+### Excel export — BOT chart tables (`src/pipeline/bot_excel_export.py`)
+
+On-demand Excel export of the table data behind every BOT Streamlit/PDF chart. Each run writes a single `.xlsx` workbook under a local OneDrive folder. Run `python -m src.pipeline.bot_excel_export` whenever a workbook refresh is wanted; there is no scheduler.
+
+- **Source**: local Hyper only — no Tableau Cloud download, no `secrets.toml` needed. The workbook reads `src/pipeline/hyper/bot_*.hyper` extracts to build aggregated chart-table sheets, but does not export raw student-level extract tabs.
+- **Destination layout**: `<EXPORT_ROOT>/<max_acyr_label>/bot_<YYYYMMDD>.xlsx`. `EXPORT_ROOT` is a module-level constant pointing to `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/Streamlit Data Export`. The folder label is derived from the max `DATASETS["bot_goal1_students"]["acyr_code"]`, e.g. `2024` -> `2024-25`. Same-day re-runs overwrite that day's workbook; later run dates create new files in the same academic-year folder.
+- **Workbook layout**: 10 chart-table sheets, one per displayed BOT metric tab, in the same order as the combined PDF export. Denominator extracts are used only for percentage calculations, not exported as raw sheets.
+- **Reused code**: chart-table sheets use the same `bot_helpers` aggregation functions and the same per-tab preparation rules as `bot_export.py` (`bot_goal1_students` credit-only denominator filters, `bot_goal2_cert_nc_denom`, `bot_goal2_wage_denom` shifted forward, and `bot_goal2_xfer._normalize`). `bot_goal3_units` uses its own average-units aggregators.
+- **Dependency**: uses `xlsxwriter` through `pandas.ExcelWriter`; keep `xlsxwriter` in `requirements.txt`.
 
 ### Tab system (`src/scripts/tabs/`)
 

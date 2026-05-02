@@ -11,3 +11,4 @@ tableauserverclient
 nbformat
 ipywidgets
 pypdf
+xlsxwriter
