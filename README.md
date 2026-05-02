@@ -80,8 +80,17 @@ nocccd-streamlit/
 │       └── NOCCCD Logo.jpg
 ├── requirements.txt
 ├── .python-version               # Pins Python 3.13 for Streamlit Cloud
-├── AGENTS.md                     # Codex project guidance
-├── CLAUDE.md                     # Claude/project implementation guidance
+├── docs/
+│   ├── agent-guidance.md         # Overview, architecture, commands, deployment
+│   ├── workflow.md               # Cross-repo workflow (notebooks → streamlit)
+│   ├── pipeline.md               # Pipeline flow, SQL parameterization, gotchas
+│   ├── tabs.md                   # Tab system, filters, downloads, PDF rendering
+│   ├── bot-tabs.md               # BOT goal/metric tabs, PDF generator, Excel helpers
+│   ├── exports.md                # Bulk PDF/Excel exports
+│   ├── mail.md                   # Mass mailing system
+│   └── theme.md                  # Theme system, color palettes, NOCCCD brand colors
+├── AGENTS.md                     # Thin Codex entrypoint
+├── CLAUDE.md                     # Thin Claude Code entrypoint
 └── README.md
 ```
 
@@ -365,7 +374,7 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle (vis
 - **`src/scripts/theme.py`** injects CSS overrides using the `light-dark()` CSS function, plus a JS `MutationObserver` that syncs the color scheme to portaled elements (e.g., selectbox dropdowns rendered outside the main app container)
 - `apply_theme()` is called once from `streamlit_app.py` — no per-tab setup needed
 
-See `CLAUDE.md` for detailed theme gotchas, color reference table, and guidance on adding new themed elements.
+See `docs/theme.md` for detailed gotchas, the color palette reference, and the NOCCCD brand color table.
 
 ## Adding a New Tab
 
