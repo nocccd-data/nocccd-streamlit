@@ -5,7 +5,13 @@ from src.scripts.data_provider import (
     fetch_bot_goal1_students,
     fetch_bot_goal3_finaid,
 )
-from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
+from src.scripts.pdf_cache import (
+    cached_excel_bytes,
+    cached_pdf_bytes,
+    clear_excel_cache,
+    clear_pdf_cache,
+)
+from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal3_finaid"]
@@ -69,12 +75,17 @@ def render():
             return
         st.session_state["bg3f_df"] = df
         st.session_state["bg3f_base"] = base
+        clear_excel_cache("bg3f")
         clear_pdf_cache("bg3f")
 
     if "bg3f_df" in st.session_state:
+        cache_key = (
+            id(st.session_state["bg3f_df"]),
+            id(st.session_state.get("bg3f_base")),
+        )
         pdf_bytes = cached_pdf_bytes(
             "bg3f",
-            (id(st.session_state["bg3f_df"]), id(st.session_state.get("bg3f_base"))),
+            cache_key,
             lambda: generate_bot_pdf(
                 st.session_state["bg3f_df"],
                 _TITLES,
@@ -85,6 +96,20 @@ def render():
             "Download PDF", data=pdf_bytes,
             file_name="bot_goal3_finaid.pdf", mime="application/pdf",
             key="bg3f_pdf_btn",
+        )
+        excel_bytes = cached_excel_bytes(
+            "bg3f",
+            cache_key,
+            lambda: generate_bot_excel(
+                st.session_state["bg3f_df"],
+                _TITLES,
+                base_df=st.session_state.get("bg3f_base"),
+            ),
+        )
+        st.sidebar.download_button(
+            "Download Excel", data=excel_bytes,
+            file_name="bot_goal3_finaid.xlsx", mime=EXCEL_MIME,
+            key="bg3f_excel_btn",
         )
 
     if "bg3f_df" not in st.session_state:

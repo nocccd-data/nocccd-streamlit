@@ -2,7 +2,13 @@ import streamlit as st
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_bot_goal1_students, fetch_bot_goal2_cert
-from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
+from src.scripts.pdf_cache import (
+    cached_excel_bytes,
+    cached_pdf_bytes,
+    clear_excel_cache,
+    clear_pdf_cache,
+)
+from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
 
 _CFG = DATASETS["bot_goal2_cert"]
@@ -70,12 +76,17 @@ def render():
             return
         st.session_state["bg2_df"] = df
         st.session_state["bg2_base"] = base
+        clear_excel_cache("bg2")
         clear_pdf_cache("bg2")
 
     if "bg2_df" in st.session_state:
+        cache_key = (
+            id(st.session_state["bg2_df"]),
+            id(st.session_state.get("bg2_base")),
+        )
         pdf_bytes = cached_pdf_bytes(
             "bg2",
-            (id(st.session_state["bg2_df"]), id(st.session_state.get("bg2_base"))),
+            cache_key,
             lambda: generate_bot_pdf(
                 st.session_state["bg2_df"],
                 _TITLES,
@@ -86,6 +97,20 @@ def render():
             "Download PDF", data=pdf_bytes,
             file_name="bot_goal2_cert.pdf", mime="application/pdf",
             key="bg2_pdf_btn",
+        )
+        excel_bytes = cached_excel_bytes(
+            "bg2",
+            cache_key,
+            lambda: generate_bot_excel(
+                st.session_state["bg2_df"],
+                _TITLES,
+                base_df=st.session_state.get("bg2_base"),
+            ),
+        )
+        st.sidebar.download_button(
+            "Download Excel", data=excel_bytes,
+            file_name="bot_goal2_cert.xlsx", mime=EXCEL_MIME,
+            key="bg2_excel_btn",
         )
 
     if "bg2_df" not in st.session_state:

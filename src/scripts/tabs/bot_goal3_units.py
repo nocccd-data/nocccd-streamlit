@@ -19,7 +19,20 @@ from matplotlib.patches import Rectangle
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_bot_goal3_units
-from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
+from src.scripts.pdf_cache import (
+    cached_excel_bytes,
+    cached_pdf_bytes,
+    clear_excel_cache,
+    clear_pdf_cache,
+)
+from src.scripts.tabs.bot_excel_helpers import (
+    EXCEL_MIME,
+    ExcelSection,
+    avg_unit_cols,
+    matrix_table,
+    sections_to_excel_bytes,
+    value_summary,
+)
 from src.scripts.tabs.bot_helpers import (
     CAMPUS_ORDER,
     COLOR_MAP,
@@ -917,6 +930,184 @@ def _generate_pdf(df) -> bytes:
     return buf.getvalue()
 
 
+def _excel_campus_table(df):
+    df_agg = _aggregate_campus(df)
+    years = sorted(df_agg["academic_year"].dropna().unique())
+    campuses = [c for c in CAMPUS_ORDER if c in df_agg["camp_desc"].values]
+    piv = df_agg.pivot_table(
+        index="camp_desc",
+        columns="academic_year",
+        values="avg_units",
+        aggfunc="first",
+        observed=True,
+    )
+    out = piv.reindex(campuses).reindex(columns=years).reset_index()
+    out = out.rename(columns={"camp_desc": "Campus"})
+
+    df_pct = _pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
+    if not df_pct.empty:
+        df_pct = df_pct.copy()
+        df_pct["5-Yr Percent Change"] = df_pct["pct_change"] / 100
+        out = out.merge(
+            df_pct[["camp_desc", "5-Yr Percent Change"]],
+            left_on="Campus",
+            right_on="camp_desc",
+            how="left",
+        ).drop(columns=["camp_desc"])
+    return out
+
+
+def _generate_excel(df) -> bytes:
+    years = sorted(df["academic_year"].dropna().unique())
+    sections = [
+        ExcelSection(
+            _TITLES["headcount_title"],
+            _excel_campus_table(df),
+            percent_cols=("5-Yr Percent Change",),
+            decimal_cols=tuple(years),
+        ),
+    ]
+
+    df_race = _aggregate_race(df)
+    visible_races = _visible_races(df_race)
+    race_summary = value_summary(
+        df_race,
+        key_col="race_description",
+        label_col="Race/Ethnicity",
+        order=visible_races,
+        label_map=RACE_SHORT,
+        years=years,
+        value_col="avg_units",
+        value_name="Avg Units",
+    )
+    sections.extend([
+        ExcelSection(
+            _TITLES["race_title"],
+            matrix_table(
+                df_race,
+                key_col="race_description",
+                label_col="Race/Ethnicity",
+                order=visible_races,
+                label_map=RACE_SHORT,
+                years=years,
+                value_col="avg_units",
+            ),
+            decimal_cols=tuple(years),
+        ),
+        ExcelSection(
+            f"{_TITLES['race_title']} - Summary",
+            race_summary,
+            percent_cols=("5-Yr Percent Change",),
+            decimal_cols=avg_unit_cols(race_summary),
+        ),
+        ExcelSection(
+            f"{_TITLES['race_title']} - Detail",
+            df_race.rename(columns={
+                "academic_year": "Academic Year",
+                "race_description": "Race/Ethnicity",
+                "avg_units": "Avg Units",
+                "count": "Student Count",
+            })[["Academic Year", "Race/Ethnicity", "Avg Units", "Student Count"]],
+            integer_cols=("Student Count",),
+            decimal_cols=("Avg Units",),
+        ),
+    ])
+
+    df_gender = _aggregate_gender(df)
+    visible_genders = _visible_genders(df_gender)
+    gender_label_map = {key: GENDER_LABELS[key] for key in GENDER_ORDER}
+    gender_summary = value_summary(
+        df_gender,
+        key_col="gender",
+        label_col="Gender",
+        order=visible_genders,
+        label_map=gender_label_map,
+        years=years,
+        value_col="avg_units",
+        value_name="Avg Units",
+    )
+    sections.extend([
+        ExcelSection(
+            _TITLES["gender_title"],
+            matrix_table(
+                df_gender,
+                key_col="gender",
+                label_col="Gender",
+                order=visible_genders,
+                label_map=gender_label_map,
+                years=years,
+                value_col="avg_units",
+            ),
+            decimal_cols=tuple(years),
+        ),
+        ExcelSection(
+            f"{_TITLES['gender_title']} - Summary",
+            gender_summary,
+            percent_cols=("5-Yr Percent Change",),
+            decimal_cols=avg_unit_cols(gender_summary),
+        ),
+        ExcelSection(
+            f"{_TITLES['gender_title']} - Detail",
+            df_gender.rename(columns={
+                "academic_year": "Academic Year",
+                "gender_label": "Gender",
+                "avg_units": "Avg Units",
+                "count": "Student Count",
+            })[["Academic Year", "Gender", "Avg Units", "Student Count"]],
+            integer_cols=("Student Count",),
+            decimal_cols=("Avg Units",),
+        ),
+    ])
+
+    df_fg = _aggregate_firstgen(df)
+    fg_label_map = {key: FIRSTGEN_LABELS[key] for key in FIRSTGEN_ORDER}
+    fg_summary = value_summary(
+        df_fg,
+        key_col="fg",
+        label_col="First-Generation Status",
+        order=FIRSTGEN_ORDER,
+        label_map=fg_label_map,
+        years=years,
+        value_col="avg_units",
+        value_name="Avg Units",
+    )
+    sections.extend([
+        ExcelSection(
+            _TITLES["firstgen_title"],
+            matrix_table(
+                df_fg,
+                key_col="fg",
+                label_col="First-Generation Status",
+                order=FIRSTGEN_ORDER,
+                label_map=fg_label_map,
+                years=years,
+                value_col="avg_units",
+            ),
+            decimal_cols=tuple(years),
+        ),
+        ExcelSection(
+            f"{_TITLES['firstgen_title']} - Summary",
+            fg_summary,
+            percent_cols=("5-Yr Percent Change",),
+            decimal_cols=avg_unit_cols(fg_summary),
+        ),
+        ExcelSection(
+            f"{_TITLES['firstgen_title']} - Detail",
+            df_fg.rename(columns={
+                "academic_year": "Academic Year",
+                "fg_label": "First-Generation Status",
+                "avg_units": "Avg Units",
+            })[["Academic Year", "First-Generation Status", "Avg Units"]],
+            decimal_cols=("Avg Units",),
+        ),
+    ])
+
+    return sections_to_excel_bytes(
+        sections,
+        title=f"{_TITLES['tab_title']} - Chart Table Data",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Streamlit render
 # ---------------------------------------------------------------------------
@@ -947,18 +1138,30 @@ def render():
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg3u_df"] = df
+        clear_excel_cache("bg3u")
         clear_pdf_cache("bg3u")
 
     if "bg3u_df" in st.session_state:
+        cache_key = id(st.session_state["bg3u_df"])
         pdf_bytes = cached_pdf_bytes(
             "bg3u",
-            id(st.session_state["bg3u_df"]),
+            cache_key,
             lambda: _generate_pdf(st.session_state["bg3u_df"]),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
             file_name="bot_goal3_units.pdf", mime="application/pdf",
             key="bg3u_pdf_btn",
+        )
+        excel_bytes = cached_excel_bytes(
+            "bg3u",
+            cache_key,
+            lambda: _generate_excel(st.session_state["bg3u_df"]),
+        )
+        st.sidebar.download_button(
+            "Download Excel", data=excel_bytes,
+            file_name="bot_goal3_units.xlsx", mime=EXCEL_MIME,
+            key="bg3u_excel_btn",
         )
 
     if "bg3u_df" not in st.session_state:
