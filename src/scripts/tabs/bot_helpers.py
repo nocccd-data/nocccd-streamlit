@@ -186,6 +186,13 @@ def _visible_genders(df_gender: pd.DataFrame,
     return _visible_categories(df_gender, "gender", GENDER_ORDER, threshold)
 
 
+# Public aliases — used by src.pipeline.bot_excel_export and bot_excel_helpers.
+# Promoted from underscore-prefixed implementations so internal renames do not
+# silently break those consumers.
+visible_races = _visible_races
+visible_genders = _visible_genders
+
+
 def aggregate_race(
     df: pd.DataFrame, base_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:

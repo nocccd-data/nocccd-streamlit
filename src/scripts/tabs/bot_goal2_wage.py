@@ -84,6 +84,12 @@ def _shift_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# Public alias — used by src.pipeline.bot_export and bot_excel_export. Promoted
+# from the underscore-prefixed implementation so that an internal rename of
+# ``_shift_df`` would not silently break the exporters.
+shift_df = _shift_df
+
+
 def render():
     st.header("BOT Goal 2 - Living Wage")
 

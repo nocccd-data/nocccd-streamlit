@@ -53,9 +53,18 @@ def extract_dataset(name: str) -> Path:
     engine = get_engine(section=cfg.get("db_section", "dwhdb"))
 
     if re.search(r"IN\s*\(:t1", base_sql, re.IGNORECASE):
-        # Multi-acyr: expand IN clause
+        # Multi-acyr: expand IN clause. DOTALL so multi-line SQL templates
+        # (e.g. `IN (\n    :t1,\n    :t2\n)`) match — without it, `.*?` stops
+        # at the first newline, the substitution silently fails, and Oracle
+        # executes with only :t1 bound, returning a partial result with no
+        # error.
         placeholders = ", ".join(f":t{i}" for i in range(1, len(values) + 1))
-        sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql, flags=re.IGNORECASE)
+        sql = re.sub(
+            r"IN\s*\(:t1.*?\)",
+            f"IN ({placeholders})",
+            base_sql,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
         params = {f"t{i}": t for i, t in enumerate(values, 1)}
         with engine.connect() as conn:
             df = pd.read_sql(sql, conn, params=params)
