@@ -49,7 +49,7 @@ nocccd-streamlit/
 │   │   ├── home_config.py        # Project card config (descriptions, metrics)
 │   │   ├── admin_config.py       # Protected tabs configuration
 │   │   ├── auth.py               # Admin authentication gate
-│   │   ├── pdf_cache.py          # Stable Streamlit PDF download-byte cache
+│   │   ├── pdf_cache.py          # Stable Streamlit PDF/Excel download-byte cache
 │   │   ├── theme.py              # Light/dark theme CSS overrides
 │   │   └── tabs/                 # Tab modules (one per dashboard)
 │   │       ├── __init__.py       # Tab registry
@@ -64,6 +64,7 @@ nocccd-streamlit/
 │   │       ├── mis_fa_submitted_scff.py
 │   │       ├── cte_sx_submitted_scff.py
 │   │       ├── bot_helpers.py
+│   │       ├── bot_excel_helpers.py
 │   │       ├── bot_goal1_students.py
 │   │       ├── bot_goal2_adt.py
 │   │       ├── bot_goal2_assoc.py

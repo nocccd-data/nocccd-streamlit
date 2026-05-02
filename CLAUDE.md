@@ -281,11 +281,13 @@ Two patterns are supported by `extract.py`:
 
 **Choosing db_section for performance**: When a query joins tables across REPT and DWHDB, prefer the `db_section` that **minimizes dblink traversal**. For example, `bot_goal2_wage_denom` uses `db_section: "dwhdb"` because it needs `dwh.scff_xfer` (local to DWHDB) plus Banner tables (accessible via `@banner.nocccd.edu` dblink). Running it from REPT with `@dwhdb.nocccd.edu` for the fact table ran for 17+ hours before timing out; running from DWHDB with the dblinks pointing to Banner ran in minutes. The dblink direction matters because Oracle's filter pushdown is sometimes one-way.
 
-### Sidebar PDF export
+### Sidebar download exports
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
 
 **BOT tabs share a single PDF generator**: `generate_bot_pdf(df, titles, base_df=None)` in `bot_helpers.py` produces a portrait 8.5×11 PDF with 2 sections per page. Page 1 has Headcount + Race, Page 2 has Gender + First-Gen. Sections use paper-coordinate positioning via `fig.add_axes([left, bottom, width, height])`. Each tab sets `tab_title` in its `_TITLES` dict for the PDF header. Titles-dict flags (`include_nocccd`, `credit_only_firstgen`, `headcount_only`, per-section `*_note` keys, `source`) apply to PDF the same way as to the interactive charts. HTML data-bar tables are rendered using matplotlib `Rectangle` patches; HTML summary tables become `ax.table()` with colored cell facecolors.
+
+**BOT tabs share Excel helpers**: `generate_bot_excel(df, titles, base_df=None)` in `bot_excel_helpers.py` writes the table data behind the Streamlit charts, using the same aggregation and denominator rules as the interactive view and PDF. Goal 3 Average Units uses `bot_goal3_units._generate_excel(df)` because that tab computes average values rather than counts/rates.
 
 **PDF always renders in light theme**: The PDF is always meant to print on white paper, so `generate_bot_pdf()` explicitly sets color-related `matplotlib.rcParams` (`figure.facecolor`, `axes.facecolor`, `text.color`, `xtick.color`, `ytick.color`, etc.) to light-theme values. This prevents Streamlit's dark-theme context from leaking into the matplotlib global state. Data-bar and summary table text is hardcoded **black** on colored cells — contrast-aware white text would become invisible when it overflows past a narrow bar onto the white page background.
 
@@ -307,10 +309,10 @@ Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Per
 - Plotly interactive charts: value labels use `textfont=dict(size=12)` — matches the race HTML data-bar table's 12px and keeps all four charts visually consistent.
 - Matplotlib PDF charts: value labels use `fontsize=6`; axis tick labels use `fontsize=6-7`; summary tables and headers use `fontsize=7`.
 
-**Critical ordering rule**: The PDF download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the PDF check (`if "key" in st.session_state`) runs before the query block that sets that key, the button won't appear on the same run as the query — it only shows after navigating away and back.
+**Critical ordering rule**: The download button block **must run after the query block**, not before it. Streamlit executes top-to-bottom; if the download check (`if "key" in st.session_state`) runs before the query block that sets that key, the buttons won't appear on the same run as the query — they only show after navigating away and back.
 
 ```python
-# CORRECT — PDF block after query block
+# CORRECT — download block after query block
 query_btn = st.sidebar.button("Query", key="xx_query_btn")
 
 if query_btn:
@@ -318,9 +320,10 @@ if query_btn:
 
 if "xx_data" in st.session_state:
     st.sidebar.download_button("Download PDF", data=..., key="xx_pdf_btn")
+    st.sidebar.download_button("Download Excel", data=..., key="xx_excel_btn")
 ```
 
-**Memoize PDF bytes per filter combination**: `st.download_button` registers `data` in an in-memory media-file store keyed by a content hash, then hands the browser a URL like `/media/<hash>.pdf`. Matplotlib **embeds a creation timestamp in every PDF**, so calling the generator on each rerun (every sidebar widget change triggers one) yields different bytes → different hash → the URL the browser is about to fetch is already invalid. The browser then silently saves Streamlit's 404 HTML response under the `.pdf` filename, producing the "downloaded an HTML file" symptom. Use `cached_pdf_bytes()` and `clear_pdf_cache()` from `src/scripts/pdf_cache.py` for new PDF-enabled tabs; the Query handler should clear the cache so a fresh fetch triggers a fresh PDF. `seat_count_report.py` has an equivalent custom cache pattern because its PDF key depends on cascading filter state.
+**Memoize download bytes per filter combination**: `st.download_button` registers `data` in an in-memory media-file store keyed by a content hash, then hands the browser a URL like `/media/<hash>.pdf`. Matplotlib **embeds a creation timestamp in every PDF**, so calling the generator on each rerun (every sidebar widget change triggers one) yields different bytes → different hash → the URL the browser is about to fetch is already invalid. The browser then silently saves Streamlit's 404 HTML response under the `.pdf` filename, producing the "downloaded an HTML file" symptom. Use `cached_pdf_bytes()` / `clear_pdf_cache()` and `cached_excel_bytes()` / `clear_excel_cache()` from `src/scripts/pdf_cache.py` for new download-enabled tabs; the Query handler should clear the cache so a fresh fetch triggers fresh download files. `seat_count_report.py` has an equivalent custom cache pattern because its PDF key depends on cascading filter state.
 
 **PDF rendering approach**: Use matplotlib (not kaleido/plotly `to_image()`). Kaleido 1.x launches a Chrome process to render images, which is slow and causes a visible Chrome window to flash on macOS. Matplotlib renders natively with no browser dependency. Two patterns exist:
 - **Table-based**: `ax.table()` renders a DataFrame as a table on a matplotlib axes. Good for small/medium tables. See `fast_facts.py` and `class_schedule_heatmap.py`.
