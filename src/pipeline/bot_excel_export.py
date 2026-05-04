@@ -20,24 +20,31 @@ from pathlib import Path
 from tempfile import gettempdir
 from typing import Callable
 
-# Matplotlib is imported by BOT tab modules even though this exporter writes
-# tables only. Keep its cache out of home-directory paths that may be sandboxed.
+
+# Matplotlib is imported transitively by the BOT tab modules below, even
+# though this exporter writes tables only. Matplotlib reads MPLCONFIGDIR
+# during its own import, so this MUST run before the tab-module imports —
+# deferring it into main() makes the override a no-op. The setdefault and
+# mkdir calls are idempotent, so importing this module from a test or REPL
+# is safe.
 _MPLCONFIGDIR = Path(gettempdir()) / "nocccd-streamlit-matplotlib"
 _MPLCONFIGDIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_MPLCONFIGDIR))
 
-# Silence Streamlit's "no runtime found" warnings BEFORE importing tab
-# modules. Their @st.cache_data decorators emit a warning per definition
-# when evaluated outside a Streamlit session.
+# Silence Streamlit's "no runtime found" warnings emitted by tab modules'
+# @st.cache_data decorators when evaluated outside a Streamlit session.
+# Same constraint: must run before the tab imports below or the warnings
+# escape during decorator evaluation.
 logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(
     lambda record: "No runtime found" not in record.getMessage()
 )
 
+
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-import pantab  # noqa: E402
 
-from src.pipeline.config import DATASETS, HYPER_DIR  # noqa: E402
+from src.pipeline.config import max_acyr_label  # noqa: E402
+from src.pipeline.hyper_cache import HyperCache  # noqa: E402
 from src.scripts.tabs import (  # noqa: E402
     bot_goal1_students,
     bot_goal2_adt,
@@ -57,23 +64,25 @@ from src.scripts.tabs.bot_helpers import (  # noqa: E402
     GENDER_LABELS,
     GENDER_ORDER,
     RACE_SHORT,
-    _visible_genders,
-    _visible_races,
     aggregate_firstgen,
     aggregate_gender,
     aggregate_headcount,
     aggregate_race,
     compute_pct_change,
+    visible_genders,
+    visible_races,
 )
 
 
 # Destination root on OneDrive. Each run creates/uses a max-academic-year
 # subfolder (e.g. 2024-25) and writes a date-stamped workbook inside it.
-EXPORT_ROOT = Path(
+# Override with BOT_EXPORT_ROOT_EXCEL env var on machines/CI without OneDrive.
+_DEFAULT_EXPORT_ROOT = (
     "/Users/hoonywise/Library/CloudStorage/"
     "OneDrive-NorthOrangeCountyCommunityCollegeDistrict/"
     "Documents - EST Data/BOT Reports/Streamlit Data Export"
 )
+EXPORT_ROOT = Path(os.environ.get("BOT_EXPORT_ROOT_EXCEL", _DEFAULT_EXPORT_ROOT))
 
 EXCEL_MAX_ROWS = 1_048_576
 EXCEL_MAX_COLS = 16_384
@@ -92,26 +101,8 @@ class ExcelSection:
 class BotChartSpec:
     dataset_name: str
     sheet_name: str
-    build: Callable[["HyperCache"], tuple[pd.DataFrame, dict, pd.DataFrame | None]]
+    build: Callable[[HyperCache], tuple[pd.DataFrame, dict, pd.DataFrame | None]]
     units_metric: bool = False
-
-
-class HyperCache:
-    """Read each local Hyper file at most once per export run."""
-
-    def __init__(self) -> None:
-        self._frames: dict[str, pd.DataFrame] = {}
-
-    def get(self, name: str) -> pd.DataFrame:
-        if name not in self._frames:
-            path = HYPER_DIR / f"{name}.hyper"
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Hyper file not found at {path}.\n"
-                    f"Run: python -m src.pipeline.run {name}"
-                )
-            self._frames[name] = pantab.frame_from_hyper(path, table="Extract")
-        return self._frames[name]
 
 
 def _credit_goal1_base(cache: HyperCache) -> pd.DataFrame:
@@ -170,8 +161,8 @@ def _build_goal2_cert_nc(
 def _build_goal2_wage(
     cache: HyperCache,
 ) -> tuple[pd.DataFrame, dict, pd.DataFrame | None]:
-    df = bot_goal2_wage._shift_df(cache.get("bot_goal2_wage"))
-    base = bot_goal2_wage._shift_df(cache.get("bot_goal2_wage_denom"))
+    df = bot_goal2_wage.shift_df(cache.get("bot_goal2_wage"))
+    base = bot_goal2_wage.shift_df(cache.get("bot_goal2_wage_denom"))
     return df, bot_goal2_wage._TITLES, base
 
 
@@ -179,7 +170,7 @@ def _build_goal2_xfer(
     cache: HyperCache,
 ) -> tuple[pd.DataFrame, dict, pd.DataFrame | None]:
     base = _credit_goal1_base(cache)
-    df = bot_goal2_xfer._normalize(cache.get("bot_goal2_xfer"), base_df=base)
+    df = bot_goal2_xfer.normalize(cache.get("bot_goal2_xfer"), base_df=base)
     return df, bot_goal2_xfer._TITLES, base
 
 
@@ -216,19 +207,6 @@ _CHART_SPECS: list[BotChartSpec] = [
         units_metric=True,
     ),
 ]
-
-
-def _max_acyr_label() -> str:
-    """Academic-year label from the max bot_goal1_students acyr_code.
-
-    Other BOT datasets sometimes cover a different 5-year window, so export
-    organization is anchored on the canonical Goal 1 students range. Example:
-    ``2024`` -> ``2024-25``.
-    """
-    cfg = DATASETS["bot_goal1_students"]
-    max_acyr = max(cfg[cfg["param_name"]], key=lambda value: int(value))
-    start_year = int(max_acyr)
-    return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
 def _safe_sheet_name(name: str) -> str:
@@ -322,7 +300,7 @@ def _value_summary(
         last_val = _get_numeric(piv, key, last_yr)
         change = (
             (last_val - first_val) / first_val
-            if first_val and last_val is not None
+            if first_val is not None and first_val != 0 and last_val is not None
             else np.nan
         )
         rows.append({
@@ -373,13 +351,21 @@ def _rate_detail(
         "total": "Denominator Count",
         "pct": "Percent",
     })
-    return detail[[
-        "Academic Year",
-        label_col,
-        "Numerator Count",
-        "Denominator Count",
-        "Percent",
-    ]].sort_values(["Academic Year", label_col])
+    # Fail loudly if an upstream Hyper drops a required metric (count/total/
+    # pct → Numerator/Denominator/Percent). Per project policy, the export
+    # must surface schema regressions, not silently ship blank columns to
+    # the workbook (CLAUDE.md: "Do not return unfiltered data when required
+    # schema/filter columns are missing — fail loudly").
+    required_cols = ["Academic Year", label_col,
+                     "Numerator Count", "Denominator Count", "Percent"]
+    missing = [c for c in required_cols if c not in detail.columns]
+    if missing:
+        raise KeyError(
+            f"_rate_detail: missing required column(s) {missing} in upstream "
+            f"frame (have: {sorted(detail.columns.tolist())}). Check the "
+            f"source Hyper's count/total/pct schema."
+        )
+    return detail[required_cols].sort_values(["Academic Year", label_col])
 
 
 def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
@@ -431,7 +417,7 @@ def _standard_chart_sections(
         return sections
 
     df_race = aggregate_race(df, base_df=base_df)
-    visible_races = _visible_races(df_race)
+    race_keys = visible_races(df_race)
     sections.extend([
         ExcelSection(
             titles["race_title"],
@@ -439,7 +425,7 @@ def _standard_chart_sections(
                 df_race,
                 key_col="race_description",
                 label_col="Race/Ethnicity",
-                order=visible_races,
+                order=race_keys,
                 label_map=RACE_SHORT,
                 years=years,
                 value_col="pct",
@@ -452,7 +438,7 @@ def _standard_chart_sections(
                 df_race,
                 key_col="race_description",
                 label_col="Race/Ethnicity",
-                order=visible_races,
+                order=race_keys,
                 label_map=RACE_SHORT,
                 years=years,
             ),
@@ -464,7 +450,7 @@ def _standard_chart_sections(
                 df_race,
                 key_col="race_description",
                 label_col="Race/Ethnicity",
-                order=visible_races,
+                order=race_keys,
                 label_map=RACE_SHORT,
             ),
             percent_cols=("Percent",),
@@ -473,7 +459,7 @@ def _standard_chart_sections(
     ])
 
     df_gender = aggregate_gender(df, base_df=base_df)
-    visible_genders = _visible_genders(df_gender)
+    gender_keys = visible_genders(df_gender)
     gender_label_map = {key: GENDER_LABELS[key] for key in GENDER_ORDER}
     sections.extend([
         ExcelSection(
@@ -482,7 +468,7 @@ def _standard_chart_sections(
                 df_gender,
                 key_col="gender",
                 label_col="Gender",
-                order=visible_genders,
+                order=gender_keys,
                 label_map=gender_label_map,
                 years=years,
                 value_col="pct",
@@ -495,7 +481,7 @@ def _standard_chart_sections(
                 df_gender,
                 key_col="gender",
                 label_col="Gender",
-                order=visible_genders,
+                order=gender_keys,
                 label_map=gender_label_map,
                 years=years,
             ),
@@ -507,7 +493,7 @@ def _standard_chart_sections(
                 df_gender,
                 key_col="gender",
                 label_col="Gender",
-                order=visible_genders,
+                order=gender_keys,
                 label_map=gender_label_map,
             ),
             percent_cols=("Percent",),
@@ -565,7 +551,7 @@ def _standard_chart_sections(
 
 
 def _units_campus_table(df: pd.DataFrame) -> pd.DataFrame:
-    df_agg = bot_goal3_units._aggregate_campus(df)
+    df_agg = bot_goal3_units.aggregate_campus(df)
     years = _academic_years(df_agg)
     campuses = _ordered_present(df_agg["camp_desc"], CAMPUS_ORDER)
     piv = df_agg.pivot_table(
@@ -578,7 +564,7 @@ def _units_campus_table(df: pd.DataFrame) -> pd.DataFrame:
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
 
-    df_pct = bot_goal3_units._pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
+    df_pct = bot_goal3_units.pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
     if not df_pct.empty:
         df_pct = df_pct.copy()
         df_pct["5-Yr Percent Change"] = df_pct["pct_change"] / 100
@@ -602,13 +588,13 @@ def _units_chart_sections(df: pd.DataFrame, titles: dict) -> list[ExcelSection]:
         ),
     ]
 
-    df_race = bot_goal3_units._aggregate_race(df)
-    visible_races = bot_goal3_units._visible_races(df_race)
+    df_race = bot_goal3_units.aggregate_race(df)
+    race_keys = bot_goal3_units.visible_races(df_race)
     race_summary = _value_summary(
         df_race,
         key_col="race_description",
         label_col="Race/Ethnicity",
-        order=visible_races,
+        order=race_keys,
         label_map=RACE_SHORT,
         years=years,
         value_col="avg_units",
@@ -621,7 +607,7 @@ def _units_chart_sections(df: pd.DataFrame, titles: dict) -> list[ExcelSection]:
                 df_race,
                 key_col="race_description",
                 label_col="Race/Ethnicity",
-                order=visible_races,
+                order=race_keys,
                 label_map=RACE_SHORT,
                 years=years,
                 value_col="avg_units",
@@ -647,14 +633,14 @@ def _units_chart_sections(df: pd.DataFrame, titles: dict) -> list[ExcelSection]:
         ),
     ])
 
-    df_gender = bot_goal3_units._aggregate_gender(df)
-    visible_genders = bot_goal3_units._visible_genders(df_gender)
+    df_gender = bot_goal3_units.aggregate_gender(df)
+    gender_keys = bot_goal3_units.visible_genders(df_gender)
     gender_label_map = {key: GENDER_LABELS[key] for key in GENDER_ORDER}
     gender_summary = _value_summary(
         df_gender,
         key_col="gender",
         label_col="Gender",
-        order=visible_genders,
+        order=gender_keys,
         label_map=gender_label_map,
         years=years,
         value_col="avg_units",
@@ -667,7 +653,7 @@ def _units_chart_sections(df: pd.DataFrame, titles: dict) -> list[ExcelSection]:
                 df_gender,
                 key_col="gender",
                 label_col="Gender",
-                order=visible_genders,
+                order=gender_keys,
                 label_map=gender_label_map,
                 years=years,
                 value_col="avg_units",
@@ -693,7 +679,7 @@ def _units_chart_sections(df: pd.DataFrame, titles: dict) -> list[ExcelSection]:
         ),
     ])
 
-    df_fg = bot_goal3_units._aggregate_firstgen(df)
+    df_fg = bot_goal3_units.aggregate_firstgen(df)
     fg_label_map = {key: FIRSTGEN_LABELS[key] for key in FIRSTGEN_ORDER}
     fg_summary = _value_summary(
         df_fg,
@@ -909,22 +895,30 @@ def main() -> int:
     if not EXPORT_ROOT.parent.exists():
         print(
             f"Export parent not found: {EXPORT_ROOT.parent}\n"
-            "Make sure OneDrive is mounted and the BOT Reports folder exists.",
+            "Make sure OneDrive is mounted and the BOT Reports folder exists "
+            "(or set BOT_EXPORT_ROOT_EXCEL to an existing parent path).",
             file=sys.stderr,
         )
         return 1
 
     EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
     today = date.today().strftime("%Y%m%d")
-    snapshot_dir = EXPORT_ROOT / _max_acyr_label()
+    snapshot_dir = EXPORT_ROOT / max_acyr_label()
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = snapshot_dir / f"bot_{today}.xlsx"
+    # Write to a sibling tmp file, then atomic-rename only on full success.
+    # Without this, a partial failure (e.g. one sheet raises) leaves a
+    # truncated workbook at the date-stamped final path, overwriting a valid
+    # same-day export. The tmp file MUST keep the .xlsx suffix because
+    # xlsxwriter validates the extension and rejects anything else (e.g.
+    # bot_YYYYMMDD.xlsx.tmp would raise ValueError before any data is written).
+    tmp_path = out_path.with_name(f"{out_path.stem}.tmp{out_path.suffix}")
     print(f"Writing BOT Excel export to {out_path}")
 
     cache = HyperCache()
     try:
-        with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+        with pd.ExcelWriter(tmp_path, engine="xlsxwriter") as writer:
             for spec in _CHART_SPECS:
                 print(f"  writing chart-data sheet {spec.sheet_name} ...")
                 df, titles, base_df = spec.build(cache)
@@ -936,6 +930,7 @@ def main() -> int:
                 title = f"{titles['tab_title']} - Chart Table Data"
                 _write_chart_sheet(writer, spec.sheet_name, title, sections)
     except ImportError as exc:
+        tmp_path.unlink(missing_ok=True)
         print(
             "Missing Excel writer dependency. Run: pip install -r requirements.txt",
             file=sys.stderr,
@@ -943,9 +938,11 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 - surface a concise CLI failure
+        tmp_path.unlink(missing_ok=True)
         print(f"Export failed: {exc}", file=sys.stderr)
         return 1
 
+    os.replace(tmp_path, out_path)
     print(f"\nDone. Wrote {out_path}")
     return 0
 

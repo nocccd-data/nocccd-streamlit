@@ -158,3 +158,16 @@ DATASETS = {
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 HYPER_DIR = Path(__file__).resolve().parent / "hyper"
+
+
+def max_acyr_label() -> str:
+    """Academic-year label from the max bot_goal1_students acyr_code.
+
+    Other BOT datasets sometimes cover a different 5-year window (e.g.
+    living-wage is shifted by 1), so export organization is anchored on the
+    canonical Goal 1 students range. Example: ``2024`` -> ``2024-25``.
+    """
+    cfg = DATASETS["bot_goal1_students"]
+    max_acyr = max(cfg[cfg["param_name"]], key=lambda value: int(value))
+    start_year = int(max_acyr)
+    return f"{start_year}-{(start_year + 1) % 100:02d}"

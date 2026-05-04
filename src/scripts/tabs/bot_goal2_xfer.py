@@ -90,6 +90,12 @@ def _normalize(df: pd.DataFrame, base_df: pd.DataFrame | None = None) -> pd.Data
     return out
 
 
+# Public alias — used by src.pipeline.bot_export and bot_excel_export. Promoted
+# from the underscore-prefixed implementation so that an internal rename of
+# ``_normalize`` would not silently break the exporters.
+normalize = _normalize
+
+
 def render():
     st.header("BOT Goal 2 - Transfers")
 

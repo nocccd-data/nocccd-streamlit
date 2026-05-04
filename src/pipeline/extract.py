@@ -52,10 +52,28 @@ def extract_dataset(name: str) -> Path:
     base_sql = sql_path.read_text(encoding="utf-8")
     engine = get_engine(section=cfg.get("db_section", "dwhdb"))
 
-    if re.search(r"IN\s*\(:t1", base_sql, re.IGNORECASE):
-        # Multi-acyr: expand IN clause
+    # Multi-acyr templates have an `IN (:t1)` placeholder we expand to one
+    # placeholder per supplied value. `\s*` on both sides of `(` AND before
+    # `:t1` accommodates SQL formatted as `IN (\n    :t1\n)`. DOTALL makes
+    # `.*?` cross newlines so the closing `)` on a separate line still
+    # matches. After substituting, assert the SQL actually changed — silent
+    # no-ops would send the literal string `:t1` to Oracle and either fail
+    # bind validation or return a partial result.
+    in_pattern = r"IN\s*\(\s*:t1.*?\)"
+    if re.search(in_pattern, base_sql, re.IGNORECASE | re.DOTALL):
         placeholders = ", ".join(f":t{i}" for i in range(1, len(values) + 1))
-        sql = re.sub(r"IN\s*\(:t1.*?\)", f"IN ({placeholders})", base_sql, flags=re.IGNORECASE)
+        sql = re.sub(
+            in_pattern,
+            f"IN ({placeholders})",
+            base_sql,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if sql == base_sql:
+            raise RuntimeError(
+                f"IN-clause expansion silently no-op'd in {sql_path.name}; "
+                f"placeholder pattern matched but substitution did not. "
+                f"Check the SQL template's IN(:t1) formatting."
+            )
         params = {f"t{i}": t for i, t in enumerate(values, 1)}
         with engine.connect() as conn:
             df = pd.read_sql(sql, conn, params=params)
