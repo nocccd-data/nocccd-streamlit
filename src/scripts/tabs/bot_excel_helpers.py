@@ -6,6 +6,7 @@ import io
 import re
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from src.scripts.tabs.bot_helpers import (
@@ -400,11 +401,19 @@ def _format_columns(
     worksheet,
     df: pd.DataFrame,
     *,
+    header_row: int,
     start_col: int,
     percent_cols: tuple[str, ...] = (),
     integer_cols: tuple[str, ...] = (),
     decimal_cols: tuple[str, ...] = (),
 ) -> None:
+    # Formats are applied per-cell within this section's data range, NOT via
+    # set_column. Multiple sections on a single sheet share the same Excel
+    # columns (A, B, C, …); a column-level format from set_column would be
+    # overwritten by the next section's set_column call, leaving e.g. the
+    # Summary Counts "5-Yr Percent Change" column rendered with the trailing
+    # Rate Detail section's integer format. set_column is used here for width
+    # only.
     percent_fmt = workbook.add_format({"num_format": "0.0%"})
     integer_fmt = workbook.add_format({"num_format": "#,##0"})
     decimal_fmt = workbook.add_format({"num_format": "#,##0.0"})
@@ -413,23 +422,38 @@ def _format_columns(
     decimal_set = set(decimal_cols)
     sample = df.head(500)
 
-    for idx, col in enumerate(df.columns):
-        fmt = None
+    col_formats: list = []
+    for col in df.columns:
         if col in percent_set:
-            fmt = percent_fmt
+            col_formats.append(percent_fmt)
         elif col in integer_set:
-            fmt = integer_fmt
+            col_formats.append(integer_fmt)
         elif col in decimal_set:
-            fmt = decimal_fmt
+            col_formats.append(decimal_fmt)
         elif pd.api.types.is_integer_dtype(df[col]):
-            fmt = integer_fmt
+            col_formats.append(integer_fmt)
         elif pd.api.types.is_float_dtype(df[col]):
-            fmt = decimal_fmt
+            col_formats.append(decimal_fmt)
+        else:
+            col_formats.append(None)
 
+    for idx, col in enumerate(df.columns):
         values = sample[col] if col in sample.columns else []
         width = max([len(str(col)), *[_string_width(v) for v in values]])
         width = min(max(width + 2, 10), 42)
-        worksheet.set_column(start_col + idx, start_col + idx, width, fmt)
+        worksheet.set_column(start_col + idx, start_col + idx, width)
+
+    for r, row_tuple in enumerate(df.itertuples(index=False)):
+        target_row = header_row + 1 + r
+        for c, value in enumerate(row_tuple):
+            fmt = col_formats[c]
+            if fmt is None:
+                continue
+            target_col = start_col + c
+            if pd.isna(value):
+                worksheet.write_blank(target_row, target_col, None, fmt)
+            elif isinstance(value, (int, np.integer, float, np.floating)):
+                worksheet.write_number(target_row, target_col, float(value), fmt)
 
 
 def _format_dataframe(
@@ -458,6 +482,7 @@ def _format_dataframe(
         workbook,
         worksheet,
         df,
+        header_row=header_row,
         start_col=0,
         percent_cols=percent_cols,
         integer_cols=integer_cols,
