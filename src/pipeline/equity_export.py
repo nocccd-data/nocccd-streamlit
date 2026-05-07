@@ -65,11 +65,12 @@ from src.scripts.tabs.bot_helpers import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 _DEFAULT_EXPORT_ROOT = (
-    "/Users/hoonywise/Library/CloudStorage/"
-    "OneDrive-NorthOrangeCountyCommunityCollegeDistrict/"
-    "Documents - EST Data/BOT Reports/Equity Analysis"
+    Path.home()
+    / "Library/CloudStorage"
+    / "OneDrive-NorthOrangeCountyCommunityCollegeDistrict"
+    / "Documents - EST Data/BOT Reports/Equity Analysis"
 )
-EXPORT_ROOT = Path(os.environ.get("BOT_EXPORT_ROOT_EQUITY", _DEFAULT_EXPORT_ROOT))
+EXPORT_ROOT = Path(os.environ.get("BOT_EXPORT_ROOT_EQUITY", str(_DEFAULT_EXPORT_ROOT)))
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +94,10 @@ class EquityMetric:
     base_dataset: str | None = None             # e.g. "bot_goal2_wage_denom"
     base_credit_only: bool = False              # filter base to site=="Credit"
     base_noncredit_only: bool = False           # filter base to site=="Noncredit"
+    # First-gen aggregation: bot_helpers.aggregate_firstgen filters to
+    # site=="Credit" by default (Goal 1 rule). Noncredit-only metrics must
+    # disable this so their NOCE first-gen rows aren't filtered to empty.
+    firstgen_credit_only: bool = True
 
 
 METRICS: list[EquityMetric] = [
@@ -136,6 +141,7 @@ METRICS: list[EquityMetric] = [
         ),
         dataset="bot_goal2_cert_nc",
         base_dataset="bot_goal2_cert_nc_denom",
+        firstgen_credit_only=False,    # NOCE noncredit data — credit filter would empty it
     ),
     EquityMetric(
         title="Completion: Associate Degrees (Not for Transfer)",
@@ -435,9 +441,19 @@ def _composition_counts(df: pd.DataFrame, year_label: str) -> dict[tuple[str, st
 
 
 def _rate_counts(
-    df: pd.DataFrame, base_df: pd.DataFrame, year_label: str,
+    df: pd.DataFrame,
+    base_df: pd.DataFrame,
+    year_label: str,
+    *,
+    firstgen_credit_only: bool = True,
 ) -> dict[tuple[str, str], tuple[int, int]]:
-    """Rate metric: num = subgroup count(df), denom = subgroup count(base_df)."""
+    """Rate metric: num = subgroup count(df), denom = subgroup count(base_df).
+
+    A subgroup with valid base population but zero outcomes returns no row
+    from aggregate_*, which would yield 0/0 and read as "Insufficient data".
+    Recover by looking up the denominator directly from base_df so the cell
+    becomes 0/N (a true 0% rate, not missing data).
+    """
     df_yr = df[df["academic_year"] == year_label]
     base_yr = base_df[base_df["academic_year"] == year_label]
     out: dict[tuple[str, str], tuple[int, int]] = {}
@@ -447,21 +463,50 @@ def _rate_counts(
     # Reuse bot_helpers.aggregate_* — same logic as Streamlit/PDF/Excel views.
     df_race = aggregate_race(df_yr, base_df=base_yr)
     df_gender = aggregate_gender(df_yr, base_df=base_yr)
-    df_fg = aggregate_firstgen(df_yr, credit_only=True, base_df=base_yr)
+    df_fg = aggregate_firstgen(
+        df_yr, credit_only=firstgen_credit_only, base_df=base_yr,
+    )
+
+    # Pre-compute base-population subgroup denominators so a subgroup with
+    # zero outcomes (no row in df_*) still gets a real denominator.
+    base_stu = base_yr.drop_duplicates(subset=["pidm", "academic_year"])
+    base_stu_credit = (
+        base_stu[base_stu["site"] == "Credit"] if firstgen_credit_only and "site" in base_stu.columns
+        else base_stu
+    )
+    race_denom = base_stu.groupby("race_description")["pidm"].nunique().to_dict()
+    gender_denom = base_stu.groupby("gender")["pidm"].nunique().to_dict()
+    fg_denom_src = base_stu_credit.copy()
+    fg_denom_src["fg"] = fg_denom_src["first_gen_ind"].where(
+        fg_denom_src["first_gen_ind"].isin(["Y", "N"]), "Unknown",
+    )
+    fg_denom = fg_denom_src.groupby("fg")["pidm"].nunique().to_dict()
 
     for sub in SUBGROUPS:
         if sub.group_type == "Race/Ethnicity":
             row = df_race[df_race["race_description"] == sub.bot_key]
-            n = int(row["count"].iloc[0]) if not row.empty else 0
-            d = int(row["total"].iloc[0]) if not row.empty else 0
+            if not row.empty:
+                n = int(row["count"].iloc[0])
+                d = int(row["total"].iloc[0])
+            else:
+                n = 0
+                d = int(race_denom.get(sub.bot_key, 0) or 0)
         elif sub.group_type == "Gender":
             row = df_gender[df_gender["gender"] == sub.bot_key]
-            n = int(row["count"].iloc[0]) if not row.empty else 0
-            d = int(row["total"].iloc[0]) if not row.empty else 0
+            if not row.empty:
+                n = int(row["count"].iloc[0])
+                d = int(row["total"].iloc[0])
+            else:
+                n = 0
+                d = int(gender_denom.get(sub.bot_key, 0) or 0)
         elif sub.group_type == "First-Generation Status":
             row = df_fg[df_fg["fg"] == sub.bot_key]
-            n = int(row["count"].iloc[0]) if not row.empty else 0
-            d = int(row["total"].iloc[0]) if not row.empty else 0
+            if not row.empty:
+                n = int(row["count"].iloc[0])
+                d = int(row["total"].iloc[0])
+            else:
+                n = 0
+                d = int(fg_denom.get(sub.bot_key, 0) or 0)
         else:
             n, d = 0, 0
         out[(sub.group_type, sub.label)] = (n, d)
@@ -515,7 +560,15 @@ def _units_counts(df: pd.DataFrame, year_label: str) -> dict[tuple[str, str], tu
         else:
             out[(sub.group_type, sub.label)] = (0.0, 0)
 
-    fg_stu = stu.copy()
+    # First-gen aggregation must apply the same Credit-only filter that
+    # _composition_counts and bot_helpers.aggregate_firstgen use, so the
+    # same students get the same first-gen cohort across metric types.
+    # bot_goal3_units SQL is already credit-only, so the filter is a no-op
+    # if the column is all "Credit"; it documents intent and protects
+    # against future SQL changes.
+    fg_stu = (
+        stu[stu["site"] == "Credit"].copy() if "site" in stu.columns else stu.copy()
+    )
     fg_stu["fg"] = fg_stu["first_gen_ind"].where(
         fg_stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
     )
@@ -601,7 +654,10 @@ def _build_metric_counts(
         elif metric.units_metric:
             counts = _units_counts(df, year_label)
         else:
-            counts = _rate_counts(df, base_df, year_label)
+            counts = _rate_counts(
+                df, base_df, year_label,
+                firstgen_credit_only=metric.firstgen_credit_only,
+            )
         for key, (n, d) in counts.items():
             subgroup_result.setdefault(key, {})[year_label] = (n, d)
         overall_result[year_label] = _overall_counts_for_year(

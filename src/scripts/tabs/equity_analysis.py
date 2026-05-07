@@ -81,7 +81,7 @@ def render() -> None:
         SUPPRESSED_RACE_LABELS,
         _baseline_and_current_labels,
     )
-    from src.scripts.pdf_cache import cached_excel_bytes
+    from src.scripts.pdf_cache import clear_excel_cache
     from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME
 
     st.header("Equity Analysis (PPG-1)")
@@ -121,16 +121,16 @@ typically fall in this range and are listed in the Summary as "--".
     st.divider()
 
     if st.button("Generate Equity Workbook", key="equity_generate_btn"):
-        # Cache key is the current acyr range so a config change invalidates
-        # the cached bytes automatically.
-        cache_key = (baseline_display, current_display)
+        # No persistent byte cache — the user clicked Generate explicitly to
+        # rebuild from current data. The underlying fetch_bot_* functions
+        # have their own @st.cache_data(ttl=600) so this isn't a full requery
+        # of Tableau, but every Generate click produces a fresh workbook.
+        # Earlier versions cached bytes keyed only by year labels, which
+        # served stale workbooks after a Tableau extract refresh.
+        clear_excel_cache("equity")
         with st.spinner("Querying BOT extracts and building workbook..."):
             try:
-                excel_bytes = cached_excel_bytes(
-                    "equity",
-                    cache_key,
-                    _build_bytes,
-                )
+                excel_bytes = _build_bytes()
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Equity export failed: {exc}")
                 return
