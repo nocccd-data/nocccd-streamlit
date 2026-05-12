@@ -93,18 +93,27 @@ def render() -> None:
 **Reporting cycle**: Baseline = **{baseline_display}**, Current = **{current_display}**
 
 This workbook applies the California Community Colleges Chancellor's Office
-**Percentage Point Gap Minus One (PPG-1)** methodology to the same metrics
-shown in the BOT report. For each subgroup, the workbook computes:
+**Percentage Point Gap Minus One (PPG-1)** methodology to the BOT report
+metrics, excluding Financial Aid (out of scope per program decision). For
+each subgroup, the workbook computes:
 
 - Numerator and denominator from the BOT data pipeline
 - Subgroup rate vs. all-other-students rate
-- PPG-1 adjusted gap (1-percentage-point penalty per CCCCO 2022)
-- 95% margin of error using the two-proportion z-test (floored at 2%)
-- Disproportionate-impact flag
+- Adjusted gap (Others − Subgroup, or inverted for Lower-is-Better)
+- 95% margin of error using the one-proportion z-test
+  E = 1.96 × √(p̂(1 − p̂)/n), floored at 2% per CCCCO methodology
+- Disproportionate impact flagged when Gap ≥ MOE (CCCCO Table 1)
 
-Subgroups with cohort N ≤ 10 are flagged as insufficient data to maintain
-confidentiality. American Indian/AK Native and Pacific Islander/HI Native
-typically fall in this range and are listed in the Summary as "--".
+The **Reduce Units to Completion** metric is an average, not a rate. Each
+subgroup's average units are compared to the district overall and assigned
+one of five flags: Better, Moderate (Better), Minimal Difference, Moderate
+(Worse), Disparity.
+
+Subgroups with denominator N ≤ 10 are flagged as insufficient data to
+maintain confidentiality. American Indian/AK Native and Pacific Islander/HI
+Native typically fall in this range and are listed in the Summary as "--".
+Baccalaureate Degrees use the same PPG-1 method; the cohort is currently
+below the suppression threshold.
         """
     )
 

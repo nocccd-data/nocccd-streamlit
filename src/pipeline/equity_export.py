@@ -179,8 +179,9 @@ METRICS: list[EquityMetric] = [
         moderate=0.02, large=0.05,
         notes=(
             "Numerator = students who earned a baccalaureate degree. "
-            "Denominator = total credit students. NOCCCD currently has no "
-            "baccalaureate awardees; all cells will be empty."
+            "Denominator = total credit students. Cohort is currently below "
+            "the N<=10 suppression threshold; same PPG-1 methodology applies "
+            "once the cohort grows."
         ),
         dataset="bot_goal2_bac",
         base_dataset="bot_goal1_students",
@@ -217,29 +218,19 @@ METRICS: list[EquityMetric] = [
         use_wage_shift=True,
     ),
     EquityMetric(
-        title="Maximize Financial Aid",
-        vision="Equity in Support",
-        metric_type="Outcome Rate",
-        direction="Higher is Better",
-        moderate=0.02, large=0.05,
-        notes=(
-            "Numerator = students meeting the financial aid outcome (Pell or "
-            "BOG). Denominator = total credit students (Goal 1 Credit base)."
-        ),
-        dataset="bot_goal3_finaid",
-        base_dataset="bot_goal1_students",
-        base_credit_only=True,
-    ),
-    EquityMetric(
         title="Reduce Units to Completion",
         vision="Equity in Support",
         metric_type="Average",
         direction="Lower is Better",
-        moderate=2.0, large=5.0,
+        moderate=1.0, large=3.0,
         notes=(
             "For an accurate overall average, numerator = total credit units "
             "earned across ADT recipients and denominator = number of ADT "
-            "recipients. Rate = numerator / denominator = average units."
+            "recipients. Rate = numerator / denominator = average units. "
+            "Equity flag compares subgroup average to district overall: "
+            ">=3 units below = \"Better\"; >=1 = \"Moderate (Better)\"; "
+            "<=-3 = \"Disparity\"; <=-1 = \"Moderate (Worse)\"; else "
+            "\"Minimal Difference\"."
         ),
         dataset="bot_goal3_units",
         units_metric=True,
@@ -753,8 +744,11 @@ def _write_instructions_sheet(workbook, baseline_label: str, current_label: str)
         )),
         ("Average-units metric", (
             "Reduce Units to Completion is an average, not a rate. PPG-1 "
-            "does not apply; the heatmap uses descriptive thresholds (\xb12 "
-            "and \xb15 units from Overall_Inputs)."
+            "does not apply; the heatmap compares each subgroup's average "
+            "units to the district overall and assigns one of five flags: "
+            "Better (>=3 units below), Moderate (Better) (1-3 below), "
+            "Minimal Difference (within +/-1), Moderate (Worse) (1-3 "
+            "above), Disparity (>=3 above). Thresholds in Overall_Inputs."
         )),
         ("Source", (
             "Banner via the BOT Hyper extracts. Living-wage data is "
@@ -1139,50 +1133,52 @@ def _write_ppg1_sheet(workbook, baseline_label: str, current_label: str) -> None
         ws.write_formula(r0, 12, f"=IFERROR(K{ppg_r}/L{ppg_r},\"\")", pct_fmt)
         # N: Raw Gap (baseline)
         ws.write_formula(r0, 13, f"=IFERROR(H{ppg_r}-M{ppg_r},\"\")", pct_fmt)
-        # O: PPG-1 Adjusted Gap (baseline)
+        # O: PPG-1 Adjusted Gap (baseline) — CCCCO PPG-1 is the raw gap; no
+        # extra penalty term. Manager confirmed the prior -0.01 was not
+        # deliberate (response May 2026).
         ws.write_formula(
             r0, 14,
             (
                 f"=IFERROR(IF($E{ppg_r}=\"Higher is Better\","
-                f"M{ppg_r}-H{ppg_r}-0.01,"
+                f"M{ppg_r}-H{ppg_r},"
                 f"IF($E{ppg_r}=\"Lower is Better\","
-                f"H{ppg_r}-M{ppg_r}-0.01,\"\")),\"\")"
+                f"H{ppg_r}-M{ppg_r},\"\")),\"\")"
             ),
             pct_fmt,
         )
-        # P: SE (baseline) — two-proportion z-test
+        # P: SE (baseline) — CCCCO one-proportion: E = 1.96 * sqrt(p(1-p)/n)
+        # uses subgroup's own proportion and denominator (manager response
+        # May 2026, citing CCCCO PPG-1 Methodology Notes 2022).
         ws.write_formula(
             r0, 15,
             (
                 f"=IF(OR($E{ppg_r}=\"Context Only\",$E{ppg_r}=\"Lower is Better\","
-                f"$E{ppg_r}=\"\",G{ppg_r}=\"\",L{ppg_r}=\"\",G{ppg_r}=0,L{ppg_r}=0),\"\","
-                f"IFERROR(SQRT((H{ppg_r}*(1-H{ppg_r})/G{ppg_r})+"
-                f"(M{ppg_r}*(1-M{ppg_r})/L{ppg_r})),\"\"))"
+                f"$E{ppg_r}=\"\",G{ppg_r}=\"\",G{ppg_r}=0),\"\","
+                f"IFERROR(SQRT(H{ppg_r}*(1-H{ppg_r})/G{ppg_r}),\"\"))"
             ),
             dec_fmt,
         )
-        # Q: MOE (baseline) — matches template (1.96 * SE, no 2% floor).
-        # CCCCO methodology PDF prescribes a 2% floor, but the prior NOCCCD
-        # template doesn't apply one and the team's historical reports use
-        # the unfloored value. Keeping consistency with the prior workbook
-        # so DI flags don't drift between runs.
+        # Q: MOE (baseline) — CCCCO 2% floor: MOE = MAX(1.96 * SE, 0.02).
         ws.write_formula(
             r0, 16,
-            f"=IFERROR(1.96*P{ppg_r},\"\")",
+            f"=IFERROR(MAX(1.96*P{ppg_r},0.02),\"\")",
             pct_fmt,
         )
-        # R: PPG-1 Result (baseline) — matches template logic:
-        #   DI when (others - subgroup - 0.01) > MOE  (i.e., O > Q)
-        #   Above reference when (subgroup - others) > MOE  (i.e., H-M > Q)
-        #   Suppress when either denominator < 10
+        # R: PPG-1 Result (baseline) — CCCCO Table 1 threshold is inclusive:
+        #   DI when (others - subgroup) >= MOE  (i.e., O >= Q)
+        #   Above reference when (subgroup - others) >= MOE
+        #   Suppress when subgroup denominator < 10 OR numerator < 10.
+        #   Numerator gate catches Baccalaureate (denom is thousands but
+        #   awardee count is below 10), matching the manager's intent that
+        #   Bacc displays as suppressed until the cohort grows.
         ws.write_formula(
             r0, 17,
             (
                 f"=IF($E{ppg_r}=\"Context Only\",\"Not applicable - composition/context\","
                 f"IF($E{ppg_r}=\"Lower is Better\",\"Not applicable - lower-is-better average/rate; review method\","
-                f"IF(OR(G{ppg_r}=\"\",L{ppg_r}=\"\",G{ppg_r}<10,L{ppg_r}<10),\"Insufficient data\","
-                f"IF(O{ppg_r}>Q{ppg_r},\"DI: significant PPG-1 gap\","
-                f"IF(H{ppg_r}-M{ppg_r}>Q{ppg_r},\"Significantly above reference\","
+                f"IF(OR(G{ppg_r}=\"\",G{ppg_r}<10,F{ppg_r}=\"\",F{ppg_r}<10),\"Insufficient data\","
+                f"IF(O{ppg_r}>=Q{ppg_r},\"DI: significant PPG-1 gap\","
+                f"IF(H{ppg_r}-M{ppg_r}>=Q{ppg_r},\"Significantly above reference\","
                 f"\"No significant PPG-1 gap\")))))"
             ),
         )
@@ -1197,41 +1193,44 @@ def _write_ppg1_sheet(workbook, baseline_label: str, current_label: str) -> None
         ws.write_formula(r0, 24, f"=IFERROR(W{ppg_r}-T{ppg_r},\"\")", int_fmt)
         ws.write_formula(r0, 25, f"=IFERROR(X{ppg_r}/Y{ppg_r},\"\")", pct_fmt)
         ws.write_formula(r0, 26, f"=IFERROR(U{ppg_r}-Z{ppg_r},\"\")", pct_fmt)
+        # AB: PPG-1 Adjusted Gap (current) — raw gap, no -0.01 penalty.
         ws.write_formula(
             r0, 27,
             (
                 f"=IFERROR(IF($E{ppg_r}=\"Higher is Better\","
-                f"Z{ppg_r}-U{ppg_r}-0.01,"
+                f"Z{ppg_r}-U{ppg_r},"
                 f"IF($E{ppg_r}=\"Lower is Better\","
-                f"U{ppg_r}-Z{ppg_r}-0.01,\"\")),\"\")"
+                f"U{ppg_r}-Z{ppg_r},\"\")),\"\")"
             ),
             pct_fmt,
         )
+        # AC: SE (current) — CCCCO one-proportion using subgroup p_hat and n.
         ws.write_formula(
             r0, 28,
             (
                 f"=IF(OR($E{ppg_r}=\"Context Only\",$E{ppg_r}=\"Lower is Better\","
-                f"$E{ppg_r}=\"\",T{ppg_r}=\"\",Y{ppg_r}=\"\",T{ppg_r}=0,Y{ppg_r}=0),\"\","
-                f"IFERROR(SQRT((U{ppg_r}*(1-U{ppg_r})/T{ppg_r})+"
-                f"(Z{ppg_r}*(1-Z{ppg_r})/Y{ppg_r})),\"\"))"
+                f"$E{ppg_r}=\"\",T{ppg_r}=\"\",T{ppg_r}=0),\"\","
+                f"IFERROR(SQRT(U{ppg_r}*(1-U{ppg_r})/T{ppg_r}),\"\"))"
             ),
             dec_fmt,
         )
-        # AD: MOE (current) — same convention as Q above (no 2% floor).
+        # AD: MOE (current) — 2% floor per CCCCO methodology.
         ws.write_formula(
             r0, 29,
-            f"=IFERROR(1.96*AC{ppg_r},\"\")",
+            f"=IFERROR(MAX(1.96*AC{ppg_r},0.02),\"\")",
             pct_fmt,
         )
-        # AE: PPG-1 Result (current) — same logic as col R, on current-year cols
+        # AE: PPG-1 Result (current) — inclusive >= threshold per CCCCO Table 1.
+        # Suppression also gates on subgroup numerator < 10 (S column) so
+        # Baccalaureate displays as suppressed for current cohort sizes.
         ws.write_formula(
             r0, 30,
             (
                 f"=IF($E{ppg_r}=\"Context Only\",\"Not applicable - composition/context\","
                 f"IF($E{ppg_r}=\"Lower is Better\",\"Not applicable - lower-is-better average/rate; review method\","
-                f"IF(OR(T{ppg_r}=\"\",Y{ppg_r}=\"\",T{ppg_r}<10,Y{ppg_r}<10),\"Insufficient data\","
-                f"IF(AB{ppg_r}>AD{ppg_r},\"DI: significant PPG-1 gap\","
-                f"IF(U{ppg_r}-Z{ppg_r}>AD{ppg_r},\"Significantly above reference\","
+                f"IF(OR(T{ppg_r}=\"\",T{ppg_r}<10,S{ppg_r}=\"\",S{ppg_r}<10),\"Insufficient data\","
+                f"IF(AB{ppg_r}>=AD{ppg_r},\"DI: significant PPG-1 gap\","
+                f"IF(U{ppg_r}-Z{ppg_r}>=AD{ppg_r},\"Significantly above reference\","
                 f"\"No significant PPG-1 gap\")))))"
             ),
         )
@@ -1313,20 +1312,32 @@ def _write_heatmap_sheet(
         ws.write(r, 0, label, label_fmt)
         for c, m in enumerate(outcome_metrics, start=1):
             if m.units_metric:
-                # Use Data_Entry's beneficial gap with thresholds from Overall_Inputs.
+                # Average-units metric: compare subgroup average to district
+                # overall (manager response May 2026). Data_Entry col V is
+                # already (Overall - Subgroup) for Lower-is-Better metrics,
+                # so the beneficial-gap convention matches CCCCO's "fewer
+                # units = better" framing. Five-bucket flag uses thresholds
+                # 1.0 (moderate) and 3.0 (large) from Overall_Inputs.
                 de_lookup = (
                     f"VLOOKUP(\"{m.title}|\"&$A{r+1},Data_Entry!$A:$AB,22,FALSE)"
+                )
+                large = (
+                    f"IFERROR(VLOOKUP(\"{m.title}\","
+                    f"Overall_Inputs!$A:$M,12,FALSE),3)"
+                )
+                moderate = (
+                    f"IFERROR(VLOOKUP(\"{m.title}\","
+                    f"Overall_Inputs!$A:$M,11,FALSE),1)"
                 )
                 ws.write_formula(
                     r, c,
                     (
                         f"=IFERROR(IF({de_lookup}=\"\",\"--\","
-                        f"IF({de_lookup}<=-IFERROR(VLOOKUP(\"{m.title}\","
-                        f"Overall_Inputs!$A:$M,12,FALSE),5),\"DI Observed\","
-                        f"IF({de_lookup}<=-IFERROR(VLOOKUP(\"{m.title}\","
-                        f"Overall_Inputs!$A:$M,11,FALSE),2),"
-                        f"\"Moderate Gap\","
-                        f"\"No statistically significant gap\"))),\"--\")"
+                        f"IF({de_lookup}>={large},\"Better\","
+                        f"IF({de_lookup}>={moderate},\"Moderate (Better)\","
+                        f"IF({de_lookup}<=-{large},\"Disparity\","
+                        f"IF({de_lookup}<=-{moderate},\"Moderate (Worse)\","
+                        f"\"Minimal Difference\"))))),\"--\")"
                     ),
                     cell_fmt,
                 )
@@ -1348,10 +1359,18 @@ def _write_heatmap_sheet(
               "(N<=10) or unavailable."),
              note_fmt)
     ws.write(note_row + 1, 0,
-             ("Legend: \"DI Observed\" = adverse disproportionate impact "
-              "below threshold. \"Significantly above reference\" = "
-              "disproportionate advantage. \"No statistically significant "
-              "gap\" = within margin of error."),
+             ("Legend (rate metrics): \"DI Observed\" = adverse "
+              "disproportionate impact (PPG-1 gap >= MOE, floor 2%). "
+              "\"Significantly above reference\" = disproportionate "
+              "advantage. \"No statistically significant gap\" = within "
+              "margin of error."),
+             note_fmt)
+    ws.write(note_row + 2, 0,
+             ("Legend (Reduce Units): subgroup avg vs. district overall. "
+              "\"Disparity\" = >=3 units above overall (worse). "
+              "\"Moderate (Worse)\" = 1-3 units above. \"Minimal "
+              "Difference\" = within +/-1 unit. \"Moderate (Better)\" = "
+              "1-3 units below. \"Better\" = >=3 units below overall."),
              note_fmt)
     _ = baseline_label
     _ = current_label
@@ -1421,16 +1440,24 @@ def _write_summary_sheet(workbook) -> None:
                     # lookup into Heatmap_Summary by label and column letter.
                     # Heatmap col letters: B,C,D,... map 1:1 to outcome_metrics.
                     col_letter = xlsxwriter.utility.xl_col_to_name(c)
+                    last_letter = xlsxwriter.utility.xl_col_to_name(len(outcome_metrics))
+                    lookup = (
+                        f"VLOOKUP(\"{label}\","
+                        f"Heatmap_Summary!$A:${last_letter},"
+                        f"{c+1},FALSE)"
+                    )
+                    # Color codes:
+                    #   1 (red)   = DI Observed | Disparity
+                    #   2 (yellow)= Moderate Gap | Moderate (Worse)
+                    #   3 (green) = everything else (No gap, Above ref,
+                    #               Better, Moderate (Better), Minimal Diff)
+                    #   "--"      = suppressed
                     formula = (
-                        f"=IFERROR(IF(VLOOKUP(\"{label}\","
-                        f"Heatmap_Summary!$A:${xlsxwriter.utility.xl_col_to_name(len(outcome_metrics))},"
-                        f"{c+1},FALSE)=\"DI Observed\",1,"
-                        f"IF(VLOOKUP(\"{label}\","
-                        f"Heatmap_Summary!$A:${xlsxwriter.utility.xl_col_to_name(len(outcome_metrics))},"
-                        f"{c+1},FALSE)=\"Moderate Gap\",2,"
-                        f"IF(VLOOKUP(\"{label}\","
-                        f"Heatmap_Summary!$A:${xlsxwriter.utility.xl_col_to_name(len(outcome_metrics))},"
-                        f"{c+1},FALSE)=\"--\",\"--\",3))),\"--\")"
+                        f"=IFERROR(IF(OR({lookup}=\"DI Observed\","
+                        f"{lookup}=\"Disparity\"),1,"
+                        f"IF(OR({lookup}=\"Moderate Gap\","
+                        f"{lookup}=\"Moderate (Worse)\"),2,"
+                        f"IF({lookup}=\"--\",\"--\",3))),\"--\")"
                     )
                     ws.write_formula(r, c, formula, cell_fmt)
                     _ = col_letter
