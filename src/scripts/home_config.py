@@ -182,4 +182,14 @@ PROJECTS = [
             "5-year percentage change",
         ],
     },
+    {
+        "tab_label": "Equity Analysis (PPG-1)",
+        "description": "CCCCO Percentage Point Gap Minus One analysis across all BOT metrics. Identifies disproportionate impact by subgroup.",
+        "metrics": [
+            "Numerator/denominator by metric × subgroup × year",
+            "PPG-1 adjusted gap with 95% margin of error",
+            "Disproportionate-impact heatmap",
+            "Auditable Excel formulas; analyst-editable thresholds",
+        ],
+    },
 ]

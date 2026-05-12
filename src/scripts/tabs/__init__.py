@@ -17,6 +17,7 @@ from .bot_goal2_xfer import render as bot_goal2_xfer_render
 from .bot_goal2_wage import render as bot_goal2_wage_render
 from .bot_goal3_finaid import render as bot_goal3_finaid_render
 from .bot_goal3_units import render as bot_goal3_units_render
+from .equity_analysis import render as equity_analysis_render
 from .mail_admin import render as mail_admin_render
 
 # Registry of active tabs: (label, render_function)
@@ -42,5 +43,6 @@ TABS = [
     ("BOT Goal 2 - Living Wage", bot_goal2_wage_render),
     ("BOT Goal 3 - Financial Aid", bot_goal3_finaid_render),
     ("BOT Goal 3 - Average Units", bot_goal3_units_render),
+    ("Equity Analysis (PPG-1)", equity_analysis_render),
     ("Mail Admin", mail_admin_render),
 ]
