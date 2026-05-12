@@ -30,6 +30,7 @@ nocccd-streamlit/
 │   │   ├── seat_count_export.py  # Bulk Seat Count Report PDF export to OneDrive
 │   │   ├── bot_export.py         # Combined BOT tabs PDF export to OneDrive
 │   │   ├── bot_excel_export.py   # BOT chart-table Excel export
+│   │   ├── equity_export.py      # Equity Analysis (PPG-1) Excel export to OneDrive
 │   │   ├── mail/                 # Mass mailing system
 │   │   │   ├── __main__.py       # `python -m src.pipeline.mail` entry point wrapper
 │   │   │   ├── mail_config.py    # Campaign definitions + report registry
@@ -75,6 +76,7 @@ nocccd-streamlit/
 │   │       ├── bot_goal2_xfer.py
 │   │       ├── bot_goal3_finaid.py
 │   │       ├── bot_goal3_units.py
+│   │       ├── equity_analysis.py # Equity Analysis (PPG-1) tab + workbook download
 │   │       └── mail_admin.py     # Mail Admin tab (password-protected)
 │   └── static/
 │       └── NOCCCD Logo.jpg
@@ -268,6 +270,25 @@ python -m src.pipeline.bot_excel_export
 - **Snapshots**: each academic-year folder accumulates date-stamped exports. Same-day re-runs overwrite that day's workbook; the next calendar day creates a new file in the same academic-year folder.
 
 The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/bot_excel_export.py` — change it there if your OneDrive path differs.
+
+## Excel Export: Equity Analysis (PPG-1) → OneDrive
+
+For internal equity reporting, an on-demand export builds the NOCCCD Equity Gap workbook applying the CCCCO **Percentage Point Gap Minus One (PPG-1)** methodology to the BOT report metrics (Financial Aid excluded per the May 2026 program review). The workbook disaggregates each metric by Race/Ethnicity, Gender, and First-Generation Status, and flags disproportionate impact.
+
+```bash
+python -m src.pipeline.equity_export
+```
+
+- **Source**: reads the same BOT Hyper extracts as the other BOT exports (`src/pipeline/hyper/bot_*.hyper`). Run the pipeline first if any BOT Hyper file is missing or stale.
+- **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/Equity Analysis/<max_acyr_label>/`, e.g. `Equity Analysis/2024-25/`. The label comes from the max `acyr_code` in `bot_goal1_students` (`2024` → `2024-25`).
+- **Filename**: `equity_<YYYYMMDD>.xlsx`, e.g. `equity_20260512.xlsx`, using the run date.
+- **Workbook layout**: 6 sheets — `Instructions`, `Summary` (1/2/3 heatmap with race/gender/first-gen sections), `Overall_Inputs` (district totals + thresholds), `Data_Entry` (numerator/denominator values per metric × subgroup × year), `Heatmap_Summary` (PPG-1 result labels), `PPG-1` (full methodology calculation sheet).
+- **Methodology**: PPG-1 adjusted gap = Others − Subgroup; SE = `1.96 × √(p̂(1 − p̂)/n)` (CCCCO one-proportion); MOE = `MAX(1.96·SE, 0.02)` (2% floor); DI flagged when `Gap ≥ MOE` per CCCCO Table 1. Subgroups with denominator or numerator below 10 are suppressed as "Insufficient data." Reduce Units to Completion is an average, not a rate — subgroup average compared against district overall using a five-bucket flag (Better / Moderate (Better) / Minimal Difference / Moderate (Worse) / Disparity).
+- **Hybrid value/formula strategy**: numerator and denominator cells are **values** from the BOT pipeline that refresh on every re-run. All derived calculations (rates, gaps, SE, MOE, DI flags, heatmap colors) are **live Excel formulas** that recompute on open and stay auditable for analysts who hand-edit denominators.
+- **Snapshots**: each academic-year folder accumulates date-stamped exports. Same-day re-runs overwrite that day's workbook via the `.tmp.xlsx` → atomic-rename pattern.
+- **Streamlit alternative**: the **Equity Analysis (PPG-1)** tab in the Streamlit app exposes the same workbook behind a Generate/Download button — CLI and tab produce byte-identical output for the same data snapshot.
+
+The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/equity_export.py` (override via the `BOT_EXPORT_ROOT_EQUITY` env var if your OneDrive path differs).
 
 ## Mass Mailing: Filtered PDF Reports
 
