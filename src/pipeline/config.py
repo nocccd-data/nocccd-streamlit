@@ -73,6 +73,15 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    "enrollment_5yrs": {
+        # Parameterless: the MV is a self-contained 5-year window based on
+        # SYSDATE, so there is no param_name / value list to loop over.
+        # ~3.7M rows x 49 cols — stream to Hyper in chunks so the extract
+        # doesn't load the whole result into one DataFrame (OOM risk).
+        "sql_file": "enrollment_5yrs.sql",
+        "db_section": "dwhdb",
+        "chunksize": 250_000,
+    },
     "seat_count_report": {
         "sql_file": "seat_count_report.sql",
         "banner_term_code": ["202310", "202315", "202320", "202335", "202330", "202405",
