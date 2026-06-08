@@ -73,14 +73,14 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    "enrollment_5yrs": {
-        # Parameterless: the MV is a self-contained 5-year window based on
-        # SYSDATE, so there is no param_name / value list to loop over.
-        # ~3.7M rows x 49 cols — stream to Hyper in chunks so the extract
-        # doesn't load the whole result into one DataFrame (OOM risk).
-        "sql_file": "enrollment_5yrs.sql",
+    "enrollment_comparison": {
+        # The MV is a rolling 5-year window (by SYSDATE); we filter it down to
+        # the two terms being compared so the extract stays small. Change the
+        # term list to reslice without touching the SQL.
+        "sql_file": "enrollment_comparison.sql",
+        "banner_term_code": ["202510", "202610"],
+        "param_name": "banner_term_code",
         "db_section": "dwhdb",
-        "chunksize": 250_000,
     },
     "seat_count_report": {
         "sql_file": "seat_count_report.sql",
