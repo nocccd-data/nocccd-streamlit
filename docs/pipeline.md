@@ -12,7 +12,7 @@ ETL flow that extracts Oracle data, writes local `.hyper` files, and publishes t
 ## SQL parameterization
 
 Two patterns are supported by `extract.py`:
-- **Multi-acyr**: SQL uses `IN (:t1...)`. The placeholder list is expanded to match the number of values via case-insensitive regex substitution (`re.IGNORECASE`). SQL files may use uppercase `IN` or lowercase `in` — both work, and the count is rebuilt from the config value list, so the SQL can hardcode any starter count (e.g. `IN (:t1,:t2)`). `enrollment_comparison` uses this to slice the 5-year enrollment MV down to the two terms being compared.
+- **Multi-acyr**: SQL uses `IN (:t1...)`. The placeholder list is expanded to match the number of values via case-insensitive regex substitution (`re.IGNORECASE`). SQL files may use uppercase `IN` or lowercase `in` — both work, and the count is rebuilt from the config value list, so the SQL can hardcode any starter count (e.g. `IN (:t1,:t2)`). `enrollment_dashboard` uses this to limit its enrichment query to the two terms being compared.
 - **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. The runner detects this (no `IN` expansion match) and loops over each value, concatenating results.
 
 `extract.py` dispatches on the `IN (:t1` pattern (multi vs single). A SQL file's parameterization style plus its config entry are the single source of truth — no per-caller flag.

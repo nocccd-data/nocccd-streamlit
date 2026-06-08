@@ -114,7 +114,7 @@ Datasets are defined in `src/pipeline/config.py`. Each entry maps a dataset name
 | `cte_sx_submitted` | `cte_sx_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS SX submitted CTE comparison |
 | `class_schedule_heatmap` | `class_schedule_heatmap.sql` | `mis_term_id` | `dwhdb` | Class Schedule Heatmap tab |
 | `persistence_by_styp` | `persistence_by_styp.sql` | `mis_term_id` | `dwhdb` | Persistence by Student Type tab |
-| `enrollment_comparison` | `enrollment_comparison.sql` | `banner_term_code` | `dwhdb` | Two-term enrollment-by-date comparison (sliced from the 5-year MV); published to Tableau Cloud only (no app tab yet) |
+| `enrollment_dashboard` | `enrollment_dashboard.sql` | `banner_term_code` | `dwhdb` | Two-term enrollment-by-date extract enriched with instructional mode + demographics (Banner joins, sliced from the 5-year MV); published to Tableau Cloud only (no app tab yet) |
 | `seat_count_report` | `seat_count_report.sql` | `banner_term_code` | `rept` | Seat Count Report tab, mail reports, and bulk PDF export |
 | `bot_goal1_students` | `bot_goal1_students.sql` | `acyr_code` | `rept` | BOT Goal 1 Students tab and shared BOT denominator |
 | `bot_goal2_cert` | `bot_goal2_cert.sql` | `acyr_code` | `rept` | BOT Goal 2 Certificates tab |

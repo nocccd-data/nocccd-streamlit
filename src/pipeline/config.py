@@ -73,11 +73,11 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    "enrollment_comparison": {
+    "enrollment_dashboard": {
         # The MV is a rolling 5-year window (by SYSDATE); we filter it down to
         # the two terms being compared so the extract stays small. Change the
         # term list to reslice without touching the SQL.
-        "sql_file": "enrollment_comparison.sql",
+        "sql_file": "enrollment_dashboard.sql",
         "banner_term_code": ["202510", "202610"],
         "param_name": "banner_term_code",
         "db_section": "dwhdb",
