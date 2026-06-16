@@ -46,6 +46,15 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "KPI - Applied to Enrolled",
+        "description": "Application-to-enrollment yield rates by student type across all three campuses.",
+        "metrics": [
+            "% of applicants who enrolled, by student type",
+            "Count-weighted overall yield per campus",
+            "Multi-term trend lines for all campuses",
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "metrics": [

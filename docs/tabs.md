@@ -51,6 +51,18 @@ Projected values are clipped to [0, 1]. The next term label is derived from MIS 
 
 Widget prefix: `"pbs_"`
 
+## Applied-to-enrolled yield (`kpi_applied_to_enrolled.py`)
+
+The KPI - Applied to Enrolled tab shows one line chart per campus (Cypress, Fullerton, NOCE) of the application-to-enrollment yield (`% enrolled` = enrolled ÷ applied). Unlike the single-line Persistence tab, each chart carries **multiple lines — one per student type** (`first_time`, `first_time_trans`, `concurrent`, `adult`) plus a bold black dashed **Overall** line.
+
+- The source MV (`dwh.mv_applied_to_enrolled`) has no overall/all-types row, so **Overall is computed in Python** in `_build_overall()` as `SUM(enrl_pidm_count) / SUM(app_pidm_count)` per campus/term — a count-weighted rate, **not** an average of the per-type rates (matches the repo's weighted-% rule in the parent `CLAUDE.md`).
+- Per-type rates are recomputed from the raw counts (not the pre-rounded `pct_enrolled` column) so per-type lines and the Overall line share one unrounded methodology. NULL/zero denominators yield NaN, never `inf`.
+- Per-type lines come from `px.line(color="styp_label")`; the Overall line is added as a separate `go.Scatter` so it renders distinctly. Term labels (`Fall 2024`…) are derived from `mis_term_id` (`year = 2000 + mis_term_id // 10`). NOCE only has the `adult` student type, so its Overall line coincides with the Adult line.
+- The Overall line is **black on light themes, white on dark themes** — Plotly traces don't honor the app's CSS `light-dark()`, so `_overall_line_color()` picks the color at render time from `st.context.theme.type` (falls back to black until the frontend reports the theme; corrects on the next rerun). The matplotlib PDF stays black because it always renders on a white background.
+- **PDF export**: one matplotlib page per campus, multi-line with a legend.
+
+Widget prefix: `"ate_"`
+
 ## Admin authentication (`auth.py`, `admin_config.py`)
 
 Protected tabs (currently Mail Admin) require a password before access. The system:
@@ -71,7 +83,7 @@ Widget prefix: `"csh_"`
 
 ## Sidebar download exports
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, KPI - Applied to Enrolled, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
 
 For BOT-specific PDF/Excel generator details (paper coordinates, layout gotchas, font sizes), see `docs/bot-tabs.md`.
 

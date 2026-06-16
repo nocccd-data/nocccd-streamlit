@@ -73,6 +73,12 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    "kpi_applied_to_enrolled": {
+        "sql_file": "kpi_applied_to_enrolled.sql",
+        "mis_term_id": ["247", "257", "267"],
+        "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
     "enrollment_dashboard": {
         # The MV is a rolling 5-year window (by SYSDATE); we filter it down to
         # the two terms being compared so the extract stays small. Change the
