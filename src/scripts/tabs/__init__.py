@@ -2,6 +2,7 @@ from .fast_facts import render as fast_facts_render
 from .class_schedule_heatmap import render as class_schedule_heatmap_render
 from .kpi_persistence import render as kpi_persistence_render
 from .kpi_applied_to_enrolled import render as kpi_applied_to_enrolled_render
+from .kpi_dual_enrollment import render as kpi_dual_enrollment_render
 from .coi_nhrdist_val import render as coi_nhrdist_val_render
 from .mis_sp_submitted_scff import render as mis_sp_submitted_scff_render
 from .mis_sp_current_scff import render as mis_sp_current_scff_render
@@ -30,6 +31,7 @@ TABS = [
     ("Class Schedule Heatmap", class_schedule_heatmap_render),
     ("KPI - Persistence", kpi_persistence_render),
     ("KPI - Applied to Enrolled", kpi_applied_to_enrolled_render),
+    ("KPI - Dual Enrollment", kpi_dual_enrollment_render),
     ("COI vs NHRDIST Validation", coi_nhrdist_val_render),
     ("SCFF Degrees - MIS SP Submitted", mis_sp_submitted_scff_render),
     ("SCFF Degrees - MIS SP Current", mis_sp_current_scff_render),

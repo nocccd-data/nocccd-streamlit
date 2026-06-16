@@ -11,7 +11,19 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_kpi_persistence
-from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
+from src.scripts.pdf_cache import (
+    cached_excel_bytes,
+    cached_pdf_bytes,
+    clear_excel_cache,
+    clear_pdf_cache,
+)
+# Generic Excel writer shared with the BOT tabs (ExcelSection /
+# sections_to_excel_bytes are not BOT-specific).
+from src.scripts.tabs.bot_excel_helpers import (
+    EXCEL_MIME,
+    ExcelSection,
+    sections_to_excel_bytes,
+)
 
 _CFG = DATASETS["kpi_persistence"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
@@ -184,6 +196,40 @@ def _build_overall_fig(
             ))
 
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Excel export (underlying chart data)
+# ---------------------------------------------------------------------------
+
+def _build_excel_sections(df_overall: pd.DataFrame) -> list[ExcelSection]:
+    """One section: overall (all-students) persistence rates + counts."""
+    out = df_overall.sort_values(["campus", "term_sort"]).rename(columns={
+        "campus": "Campus",
+        "term_short": "Term",
+        "curr_fall_p_count": "Fall P-Count",
+        "spring_total_headcount": "Spring Headcount",
+        "next_fall_total_headcount": "Next Fall Headcount",
+        "spring_persistence_rate": "Fall → Spring Rate",
+        "next_fall_persistence_rate": "Fall → Next Fall Rate",
+    })[[
+        "Campus", "Term", "Fall P-Count",
+        "Spring Headcount", "Fall → Spring Rate",
+        "Next Fall Headcount", "Fall → Next Fall Rate",
+    ]]
+    return [ExcelSection(
+        "Persistence Rates (All Students)",
+        out,
+        percent_cols=("Fall → Spring Rate", "Fall → Next Fall Rate"),
+        integer_cols=("Fall P-Count", "Spring Headcount", "Next Fall Headcount"),
+    )]
+
+
+def _generate_excel(df_overall: pd.DataFrame) -> bytes:
+    return sections_to_excel_bytes(
+        _build_excel_sections(df_overall),
+        title="KPI - Persistence - Chart Table Data",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +454,7 @@ def render():
         df_prepared = _prepare_data(df)
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
         clear_pdf_cache("pbs")
+        clear_excel_cache("pbs")
 
     # --- PDF download in sidebar (after query block) ---
     if "pbs_df_overall" in st.session_state:
@@ -446,6 +493,18 @@ def render():
             file_name="kpi_persistence.pdf",
             mime="application/pdf",
             key="pbs_pdf_btn",
+        )
+        excel_bytes = cached_excel_bytes(
+            "pbs",
+            (id(st.session_state["pbs_df_overall"]),),
+            lambda: _generate_excel(st.session_state["pbs_df_overall"]),
+        )
+        st.sidebar.download_button(
+            "Download Excel",
+            data=excel_bytes,
+            file_name="kpi_persistence.xlsx",
+            mime=EXCEL_MIME,
+            key="pbs_excel_btn",
         )
 
     if "pbs_df_overall" not in st.session_state:

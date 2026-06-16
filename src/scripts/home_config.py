@@ -55,6 +55,14 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "KPI - Dual Enrollment",
+        "description": "Dual enrollment headcount trends for the credit campuses (Cypress and Fullerton).",
+        "metrics": [
+            "Dual enrollment headcount by academic year",
+            "Per-campus trend lines (credit campuses only)",
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "metrics": [

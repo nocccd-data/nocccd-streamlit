@@ -112,6 +112,11 @@ def fetch_kpi_applied_to_enrolled(terms: tuple[str, ...]) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_kpi_dual_enrollment(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+    return _download_and_read("kpi_dual_enrollment", "acyr_code", acyr_codes)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_seat_count_report(term_codes: tuple[str, ...]) -> pd.DataFrame:
     return _download_and_read("seat_count_report", "term_code", term_codes)
 

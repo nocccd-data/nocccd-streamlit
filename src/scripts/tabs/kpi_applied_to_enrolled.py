@@ -10,7 +10,19 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_kpi_applied_to_enrolled
-from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
+from src.scripts.pdf_cache import (
+    cached_excel_bytes,
+    cached_pdf_bytes,
+    clear_excel_cache,
+    clear_pdf_cache,
+)
+# Generic Excel writer shared with the BOT tabs (ExcelSection /
+# sections_to_excel_bytes are not BOT-specific).
+from src.scripts.tabs.bot_excel_helpers import (
+    EXCEL_MIME,
+    ExcelSection,
+    sections_to_excel_bytes,
+)
 
 _CFG = DATASETS["kpi_applied_to_enrolled"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
@@ -161,6 +173,47 @@ def _build_campus_fig(
 
 
 # ---------------------------------------------------------------------------
+# Excel export (underlying chart data)
+# ---------------------------------------------------------------------------
+
+def _build_excel_sections(
+    df_types: pd.DataFrame, df_overall: pd.DataFrame,
+) -> list[ExcelSection]:
+    """One tidy section: per-student-type rows plus the computed Overall rows."""
+    cols = ["campus", "term_short", "term_sort", "styp_label",
+            "app_pidm_count", "enrl_pidm_count", "rate"]
+    combined = pd.concat(
+        [df_types[cols], df_overall[cols]], ignore_index=True
+    )
+    # Sort campus → term, with the Overall row last within each campus/term.
+    combined["_is_overall"] = (combined["styp_label"] == OVERALL_LABEL).astype(int)
+    combined = combined.sort_values(
+        ["campus", "term_sort", "_is_overall", "styp_label"]
+    )
+    out = combined.rename(columns={
+        "campus": "Campus",
+        "term_short": "Term",
+        "styp_label": "Student Type",
+        "app_pidm_count": "Applied",
+        "enrl_pidm_count": "Enrolled",
+        "rate": "% Enrolled",
+    })[["Campus", "Term", "Student Type", "Applied", "Enrolled", "% Enrolled"]]
+    return [ExcelSection(
+        "Applied to Enrolled by Student Type",
+        out,
+        percent_cols=("% Enrolled",),
+        integer_cols=("Applied", "Enrolled"),
+    )]
+
+
+def _generate_excel(df_types: pd.DataFrame, df_overall: pd.DataFrame) -> bytes:
+    return sections_to_excel_bytes(
+        _build_excel_sections(df_types, df_overall),
+        title="KPI - Applied to Enrolled - Chart Table Data",
+    )
+
+
+# ---------------------------------------------------------------------------
 # PDF export (matplotlib)
 # ---------------------------------------------------------------------------
 
@@ -260,12 +313,14 @@ def render():
         st.session_state["ate_df_types"] = df_prepared
         st.session_state["ate_df_overall"] = _build_overall(df_prepared)
         clear_pdf_cache("ate")
+        clear_excel_cache("ate")
 
-    # --- PDF download in sidebar (after query block) ---
+    # --- Downloads in sidebar (after query block) ---
     if "ate_df_types" in st.session_state:
+        cache_key = (id(st.session_state["ate_df_types"]),)
         pdf_bytes = cached_pdf_bytes(
             "ate",
-            (id(st.session_state["ate_df_types"]),),
+            cache_key,
             lambda: _generate_pdf(
                 st.session_state["ate_df_types"],
                 st.session_state["ate_df_overall"],
@@ -277,6 +332,21 @@ def render():
             file_name="kpi_applied_to_enrolled.pdf",
             mime="application/pdf",
             key="ate_pdf_btn",
+        )
+        excel_bytes = cached_excel_bytes(
+            "ate",
+            cache_key,
+            lambda: _generate_excel(
+                st.session_state["ate_df_types"],
+                st.session_state["ate_df_overall"],
+            ),
+        )
+        st.sidebar.download_button(
+            "Download Excel",
+            data=excel_bytes,
+            file_name="kpi_applied_to_enrolled.xlsx",
+            mime=EXCEL_MIME,
+            key="ate_excel_btn",
         )
 
     if "ate_df_types" not in st.session_state:

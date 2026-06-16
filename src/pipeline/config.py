@@ -79,6 +79,12 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    "kpi_dual_enrollment": {
+        "sql_file": "kpi_dual_enrollment.sql",
+        "acyr_code": ["2024", "2025", "2026"],
+        "param_name": "acyr_code",
+        "db_section": "dwhdb",
+    },
     "enrollment_dashboard": {
         # The MV is a rolling 5-year window (by SYSDATE); we filter it down to
         # the two terms being compared so the extract stays small. Change the
