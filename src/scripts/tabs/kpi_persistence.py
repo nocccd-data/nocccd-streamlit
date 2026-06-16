@@ -10,10 +10,10 @@ import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_kpi_b1_c2_persistence
+from src.scripts.data_provider import fetch_kpi_persistence
 from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 
-_CFG = DATASETS["kpi_b1_c2_persistence"]
+_CFG = DATASETS["kpi_persistence"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 
 CAMP_MAP = {"1": "Cypress", "2": "Fullerton", "3": "NOCE"}
@@ -400,8 +400,8 @@ def render():
         if not selected_terms:
             st.warning("Select at least one term.")
             return
-        fetch_kpi_b1_c2_persistence.clear()
-        df = fetch_kpi_b1_c2_persistence(tuple(sorted(selected_terms)))
+        fetch_kpi_persistence.clear()
+        df = fetch_kpi_persistence(tuple(sorted(selected_terms)))
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return
@@ -443,7 +443,7 @@ def render():
         st.sidebar.download_button(
             "Download PDF",
             data=pdf_bytes,
-            file_name="kpi_b1_c2_persistence.pdf",
+            file_name="kpi_persistence.pdf",
             mime="application/pdf",
             key="pbs_pdf_btn",
         )

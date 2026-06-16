@@ -38,7 +38,7 @@ The Seat Count Report shows a different column set per campus, in both the bande
 
 `_layout_for_campus(campus_mode)` returns the per-mode metadata (`html_labels`, `pdf_cols` with widths summing to 1.0, rate-color indices, alignment sets, and visibility flags) used by `_build_banded_html` and `_generate_pdf`. PDF widths differ between credit (13 cols, INSM 0.27, no Building) and NOCE (16 cols, INSM 0.14, Building 0.19); both sum to 1.000. The bulk export passes the per-PDF campus directly so each `<Campus>/<Season>/*.pdf` lands in its correct layout automatically.
 
-## Persistence projections (`kpi_b1_c2_persistence.py`)
+## Persistence projections (`kpi_persistence.py`)
 
 The KPI - Persistence tab shows one overall ("all students") persistence line chart per campus (Cypress, Fullerton, NOCE), with a `Fall → Spring` / `Fall → Next Fall` radio. It also supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
 
