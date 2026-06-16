@@ -10,40 +10,21 @@ import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_persistence_by_styp
+from src.scripts.data_provider import fetch_kpi_b1_c2_persistence
 from src.scripts.pdf_cache import cached_pdf_bytes, clear_pdf_cache
 
-_CFG = DATASETS["persistence_by_styp"]
+_CFG = DATASETS["kpi_b1_c2_persistence"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 
 CAMP_MAP = {"1": "Cypress", "2": "Fullerton", "3": "NOCE"}
 
-STYP_ORDER = [
-    "first_time",
-    "first_time_trans",
-    "continuing",
-    "returning",
-    "adult",
-    "dual_enroll",
-    "concurrent",
-]
-STYP_LABELS = {
-    "first_time": "First-Time",
-    "first_time_trans": "First-Time Transfer",
-    "continuing": "Continuing",
-    "returning": "Returning",
-    "adult": "Adult",
-    "dual_enroll": "Dual Enrollment",
-    "concurrent": "Concurrent",
-}
-
 RATE_OPTIONS = {
-    "Fall \u2192 Spring": {
+    "Fall → Spring": {
         "rate_col": "spring_persistence_rate",
         "p_count_col": "curr_fall_p_count",
         "headcount_col": "spring_total_headcount",
     },
-    "Fall \u2192 Next Fall": {
+    "Fall → Next Fall": {
         "rate_col": "next_fall_persistence_rate",
         "p_count_col": "curr_fall_p_count",
         "headcount_col": "next_fall_total_headcount",
@@ -58,11 +39,6 @@ RATE_OPTIONS = {
 def _prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["campus"] = out["camp_code"].astype(str).map(CAMP_MAP)
-    out["styp_label"] = pd.Categorical(
-        out["styp_code"].map(STYP_LABELS),
-        categories=[STYP_LABELS[s] for s in STYP_ORDER],
-        ordered=True,
-    )
     out["term_short"] = out["academic_term"].str.replace(" Fall", "", regex=False)
     out["term_sort"] = out["mis_term_id"].astype(int)
     out = out.sort_values("term_sort")
@@ -169,7 +145,7 @@ def _build_overall_fig(
     opts = RATE_OPTIONS[persistence_type]
     rate_col = opts["rate_col"]
     dfc = df_overall[df_overall["campus"] == campus].copy()
-    if persistence_type == "Fall \u2192 Next Fall":
+    if persistence_type == "Fall → Next Fall":
         dfc = dfc[dfc["next_fall_total_headcount"] > 0]
 
     fig = px.line(
@@ -178,7 +154,7 @@ def _build_overall_fig(
         y=rate_col,
         markers=True,
         text=rate_col,
-        title=f"{campus} — All Students — {persistence_type}",
+        title=f"{campus} — {persistence_type}",
         custom_data=[opts["headcount_col"], opts["p_count_col"]],
     )
     fig.update_traces(
@@ -206,103 +182,6 @@ def _build_overall_fig(
                 showlegend=False,
                 hovertemplate="<b>%{x}</b><br>Projected: %{y:.1%}<extra></extra>",
             ))
-
-    return fig
-
-
-def _build_by_styp_fig(
-    df_viz: pd.DataFrame, campus: str, persistence_type: str,
-    projection: pd.DataFrame | None = None,
-):
-    opts = RATE_OPTIONS[persistence_type]
-    rate_col = opts["rate_col"]
-    dfc = df_viz[df_viz["campus"] == campus].copy()
-    if persistence_type == "Fall \u2192 Next Fall":
-        dfc = dfc[dfc["next_fall_total_headcount"] > 0]
-
-    fig = px.line(
-        dfc,
-        x="term_short",
-        y=rate_col,
-        facet_col="styp_label",
-        facet_col_wrap=3,
-        markers=True,
-        text=rate_col,
-        title=f"{campus} — By Student Type — {persistence_type}",
-        custom_data=[opts["headcount_col"], opts["p_count_col"]],
-    )
-    fig.update_traces(
-        texttemplate="%{y:.0%}",
-        textposition="top center",
-        hovertemplate=_HOVER_TEMPLATE,
-        mode="lines+markers+text",
-    )
-    fig.update_yaxes(range=[0, 1], tickformat=".0%", title_text="")
-    fig.update_xaxes(tickangle=-45)
-    fig.update_layout(height=900)
-    # Single centered y-axis label via annotation
-    fig.add_annotation(
-        text="Persistence Rate",
-        xref="paper", yref="paper",
-        x=-0.06, y=0.5,
-        textangle=-90,
-        showarrow=False,
-        font={"size": 14},
-    )
-    fig.for_each_annotation(
-        lambda a: a.update(text=a.text.split("=")[-1])
-        if "=" in a.text else None
-    )
-
-    if projection is not None and not projection.empty and not dfc.empty:
-        proj_campus = projection[projection["campus"] == campus]
-        categories = [s for s in dfc["styp_label"].cat.categories
-                      if s in dfc["styp_label"].values]
-
-        # Traces are NOT in categorical order — match each trace to its
-        # category by comparing y-data against known rates.
-        cat_to_axes: dict[str, tuple[str, str]] = {}
-        for trace in fig.data:
-            trace_y = np.array(trace.y, dtype=float)
-            for cat in categories:
-                if cat in cat_to_axes:
-                    continue
-                cat_y = (dfc[dfc["styp_label"] == cat]
-                         .sort_values("term_sort")[rate_col].values)
-                if len(trace_y) == len(cat_y) and np.allclose(
-                    trace_y, cat_y, equal_nan=True
-                ):
-                    cat_to_axes[cat] = (trace.xaxis or "x",
-                                        trace.yaxis or "y")
-                    break
-
-        for cat, (src_xaxis, src_yaxis) in cat_to_axes.items():
-            proj_r = proj_campus[proj_campus["styp_label"] == cat]
-            if proj_r.empty:
-                continue
-            dfc_cat = dfc[dfc["styp_label"] == cat].sort_values("term_sort")
-            if dfc_cat.empty:
-                continue
-            last = dfc_cat.iloc[-1]
-
-            kw: dict = dict(
-                x=[last["term_short"], proj_r.iloc[0]["term_short"]],
-                y=[last[rate_col], proj_r.iloc[0][rate_col]],
-                mode="lines+markers+text",
-                line={"dash": "dash", "color": "grey"},
-                marker={"symbol": "diamond", "size": 10},
-                text=["", f"{proj_r.iloc[0][rate_col]:.0%}"],
-                textposition="top center",
-                showlegend=False,
-                hovertemplate=(
-                    "<b>%{x}</b><br>Projected: %{y:.1%}<extra></extra>"
-                ),
-            )
-            if src_xaxis != "x":
-                kw["xaxis"] = src_xaxis
-            if src_yaxis != "y":
-                kw["yaxis"] = src_yaxis
-            fig.add_trace(go.Scatter(**kw))
 
     return fig
 
@@ -357,10 +236,9 @@ def _mpl_line_chart(
 
 
 def _generate_pdf(
-    df_viz: pd.DataFrame, df_overall: pd.DataFrame,
-    campus: str, persistence_type: str,
+    df_overall: pd.DataFrame,
+    persistence_type: str,
     proj_overall: pd.DataFrame | None = None,
-    proj_by_styp: pd.DataFrame | None = None,
     proj_method: str | None = None,
 ) -> bytes:
     matplotlib.rcParams.update({
@@ -374,68 +252,41 @@ def _generate_pdf(
     rate_col = opts["rate_col"]
     PAGE_W, PAGE_H = 11.0, 8.5
 
-    # Extract projection values for this campus
-    def _get_proj(proj_df, campus_val, label_col=None, label_val=None):
+    # Extract projection value for a campus
+    def _get_proj(proj_df, campus_val):
         if proj_df is None or proj_df.empty:
             return None, None
-        mask = proj_df["campus"] == campus_val
-        if label_col and label_val:
-            mask = mask & (proj_df[label_col] == label_val)
-        row = proj_df[mask]
+        row = proj_df[proj_df["campus"] == campus_val]
         if row.empty:
             return None, None
         return row.iloc[0][rate_col], row.iloc[0]["term_short"]
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
-        # Page 1: Overall
-        dfc_overall = df_overall[df_overall["campus"] == campus].copy()
-        if persistence_type == "Fall \u2192 Next Fall":
-            dfc_overall = dfc_overall[dfc_overall["next_fall_total_headcount"] > 0]
+        # One page per campus: overall (all students) persistence
+        for campus in CAMP_MAP.values():
+            dfc_overall = df_overall[df_overall["campus"] == campus].copy()
+            if persistence_type == "Fall → Next Fall":
+                dfc_overall = dfc_overall[dfc_overall["next_fall_total_headcount"] > 0]
+            if dfc_overall.empty:
+                continue
 
-        p_rate, p_label = _get_proj(proj_overall, campus)
+            p_rate, p_label = _get_proj(proj_overall, campus)
 
-        overall_title = f"{campus} — All Students — {persistence_type}"
-        fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
-        fig.text(0.50, 0.97, "Persistence by Student Type",
-                 fontsize=16, fontweight="bold", ha="center")
-        fig.suptitle(overall_title, fontsize=14, fontweight="bold", y=0.93)
-        fig.subplots_adjust(left=0.10, right=0.92, top=0.88, bottom=0.20)
-        _mpl_line_chart(ax, dfc_overall, rate_col, "",
-                        proj_rate=p_rate, proj_label=p_label)
-        _add_pdf_footer(fig)
-        pdf.savefig(fig)
-        plt.close(fig)
-
-        # Page 2+: By student type (2x2 grid per page)
-        dfc = df_viz[df_viz["campus"] == campus].copy()
-        if persistence_type == "Fall \u2192 Next Fall":
-            dfc = dfc[dfc["next_fall_total_headcount"] > 0]
-
-        styp_labels = [s for s in dfc["styp_label"].cat.categories if s in dfc["styp_label"].values]
-        styp_title = f"{campus} — By Student Type — {persistence_type}"
-        for page_start in range(0, len(styp_labels), 4):
-            page_labels = styp_labels[page_start : page_start + 4]
-            nrows = (len(page_labels) + 1) // 2
-            fig, axes = plt.subplots(nrows, 2, figsize=(PAGE_W, PAGE_H))
-            fig.suptitle(styp_title, fontsize=14, fontweight="bold", y=0.97)
-            fig.subplots_adjust(left=0.10, right=0.92, top=0.90, bottom=0.20,
-                                hspace=0.45, wspace=0.30)
-            axes = axes.flatten()
-            for i, label in enumerate(page_labels):
-                df_s = dfc[dfc["styp_label"] == label]
-                s_rate, s_label = _get_proj(proj_by_styp, campus,
-                                            "styp_label", label)
-                _mpl_line_chart(axes[i], df_s, rate_col, label,
-                                proj_rate=s_rate, proj_label=s_label)
-            for j in range(len(page_labels), len(axes)):
-                axes[j].set_visible(False)
+            fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
+            fig.text(0.50, 0.97, "KPI - Persistence",
+                     fontsize=16, fontweight="bold", ha="center")
+            fig.suptitle(f"{campus} — {persistence_type}",
+                         fontsize=14, fontweight="bold", y=0.93)
+            fig.subplots_adjust(left=0.10, right=0.92, top=0.88, bottom=0.20)
+            _mpl_line_chart(ax, dfc_overall, rate_col, "",
+                            proj_rate=p_rate, proj_label=p_label)
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
 
         # Methodology page (only when projections are active)
-        if proj_method and (proj_overall is not None or proj_by_styp is not None):
+        if proj_method and proj_overall is not None:
             fig = plt.figure(figsize=(PAGE_W, PAGE_H))
             fig.text(0.50, 0.95, "Projection Methodology",
                      fontsize=16, fontweight="bold", ha="center")
@@ -450,7 +301,7 @@ def _generate_pdf(
                     "The projected value is the extrapolated point for the",
                     "next fall term.",
                     "",
-                    "R\u00b2 (goodness of fit) indicates how well the linear",
+                    "R² (goodness of fit) indicates how well the linear",
                     "model fits the historical data. Values closer to 1.0",
                     "mean a stronger linear trend; values near 0 suggest no",
                     "clear trend and the projection should be treated with",
@@ -461,7 +312,7 @@ def _generate_pdf(
                     "Method: Weighted Moving Average",
                     "",
                     "The last 3 data points are averaged with increasing",
-                    "weights (1\u00d7, 2\u00d7, 3\u00d7), giving the most recent",
+                    "weights (1×, 2×, 3×), giving the most recent",
                     "year triple the influence of the oldest year in the",
                     "window. This method responds quickly to recent changes",
                     "without assuming a long-term trend.",
@@ -480,33 +331,29 @@ def _generate_pdf(
             fig.text(0.10, y,
                      "Projections are estimates based on historical patterns "
                      "and should be interpreted with caution.\n"
-                     "Projected values are clipped to the 0\u2013100% range.",
+                     "Projected values are clipped to the 0–100% range.",
                      fontsize=9, color="grey", va="top")
 
             # R² table for linear regression
             if proj_method == "Linear Regression":
                 r_sq_data: list[tuple[str, str]] = []
-                if proj_overall is not None and "_r_squared" in proj_overall.columns:
-                    for _, r in proj_overall[
-                        proj_overall["campus"] == campus
-                    ].iterrows():
-                        r_sq_data.append(("All Students", f"{r['_r_squared']:.3f}"))
-                if proj_by_styp is not None and "_r_squared" in proj_by_styp.columns:
-                    for _, r in proj_by_styp[
-                        proj_by_styp["campus"] == campus
-                    ].iterrows():
-                        r_sq_data.append((r["styp_label"], f"{r['_r_squared']:.3f}"))
+                if "_r_squared" in proj_overall.columns:
+                    for campus in CAMP_MAP.values():
+                        row = proj_overall[proj_overall["campus"] == campus]
+                        if not row.empty:
+                            r_sq_data.append(
+                                (campus, f"{row.iloc[0]['_r_squared']:.3f}"))
 
                 if r_sq_data:
                     y -= 0.05
-                    fig.text(0.10, y, "R\u00b2 by Group", fontsize=12,
+                    fig.text(0.10, y, "R² by Campus", fontsize=12,
                              fontweight="bold", va="top")
                     y -= 0.035
                     col_w = [0.30, 0.10]
                     # Header
-                    fig.text(0.10, y, "Group", fontsize=10,
+                    fig.text(0.10, y, "Campus", fontsize=10,
                              fontweight="bold", va="top")
-                    fig.text(0.10 + col_w[0], y, "R\u00b2", fontsize=10,
+                    fig.text(0.10 + col_w[0], y, "R²", fontsize=10,
                              fontweight="bold", va="top")
                     y -= 0.025
                     for grp, rsq in r_sq_data:
@@ -527,7 +374,7 @@ def _generate_pdf(
 # ---------------------------------------------------------------------------
 
 def render():
-    st.header("Persistence by Student Type")
+    st.header("KPI - Persistence")
 
     # --- Sidebar controls ---
     selected_terms = st.sidebar.multiselect(
@@ -553,121 +400,87 @@ def render():
         if not selected_terms:
             st.warning("Select at least one term.")
             return
-        fetch_persistence_by_styp.clear()
-        df = fetch_persistence_by_styp(tuple(sorted(selected_terms)))
+        fetch_kpi_b1_c2_persistence.clear()
+        df = fetch_kpi_b1_c2_persistence(tuple(sorted(selected_terms)))
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return
         df_prepared = _prepare_data(df)
-        st.session_state["pbs_df"] = df_prepared
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
         clear_pdf_cache("pbs")
 
     # --- PDF download in sidebar (after query block) ---
-    if "pbs_df" in st.session_state:
-        campus_val = st.session_state.get("pbs_campus", "Cypress")
-        ptype_val = st.session_state.get("pbs_ptype", "Fall \u2192 Spring")
+    if "pbs_df_overall" in st.session_state:
+        ptype_val = st.session_state.get("pbs_ptype", "Fall → Spring")
 
         # Compute projections for PDF (uses current sidebar selections)
         pdf_proj_overall = None
-        pdf_proj_by_styp = None
         if show_projection and proj_method:
             opts = RATE_OPTIONS[ptype_val]
             rate_col = opts["rate_col"]
             df_o = st.session_state["pbs_df_overall"].copy()
-            if ptype_val == "Fall \u2192 Next Fall":
+            if ptype_val == "Fall → Next Fall":
                 df_o = df_o[df_o["next_fall_total_headcount"] > 0]
             if not df_o.empty:
                 pdf_proj_overall = _compute_projections(
                     df_o, rate_col, ["campus"], proj_method)
-            df_v = st.session_state["pbs_df"].copy()
-            if ptype_val == "Fall \u2192 Next Fall":
-                df_v = df_v[df_v["next_fall_total_headcount"] > 0]
-            if not df_v.empty:
-                pdf_proj_by_styp = _compute_projections(
-                    df_v, rate_col, ["campus", "styp_label"], proj_method)
 
         pdf_bytes = cached_pdf_bytes(
             "pbs",
             (
-                id(st.session_state["pbs_df"]),
                 id(st.session_state["pbs_df_overall"]),
-                campus_val,
                 ptype_val,
                 show_projection,
                 proj_method,
             ),
             lambda: _generate_pdf(
-                st.session_state["pbs_df"],
                 st.session_state["pbs_df_overall"],
-                campus_val,
                 ptype_val,
                 proj_overall=pdf_proj_overall,
-                proj_by_styp=pdf_proj_by_styp,
                 proj_method=proj_method if show_projection else None,
             ),
         )
         st.sidebar.download_button(
             "Download PDF",
             data=pdf_bytes,
-            file_name="persistence_by_styp.pdf",
+            file_name="kpi_b1_c2_persistence.pdf",
             mime="application/pdf",
             key="pbs_pdf_btn",
         )
 
-    if "pbs_df" not in st.session_state:
+    if "pbs_df_overall" not in st.session_state:
         st.info("Select Term IDs and press **Query** to load data.")
         return
 
-    df_viz = st.session_state["pbs_df"]
     df_overall = st.session_state["pbs_df_overall"]
 
-    # --- Filters ---
-    col1, col2 = st.columns(2)
-    with col1:
-        campus = st.selectbox("Campus", list(CAMP_MAP.values()), key="pbs_campus")
-    with col2:
-        persistence_type = st.radio(
-            "Persistence Type",
-            list(RATE_OPTIONS.keys()),
-            key="pbs_ptype",
-            horizontal=True,
-        )
+    # --- Filter: persistence type ---
+    persistence_type = st.radio(
+        "Persistence Type",
+        list(RATE_OPTIONS.keys()),
+        key="pbs_ptype",
+        horizontal=True,
+    )
 
     # --- Compute projections for charts ---
     proj_overall = None
-    proj_by_styp = None
     if show_projection and proj_method:
         opts = RATE_OPTIONS[persistence_type]
         rate_col = opts["rate_col"]
         df_o = df_overall.copy()
-        if persistence_type == "Fall \u2192 Next Fall":
+        if persistence_type == "Fall → Next Fall":
             df_o = df_o[df_o["next_fall_total_headcount"] > 0]
         if not df_o.empty:
             proj_overall = _compute_projections(
                 df_o, rate_col, ["campus"], proj_method)
-        df_v = df_viz.copy()
-        if persistence_type == "Fall \u2192 Next Fall":
-            df_v = df_v[df_v["next_fall_total_headcount"] > 0]
-        if not df_v.empty:
-            proj_by_styp = _compute_projections(
-                df_v, rate_col, ["campus", "styp_label"], proj_method)
 
-    # --- Section A: Overall persistence ---
-    st.subheader("All Students")
-    st.plotly_chart(
-        _build_overall_fig(df_overall, campus, persistence_type,
-                           projection=proj_overall),
-        use_container_width=True,
-    )
-
-    # --- Section B: By student type ---
-    st.subheader("By Student Type")
-    st.plotly_chart(
-        _build_by_styp_fig(df_viz, campus, persistence_type,
-                           projection=proj_by_styp),
-        use_container_width=True,
-    )
+    # --- Persistence by campus (all three) ---
+    for campus in CAMP_MAP.values():
+        st.plotly_chart(
+            _build_overall_fig(df_overall, campus, persistence_type,
+                               projection=proj_overall),
+            use_container_width=True,
+        )
 
     # --- Projection methodology expander ---
     if show_projection and proj_method:
@@ -678,7 +491,7 @@ def render():
                     "available historical data points using least-squares "
                     "regression. The projected value is the extrapolated point "
                     "for the next fall term.\n\n"
-                    "**R\u00b2** indicates how well the linear model fits the "
+                    "**R²** indicates how well the linear model fits the "
                     "historical data. Values closer to 1.0 mean a stronger "
                     "linear trend; values near 0 suggest no clear trend and "
                     "the projection should be treated with caution."
@@ -686,7 +499,7 @@ def render():
             else:
                 st.markdown(
                     "**Weighted Moving Average** uses the last 3 data points "
-                    "with increasing weights (1\u00d7, 2\u00d7, 3\u00d7), "
+                    "with increasing weights (1×, 2×, 3×), "
                     "giving the most recent year triple the influence of the "
                     "oldest year in the window. This method responds quickly "
                     "to recent changes without assuming a long-term trend."
@@ -695,28 +508,20 @@ def render():
             st.caption(
                 "Projections are estimates based on historical patterns "
                 "and should be interpreted with caution. Projected values "
-                "are clipped to the 0\u2013100% range."
+                "are clipped to the 0–100% range."
             )
 
             # R² table for linear regression
             if proj_method == "Linear Regression":
                 r_sq_rows: list[dict] = []
                 if proj_overall is not None and "_r_squared" in proj_overall.columns:
-                    for _, row in proj_overall[
-                        proj_overall["campus"] == campus
-                    ].iterrows():
-                        r_sq_rows.append({
-                            "Group": "All Students",
-                            "R\u00b2": f"{row['_r_squared']:.3f}",
-                        })
-                if proj_by_styp is not None and "_r_squared" in proj_by_styp.columns:
-                    for _, row in proj_by_styp[
-                        proj_by_styp["campus"] == campus
-                    ].iterrows():
-                        r_sq_rows.append({
-                            "Group": row["styp_label"],
-                            "R\u00b2": f"{row['_r_squared']:.3f}",
-                        })
+                    for campus in CAMP_MAP.values():
+                        row = proj_overall[proj_overall["campus"] == campus]
+                        if not row.empty:
+                            r_sq_rows.append({
+                                "Campus": campus,
+                                "R²": f"{row.iloc[0]['_r_squared']:.3f}",
+                            })
                 if r_sq_rows:
                     st.dataframe(
                         pd.DataFrame(r_sq_rows),

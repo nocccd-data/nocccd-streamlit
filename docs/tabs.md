@@ -38,18 +38,16 @@ The Seat Count Report shows a different column set per campus, in both the bande
 
 `_layout_for_campus(campus_mode)` returns the per-mode metadata (`html_labels`, `pdf_cols` with widths summing to 1.0, rate-color indices, alignment sets, and visibility flags) used by `_build_banded_html` and `_generate_pdf`. PDF widths differ between credit (13 cols, INSM 0.27, no Building) and NOCE (16 cols, INSM 0.14, Building 0.19); both sum to 1.000. The bulk export passes the per-PDF campus directly so each `<Campus>/<Season>/*.pdf` lands in its correct layout automatically.
 
-## Persistence projections (`persistence_by_styp.py`)
+## Persistence projections (`kpi_b1_c2_persistence.py`)
 
-The Persistence by Student Type tab supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
+The KPI - Persistence tab shows one overall ("all students") persistence line chart per campus (Cypress, Fullerton, NOCE), with a `Fall → Spring` / `Fall → Next Fall` radio. It also supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
 
-- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per group. Minimum 2 data points.
+- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per campus. Minimum 2 data points.
 - **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
 
 Projected values are clipped to [0, 1]. The next term label is derived from MIS term ID pattern (IDs increment by 10 per year: 207→217→…→257→267).
 
-**Plotly facet subplot gotcha**: `px.line(facet_col_wrap=3)` does NOT store traces in categorical order — the trace order matches Plotly's internal subplot layout, which differs from the category order. To add projection traces to the correct facet panel, match each existing trace to its category by comparing y-data with `np.allclose()`, then read the trace's `xaxis`/`yaxis` to determine its subplot. Setting `xaxis="x"` on `go.Scatter()` raises a validator error in some Plotly versions — only set `xaxis`/`yaxis` for non-default subplots (i.e., skip when value is `"x"` or `"y"`).
-
-**PDF export**: Includes projected dashed lines on all charts plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
+**PDF export**: One overall page per campus with projected dashed lines, plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
 
 Widget prefix: `"pbs_"`
 
@@ -73,7 +71,7 @@ Widget prefix: `"csh_"`
 
 ## Sidebar download exports
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
 
 For BOT-specific PDF/Excel generator details (paper coordinates, layout gotchas, font sizes), see `docs/bot-tabs.md`.
 

@@ -102,8 +102,8 @@ def fetch_class_schedule_heatmap(terms: tuple[str, ...]) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
-def fetch_persistence_by_styp(terms: tuple[str, ...]) -> pd.DataFrame:
-    return _download_and_read("persistence_by_styp", "mis_term_id", terms)
+def fetch_kpi_b1_c2_persistence(terms: tuple[str, ...]) -> pd.DataFrame:
+    return _download_and_read("kpi_b1_c2_persistence", "mis_term_id", terms)
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")

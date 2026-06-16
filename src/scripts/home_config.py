@@ -37,13 +37,12 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "Persistence by Student Type",
-        "description": "Fall-to-spring and fall-to-fall persistence rates by campus and student type.",
+        "tab_label": "KPI - Persistence",
+        "description": "Fall-to-spring and fall-to-fall persistence rates across all three campuses.",
         "metrics": [
             "Fall-to-spring persistence rates",
             "Fall-to-fall persistence rates",
-            "Breakdown by student type",
-            "Multi-term trend lines by campus",
+            "Multi-term trend lines for all campuses",
         ],
     },
     {

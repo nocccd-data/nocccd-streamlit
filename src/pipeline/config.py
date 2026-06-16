@@ -67,9 +67,9 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    "persistence_by_styp": {
-        "sql_file": "persistence_by_styp.sql",
-        "mis_term_id": ["207", "217", "227", "237", "247", "257"],
+    "kpi_b1_c2_persistence": {
+        "sql_file": "kpi_b1_c2_persistence.sql",
+        "mis_term_id": ["237", "247", "257", "267"],
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
