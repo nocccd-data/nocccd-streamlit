@@ -58,7 +58,9 @@ nocccd-streamlit/
 │   │       ├── fast_facts.py
 │   │       ├── seat_count_report.py
 │   │       ├── class_schedule_heatmap.py
-│   │       ├── persistence_by_styp.py
+│   │       ├── kpi_persistence.py
+│   │       ├── kpi_applied_to_enrolled.py
+│   │       ├── kpi_dual_enrollment.py
 │   │       ├── coi_nhrdist_val.py
 │   │       ├── mis_sp_submitted_scff.py
 │   │       ├── mis_sp_current_scff.py
@@ -113,7 +115,9 @@ Datasets are defined in `src/pipeline/config.py`. Each entry maps a dataset name
 | `cte_scff` | `cte_scff.sql` | `mis_acyr_id` | `dwhdb` | SCFF CTE award source comparison |
 | `cte_sx_submitted` | `cte_sx_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS SX submitted CTE comparison |
 | `class_schedule_heatmap` | `class_schedule_heatmap.sql` | `mis_term_id` | `dwhdb` | Class Schedule Heatmap tab |
-| `persistence_by_styp` | `persistence_by_styp.sql` | `mis_term_id` | `dwhdb` | Persistence by Student Type tab |
+| `kpi_persistence` | `kpi_persistence.sql` | `mis_term_id` | `dwhdb` | KPI - Persistence tab |
+| `kpi_applied_to_enrolled` | `kpi_applied_to_enrolled.sql` | `mis_term_id` | `dwhdb` | KPI - Applied to Enrolled tab |
+| `kpi_dual_enrollment` | `kpi_dual_enrollment.sql` | `acyr_code` | `dwhdb` | KPI - Dual Enrollment tab |
 | `enrollment_dashboard` | `enrollment_dashboard.sql` | `banner_term_code` | `dwhdb` | Two-term enrollment-by-date extract enriched with instructional mode + demographics (Banner joins, sliced from the 5-year MV); published to Tableau Cloud only (no app tab yet) |
 | `seat_count_report` | `seat_count_report.sql` | `banner_term_code` | `rept` | Seat Count Report tab, mail reports, and bulk PDF export |
 | `bot_goal1_students` | `bot_goal1_students.sql` | `acyr_code` | `rept` | BOT Goal 1 Students tab and shared BOT denominator |

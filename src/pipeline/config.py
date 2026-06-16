@@ -67,10 +67,22 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    "persistence_by_styp": {
-        "sql_file": "persistence_by_styp.sql",
-        "mis_term_id": ["207", "217", "227", "237", "247", "257"],
+    "kpi_persistence": {
+        "sql_file": "kpi_persistence.sql",
+        "mis_term_id": ["237", "247", "257", "267"],
         "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
+    "kpi_applied_to_enrolled": {
+        "sql_file": "kpi_applied_to_enrolled.sql",
+        "mis_term_id": ["247", "257", "267"],
+        "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
+    "kpi_dual_enrollment": {
+        "sql_file": "kpi_dual_enrollment.sql",
+        "acyr_code": ["2024", "2025", "2026"],
+        "param_name": "acyr_code",
         "db_section": "dwhdb",
     },
     "enrollment_dashboard": {

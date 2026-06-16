@@ -38,20 +38,45 @@ The Seat Count Report shows a different column set per campus, in both the bande
 
 `_layout_for_campus(campus_mode)` returns the per-mode metadata (`html_labels`, `pdf_cols` with widths summing to 1.0, rate-color indices, alignment sets, and visibility flags) used by `_build_banded_html` and `_generate_pdf`. PDF widths differ between credit (13 cols, INSM 0.27, no Building) and NOCE (16 cols, INSM 0.14, Building 0.19); both sum to 1.000. The bulk export passes the per-PDF campus directly so each `<Campus>/<Season>/*.pdf` lands in its correct layout automatically.
 
-## Persistence projections (`persistence_by_styp.py`)
+## Persistence projections (`kpi_persistence.py`)
 
-The Persistence by Student Type tab supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
+The KPI - Persistence tab shows one overall ("all students") persistence line chart per campus (Cypress, Fullerton, NOCE), with a `Fall → Spring` / `Fall → Next Fall` radio. It also supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
 
-- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per group. Minimum 2 data points.
+- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per campus. Minimum 2 data points.
 - **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
 
 Projected values are clipped to [0, 1]. The next term label is derived from MIS term ID pattern (IDs increment by 10 per year: 207→217→…→257→267).
 
-**Plotly facet subplot gotcha**: `px.line(facet_col_wrap=3)` does NOT store traces in categorical order — the trace order matches Plotly's internal subplot layout, which differs from the category order. To add projection traces to the correct facet panel, match each existing trace to its category by comparing y-data with `np.allclose()`, then read the trace's `xaxis`/`yaxis` to determine its subplot. Setting `xaxis="x"` on `go.Scatter()` raises a validator error in some Plotly versions — only set `xaxis`/`yaxis` for non-default subplots (i.e., skip when value is `"x"` or `"y"`).
+**PDF export**: One overall page per campus with projected dashed lines, plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
 
-**PDF export**: Includes projected dashed lines on all charts plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
+**Excel export**: One `chart_data` sheet with overall persistence rates + counts (Fall→Spring and Fall→Next Fall) per campus/term. Independent of the projection/persistence-type toggles, so its cache key is just `(id(df_overall),)`.
 
 Widget prefix: `"pbs_"`
+
+## Applied-to-enrolled yield (`kpi_applied_to_enrolled.py`)
+
+The KPI - Applied to Enrolled tab shows one line chart per campus (Cypress, Fullerton, NOCE) of the application-to-enrollment yield (`% enrolled` = enrolled ÷ applied). Unlike the single-line Persistence tab, each chart carries **multiple lines — one per student type** (`first_time`, `first_time_trans`, `concurrent`, `adult`) plus a bold black dashed **Overall** line.
+
+- The source MV (`dwh.mv_applied_to_enrolled`) has no overall/all-types row, so **Overall is computed in Python** in `_build_overall()` as `SUM(enrl_pidm_count) / SUM(app_pidm_count)` per campus/term — a count-weighted rate, **not** an average of the per-type rates (matches the repo's weighted-% rule in the parent `CLAUDE.md`).
+- Per-type rates are recomputed from the raw counts (not the pre-rounded `pct_enrolled` column) so per-type lines and the Overall line share one unrounded methodology. NULL/zero denominators yield NaN, never `inf`.
+- Per-type lines come from `px.line(color="styp_label")`; the Overall line is added as a separate `go.Scatter` so it renders distinctly. Term labels (`Fall 2024`…) are derived from `mis_term_id` (`year = 2000 + mis_term_id // 10`). NOCE only has the `adult` student type, so its Overall line coincides with the Adult line.
+- The Overall line is **black on light themes, white on dark themes** — Plotly traces don't honor the app's CSS `light-dark()`, so `_overall_line_color()` picks the color at render time from `st.context.theme.type` (falls back to black until the frontend reports the theme; corrects on the next rerun). The matplotlib PDF stays black because it always renders on a white background.
+- **PDF export**: one matplotlib page per campus, multi-line with a legend.
+- **Excel export**: one `chart_data` sheet — a tidy table of per-student-type rows plus the computed Overall rows (Campus, Term, Student Type, Applied, Enrolled, % Enrolled).
+
+Widget prefix: `"ate_"`
+
+## Dual enrollment (`kpi_dual_enrollment.py`)
+
+The KPI - Dual Enrollment tab shows one line chart per **credit campus** (Cypress, Fullerton) of the dual-enrollment headcount by academic year. The source MV (`dwh.mv_dual_enrollment`) has no NOCE row, so `CAMP_MAP` only maps codes `1`/`2`.
+
+- Filtered on `acyr_code` (one of the few KPI tabs on academic year, not term). Year labels (`2024-25`) are derived from `acyr_code` via `_acyr_label()`, matching `config.max_acyr_label()`.
+- The MV also carries `concurrent_enroll_count`, but the tab plots **only `dual_enroll_count`** — one line per chart, no second series.
+- It's a raw count, not a rate, so the y-axis uses `rangemode="tozero"` (Plotly) / `set_ylim(bottom=0)` (PDF) for an honest trend, with the count printed at each point.
+- **PDF export**: one matplotlib page per campus.
+- **Excel export**: one `chart_data` sheet — dual-enrollment count pivoted by academic year × campus.
+
+Widget prefix: `"kde_"`
 
 ## Admin authentication (`auth.py`, `admin_config.py`)
 
@@ -73,7 +98,9 @@ Widget prefix: `"csh_"`
 
 ## Sidebar download exports
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, Persistence by Student Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. BOT tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current BOT metric tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, KPI - Applied to Enrolled, KPI - Dual Enrollment, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. The BOT tabs and all three KPI tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
+
+The KPI tabs build their Excel from the underlying chart data via the generic `ExcelSection` / `sections_to_excel_bytes` / `EXCEL_MIME` building blocks in `bot_excel_helpers.py` (these are not BOT-specific — only `generate_bot_excel` and `standard_bot_excel_sections` are). Each KPI tab has a small `_build_excel_sections()` + `_generate_excel()` pair and follows the same `cached_excel_bytes("<prefix>", (id(df),), ...)` / `clear_excel_cache("<prefix>")` pattern as the PDF cache. The exported tables: Persistence → overall rates + counts per campus/term; Applied to Enrolled → per-student-type rows plus the computed Overall rows; Dual Enrollment → count by academic year × campus.
 
 For BOT-specific PDF/Excel generator details (paper coordinates, layout gotchas, font sizes), see `docs/bot-tabs.md`.
 

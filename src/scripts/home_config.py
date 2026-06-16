@@ -37,13 +37,29 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "Persistence by Student Type",
-        "description": "Fall-to-spring and fall-to-fall persistence rates by campus and student type.",
+        "tab_label": "KPI - Persistence",
+        "description": "Fall-to-spring and fall-to-fall persistence rates across all three campuses.",
         "metrics": [
             "Fall-to-spring persistence rates",
             "Fall-to-fall persistence rates",
-            "Breakdown by student type",
-            "Multi-term trend lines by campus",
+            "Multi-term trend lines for all campuses",
+        ],
+    },
+    {
+        "tab_label": "KPI - Applied to Enrolled",
+        "description": "Application-to-enrollment yield rates by student type across all three campuses.",
+        "metrics": [
+            "% of applicants who enrolled, by student type",
+            "Count-weighted overall yield per campus",
+            "Multi-term trend lines for all campuses",
+        ],
+    },
+    {
+        "tab_label": "KPI - Dual Enrollment",
+        "description": "Dual enrollment headcount trends for the credit campuses (Cypress and Fullerton).",
+        "metrics": [
+            "Dual enrollment headcount by academic year",
+            "Per-campus trend lines (credit campuses only)",
         ],
     },
     {
