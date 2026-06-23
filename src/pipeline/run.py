@@ -28,7 +28,9 @@ def main() -> int:
     parser.add_argument("--extract-only", action="store_true", help="Only create .hyper files, skip upload")
     args = parser.parse_args()
 
-    names = args.datasets if args.datasets else list(DATASETS.keys())
+    names = args.datasets if args.datasets else [
+        n for n, c in DATASETS.items() if not c.get("skip_refresh")
+    ]
     for name in names:
         if name not in DATASETS:
             print(f"Unknown dataset: {name}")
