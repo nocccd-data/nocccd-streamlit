@@ -86,6 +86,10 @@ DATASETS = {
         "db_section": "dwhdb",
     },
     "enrollment_dashboard": {
+        # Used by the Tableau hyper pipeline only (no Streamlit tab). Excluded
+        # from the bulk/scheduled refresh; run manually when needed:
+        #   python -m src.pipeline.run enrollment_dashboard
+        "skip_refresh": True,
         # The MV is a rolling 5-year window (by SYSDATE); we filter it down to
         # the two terms being compared so the extract stays small. Change the
         # term list to reslice without touching the SQL.
