@@ -65,7 +65,7 @@ WITH
             a.levl_code,
             SUM(a.sum_hrs) AS tot_sum_hrs
         FROM shrtgpa_acyr a
-        WHERE a.acyr_code <= :acyr_code
+        WHERE a.acyr_code < :acyr_code
         GROUP BY
             :acyr_code,
             a.pidm,
