@@ -199,6 +199,15 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "BOT Goal 4 - Transfer Ready",
+        "description": "Board of Trustees Goal 4 — Students who are transfer ready at the credit colleges (GPA ≥ 2.0, 60+ transferable units, transfer-level Math + English).",
+        "metrics": [
+            "District-wide transfer-ready headcount by year",
+            "Race/ethnicity, gender, first-gen proportions",
+            "5-year percentage change",
+        ],
+    },
+    {
         "tab_label": "Equity Analysis (PPG-1)",
         "description": "CCCCO Percentage Point Gap Minus One analysis across all BOT metrics. Identifies disproportionate impact by subgroup.",
         "metrics": [

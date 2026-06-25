@@ -304,28 +304,28 @@ def _render_drilldown(df_slice: pd.DataFrame, context: str):
         st.markdown("**Top 10 Divisions**")
         st.dataframe(
             _top_n_pct(deduped, "division_desc", "current_enrollment", "Division"),
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
     with c2:
         st.markdown("**Top 10 Departments**")
         st.dataframe(
             _top_n_pct(deduped, "department_desc", "current_enrollment", "Department"),
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
     with c3:
         st.markdown("**Top 10 Subjects**")
         st.dataframe(
             _top_n_pct(deduped, "subject_desc", "current_enrollment", "Subject"),
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
     with c4:
         st.markdown("**Modality Breakdown**")
         st.dataframe(
             _top_n_pct(deduped, "modality_desc", "current_enrollment", "Modality", n=20),
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
 
@@ -388,7 +388,7 @@ def render():
 
     # --- Section A: Enrollment by Day of Week ---
     st.subheader("Enrollment by Day of Week")
-    st.plotly_chart(_build_day_heatmap_fig(df_term, sel_term), use_container_width=True)
+    st.plotly_chart(_build_day_heatmap_fig(df_term, sel_term), width="stretch")
 
     # Day drill-down
     with st.expander("Explore by Campus & Day"):
@@ -408,7 +408,7 @@ def render():
     for campus in _CAMPUSES:
         fig = _build_time_heatmap_fig(df_heatmap, sel_term, campus)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Time drill-down
             with st.expander(f"Explore — {campus}"):

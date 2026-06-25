@@ -43,7 +43,7 @@ Most Goal 2+ tabs use `bot_goal1_students` as the denominator. Exceptions use sp
 - **BOT Goal 2 - Noncredit Certificates** (`bot_goal2_cert_nc.py`): uses `bot_goal2_cert_nc_denom` (SQL at `src/pipeline/sql/bot_goal2_cert_nc_denom.sql`). The general Goal 1 NOCE population includes many non-CTE students; this specialized denominator restricts to CTE-relevant subjects/divisions that are eligible for noncredit certificates.
 
 **Base_df must match tab's campus scope**: After fetching `bot_goal1_students` as `base`, the tab must filter it to match its own campus scope BEFORE passing to `render_bot_charts()`. Otherwise the proportion denominator includes populations the tab's numerator can never reach (e.g., a credit-only cert tab divided by a district-wide Goal 1 population). Pattern:
-- Credit-only tabs (cert, assoc, adt, xfer, finaid): `base = base[base["site"] == "Credit"]`
+- Credit-only tabs (cert, assoc, adt, xfer, finaid, xfer_ready): `base = base[base["site"] == "Credit"]`
 - Noncredit-only tabs (cert_nc): `base = base[base["site"] == "Noncredit"]`
 - All-campus tabs (wage): uses its own denom, no filtering needed
 
@@ -52,8 +52,17 @@ Most Goal 2+ tabs use `bot_goal1_students` as the denominator. Exceptions use sp
 Some BOT tabs are scoped to credit colleges only (Cypress + Fullerton, excluding NOCE). The filter is applied at the **SQL level** (e.g., `WHERE a.site = 'Credit'` in the SQL), not in Python. Credit-only tabs currently include:
 - Goal 2: Certificates, Associate Degrees, ADT, Bachelor's, Transfers
 - Goal 3: Financial Aid, Average Units
+- Goal 4: Transfer Ready
 
 Noncredit-only (NOCE) tabs: Goal 2 Noncredit Certificates. All-campus tabs (credit + noncredit): Goal 1 Students, Goal 2 Living Wage.
+
+## District-wide headcount (no campus split) — Goal 4 Transfer Ready
+
+Most tabs break the headcount chart out by campus (Cypress / Fullerton / NOCE) plus an optional NOCCCD unduplicated bar. **Goal 4 Transfer Ready** is different: transfer readiness is a student-level, district-wide fact (a student earns it across their whole transcript, with no single home campus), so the Excel source shows a **single Credit-college bar per year**, not a per-campus split. To render this with the shared helper without modifying it:
+- The SQL (`bot_goal4_xfer_ready.sql`) emits literal `'NOCCCD (Unduplicated)' AS camp_desc` and `'Credit' AS site` for every row (alongside `acyr_code`, `academic_year` from `stvacyr`, `pidm`, and the three demographic columns).
+- `_TITLES` sets `include_nocccd=False` so `aggregate_headcount()` does **not** add a second NOCCCD unduplicated group — every row already carries that single `camp_desc`, giving exactly one bar (and one `5-Yr % Change` bar) per year. `"NOCCCD (Unduplicated)"` is in `CAMPUS_ORDER` and `COLOR_MAP` (teal), so ordering, color, and `compute_pct_change()` all work unchanged.
+- `headcount_note` carries the "NOCE data not applicable for this metric" disclaimer from the source Excel.
+- The race/gender/first-gen charts are standard rate metrics with `base_df = bot_goal1_students` filtered to Credit (same as Cert/ADT). Widget prefix: `bg4_`.
 
 ## Average-metric tabs (Goal 3 Average Units)
 
@@ -63,7 +72,7 @@ When adding a new tab, align the titles dict (`org`, captions) with the SQL's ac
 
 ## Configurable flags in titles dict
 
-- `include_nocccd` (default `True`): set `False` for single-campus tabs (e.g., NOCE noncredit) to skip the NOCCCD unduplicated bar. Credit-only tabs keep it since "NOCCCD (Unduplicated)" meaningfully represents Cypress+Fullerton combined.
+- `include_nocccd` (default `True`): set `False` for single-campus tabs (e.g., NOCE noncredit) to skip the NOCCCD unduplicated bar, or for the district-wide Goal 4 Transfer Ready tab where every row already carries `camp_desc = "NOCCCD (Unduplicated)"` so a single district bar is shown (see "District-wide headcount" above). Most credit-only tabs keep it since "NOCCCD (Unduplicated)" meaningfully represents Cypress+Fullerton combined.
 - `credit_only_firstgen` (default `True`): set `False` for noncredit tabs so first-gen data isn't filtered out. Redundant (but harmless) for tabs already filtered to credit at the SQL level.
 - `headcount_only` (default `False`): set `True` to skip charts 2-4 (race, gender, first-gen). Used by Bachelor's tab where the population is too small for meaningful demographic breakdowns.
 - `headcount_note`, `race_note`, `gender_note`, `firstgen_note` (default `None`): per-section grey footer note rendered just below that section's "Source: …" line. Used for the small-sample confidentiality disclaimer (most often on race) and the NOCE survey-data caveat (first-gen on Goal 1). When a note is present, that section's chart and Source line shift up by `0.01` (paper coords) in the PDF to make room.

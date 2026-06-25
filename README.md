@@ -78,6 +78,7 @@ nocccd-streamlit/
 │   │       ├── bot_goal2_xfer.py
 │   │       ├── bot_goal3_finaid.py
 │   │       ├── bot_goal3_units.py
+│   │       ├── bot_goal4_xfer_ready.py
 │   │       ├── equity_analysis.py # Equity Analysis (PPG-1) tab + workbook download
 │   │       └── mail_admin.py     # Mail Admin tab (password-protected)
 │   └── static/
@@ -132,6 +133,7 @@ Datasets are defined in `src/pipeline/config.py`. Each entry maps a dataset name
 | `bot_goal2_wage_denom` | `bot_goal2_wage_denom.sql` | `acyr_code` | `dwhdb` | Denominator for living-wage rates |
 | `bot_goal3_finaid` | `bot_goal3_finaid.sql` | `acyr_code` | `rept` | BOT Goal 3 Financial Aid tab |
 | `bot_goal3_units` | `bot_goal3_units.sql` | `acyr_code` | `rept` | BOT Goal 3 Average Units tab |
+| `bot_goal4_xfer_ready` | `bot_goal4_xfer_ready.sql` | `acyr_code` | `rept` | BOT Goal 4 Transfer Ready tab |
 
 ## Setup
 
@@ -255,7 +257,7 @@ python -m src.pipeline.bot_export
 - **Source**: reads `src/pipeline/hyper/bot_*.hyper` directly. Run the pipeline first if any BOT Hyper file is missing or stale.
 - **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/PDF Export/<max_acyr_label>/`, e.g. `PDF Export/2024-25/`. The label comes from the max `acyr_code` in `bot_goal1_students` (`2024` → `2024-25`).
 - **Filename**: `bot_<YYYYMMDD>.pdf`, e.g. `bot_20260501.pdf`, using the run date.
-- **Combined PDF**: pages from all 10 BOT tabs are concatenated in this order — Goal 1 Students, Goal 2 ADT, Associate Degrees, Bachelor's, Certificates, Noncredit Certificates, Living Wage, Transfers, Goal 3 Financial Aid, Average Units.
+- **Combined PDF**: pages from all 11 BOT tabs are concatenated in this order — Goal 1 Students, Goal 2 ADT, Associate Degrees, Bachelor's, Certificates, Noncredit Certificates, Living Wage, Transfers, Goal 3 Financial Aid, Average Units, Goal 4 Transfer Ready.
 - **Snapshots**: each academic-year folder accumulates date-stamped exports. Same-day re-runs overwrite that day's PDF; the next calendar day creates a new file in the same academic-year folder.
 
 The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/bot_export.py` — change it there if your OneDrive path differs.
@@ -271,7 +273,7 @@ python -m src.pipeline.bot_excel_export
 - **Source**: reads `src/pipeline/hyper/bot_*.hyper` directly to build chart tables. Run the pipeline first if any BOT Hyper file is missing or stale.
 - **Destination**: `~/Library/CloudStorage/OneDrive-NorthOrangeCountyCommunityCollegeDistrict/Documents - EST Data/BOT Reports/Streamlit Data Export/<max_acyr_label>/`, e.g. `Streamlit Data Export/2024-25/`. The label comes from the max `acyr_code` in `bot_goal1_students` (`2024` → `2024-25`).
 - **Filename**: `bot_<YYYYMMDD>.xlsx`, e.g. `bot_20260501.xlsx`, using the run date.
-- **Workbook layout**: 10 chart-table sheets, one per displayed BOT metric tab, in the same order as the combined BOT PDF. The denominator extracts are used only for percentage calculations, not exported as raw sheets.
+- **Workbook layout**: 11 chart-table sheets, one per displayed BOT metric tab, in the same order as the combined BOT PDF. The denominator extracts are used only for percentage calculations, not exported as raw sheets.
 - **Snapshots**: each academic-year folder accumulates date-stamped exports. Same-day re-runs overwrite that day's workbook; the next calendar day creates a new file in the same academic-year folder.
 
 The destination root is set in the `EXPORT_ROOT` constant at the top of `src/pipeline/bot_excel_export.py` — change it there if your OneDrive path differs.

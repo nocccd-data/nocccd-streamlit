@@ -262,5 +262,5 @@ def render():
             continue
         st.plotly_chart(
             _build_campus_fig(df, campus),
-            use_container_width=True,
+            width="stretch",
         )

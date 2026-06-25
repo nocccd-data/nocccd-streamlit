@@ -302,10 +302,10 @@ def render():
     st.subheader("Students")
     for df, title in datasets[:6]:
         st.caption(title)
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
     # --- Employee tables ---
     st.subheader("Employees")
     for df, title in datasets[6:]:
         st.caption(title)
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")

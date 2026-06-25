@@ -368,5 +368,5 @@ def render():
             continue
         st.plotly_chart(
             _build_campus_fig(df_types, df_overall, campus, overall_color),
-            use_container_width=True,
+            width="stretch",
         )

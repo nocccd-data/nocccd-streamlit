@@ -42,6 +42,7 @@ from src.scripts.tabs import (  # noqa: E402
     bot_goal2_xfer,
     bot_goal3_finaid,
     bot_goal3_units,
+    bot_goal4_xfer_ready,
 )
 from src.scripts.tabs.bot_helpers import generate_bot_pdf  # noqa: E402
 
@@ -124,7 +125,14 @@ def _pdf_goal3_units(cache: HyperCache) -> bytes:
     return bot_goal3_units.generate_pdf(df)
 
 
-# Order mirrors the tab list (Goal 1 → Goal 2 alphabetical → Goal 3).
+def _pdf_goal4_xfer_ready(cache: HyperCache) -> bytes:
+    df = cache.get("bot_goal4_xfer_ready")
+    return generate_bot_pdf(
+        df, bot_goal4_xfer_ready._TITLES, base_df=_credit_goal1_base(cache),
+    )
+
+
+# Order mirrors the tab list (Goal 1 → Goal 2 alphabetical → Goal 3 → Goal 4).
 _TAB_BUILDERS: list[tuple[str, Callable[[HyperCache], bytes]]] = [
     ("bot_goal1_students", _pdf_goal1_students),
     ("bot_goal2_adt",      _pdf_goal2_adt),
@@ -136,6 +144,7 @@ _TAB_BUILDERS: list[tuple[str, Callable[[HyperCache], bytes]]] = [
     ("bot_goal2_xfer",     _pdf_goal2_xfer),
     ("bot_goal3_finaid",   _pdf_goal3_finaid),
     ("bot_goal3_units",    _pdf_goal3_units),
+    ("bot_goal4_xfer_ready", _pdf_goal4_xfer_ready),
 ]
 
 

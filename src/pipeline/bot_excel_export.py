@@ -56,6 +56,7 @@ from src.scripts.tabs import (  # noqa: E402
     bot_goal2_xfer,
     bot_goal3_finaid,
     bot_goal3_units,
+    bot_goal4_xfer_ready,
 )
 from src.scripts.tabs.bot_helpers import (  # noqa: E402
     CAMPUS_ORDER,
@@ -190,6 +191,16 @@ def _build_goal3_units(
     return cache.get("bot_goal3_units"), bot_goal3_units._TITLES, None
 
 
+def _build_goal4_xfer_ready(
+    cache: HyperCache,
+) -> tuple[pd.DataFrame, dict, pd.DataFrame | None]:
+    return (
+        cache.get("bot_goal4_xfer_ready"),
+        bot_goal4_xfer_ready._TITLES,
+        _credit_goal1_base(cache),
+    )
+
+
 _CHART_SPECS: list[BotChartSpec] = [
     BotChartSpec("bot_goal1_students", "chart_goal1_students", _build_goal1_students),
     BotChartSpec("bot_goal2_adt", "chart_goal2_adt", _build_goal2_adt),
@@ -205,6 +216,11 @@ _CHART_SPECS: list[BotChartSpec] = [
         "chart_goal3_units",
         _build_goal3_units,
         units_metric=True,
+    ),
+    BotChartSpec(
+        "bot_goal4_xfer_ready",
+        "chart_goal4_xfer_ready",
+        _build_goal4_xfer_ready,
     ),
 ]
 

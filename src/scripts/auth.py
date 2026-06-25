@@ -56,6 +56,6 @@ def render_admin_hub(admin_tabs: list[tuple[str, callable]]):
         with col:
             with st.container(border=True):
                 st.subheader(label)
-                if st.button("Open", key=f"_admin_open_{label}", use_container_width=True):
+                if st.button("Open", key=f"_admin_open_{label}", width="stretch"):
                     st.session_state["_admin_selected_tab"] = label
                     st.rerun()

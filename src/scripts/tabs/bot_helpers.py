@@ -674,11 +674,11 @@ def render_bot_charts(
 
     col_main, col_pct = st.columns([3, 1])
     with col_main:
-        st.plotly_chart(build_headcount_chart(df_agg), use_container_width=True)
+        st.plotly_chart(build_headcount_chart(df_agg), width="stretch")
     with col_pct:
         if not df_pct.empty:
             st.plotly_chart(
-                build_pct_change_chart(df_pct), use_container_width=True,
+                build_pct_change_chart(df_pct), width="stretch",
             )
         else:
             st.info("Need at least 2 years for % change.")
@@ -721,7 +721,7 @@ def render_bot_charts(
     with col_gc:
         st.plotly_chart(
             build_gender_bar_chart(df_gender, years),
-            use_container_width=True,
+            width="stretch",
         )
     with col_gs:
         html = build_gender_summary_html(df_gender, years)
@@ -746,7 +746,7 @@ def render_bot_charts(
     with col_fc:
         st.plotly_chart(
             build_firstgen_line_chart(df_fg, years),
-            use_container_width=True,
+            width="stretch",
         )
     with col_fs:
         html = build_firstgen_summary_html(df_fg, years)
