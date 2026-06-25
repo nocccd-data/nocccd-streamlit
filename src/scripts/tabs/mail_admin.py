@@ -50,7 +50,7 @@ def render():
             "Email": r["email"],
             "Filters": filters_str,
         })
-    st.dataframe(pd.DataFrame(recipient_data), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(recipient_data), hide_index=True, width="stretch")
 
     # --- Sidebar: Actions ---
     dry_run_btn = st.sidebar.button("Dry Run (Preview)", key="ma_dry_run_btn")

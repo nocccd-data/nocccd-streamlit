@@ -48,7 +48,7 @@ if admin_tabs:
     st.sidebar.button("Admin", on_click=_go_admin)
 st.sidebar.markdown("---")
 
-st.sidebar.button("Home", on_click=_go_home, use_container_width=True)
+st.sidebar.button("Home", on_click=_go_home, width="stretch")
 
 # Navigation — public tabs only
 labels = ["Home"] + [label for label, _ in public_tabs]

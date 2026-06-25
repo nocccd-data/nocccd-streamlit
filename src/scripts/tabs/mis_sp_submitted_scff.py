@@ -143,7 +143,7 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
     if not df1_acyr.empty:
         table1 = _ordered_crosstab(df1_acyr, "award_type", "funding_status", "sb00")
         st.caption(f"SCFF File Counts — ACYR {acyr}")
-        st.dataframe(table1, use_container_width=True)
+        st.dataframe(table1, width="stretch")
     else:
         st.info(f"No SCFF data for ACYR {acyr}.")
 

@@ -538,7 +538,7 @@ def render():
         st.plotly_chart(
             _build_overall_fig(df_overall, campus, persistence_type,
                                projection=proj_overall),
-            use_container_width=True,
+            width="stretch",
         )
 
     # --- Projection methodology expander ---
@@ -585,5 +585,5 @@ def render():
                     st.dataframe(
                         pd.DataFrame(r_sq_rows),
                         hide_index=True,
-                        use_container_width=False,
+                        width="content",
                     )

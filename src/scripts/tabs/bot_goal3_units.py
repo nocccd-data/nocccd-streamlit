@@ -1204,11 +1204,11 @@ def render():
     col_main, col_pct = st.columns([3, 1])
     with col_main:
         st.plotly_chart(_build_campus_chart(df_campus),
-                        use_container_width=True)
+                        width="stretch")
     with col_pct:
         if not df_pct.empty:
             st.plotly_chart(_build_pct_change_chart(df_pct),
-                            use_container_width=True)
+                            width="stretch")
         else:
             st.info("Need at least 2 years for % change.")
     st.markdown(_SOURCE_FOOTER, unsafe_allow_html=True)
@@ -1242,7 +1242,7 @@ def render():
     col_gc, col_gs = st.columns([3, 2])
     with col_gc:
         st.plotly_chart(_build_gender_chart(df_gender, years),
-                        use_container_width=True)
+                        width="stretch")
     with col_gs:
         html = _build_gender_summary(df_gender, years)
         if html:
@@ -1259,7 +1259,7 @@ def render():
     col_fc, col_fs = st.columns([3, 2])
     with col_fc:
         st.plotly_chart(_build_firstgen_chart(df_fg, years),
-                        use_container_width=True)
+                        width="stretch")
     with col_fs:
         html = _build_firstgen_summary(df_fg, years)
         if html:

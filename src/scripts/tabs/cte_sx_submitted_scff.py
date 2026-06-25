@@ -36,7 +36,7 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
         table1.loc["Total"] = table1["count"].sum()
         table1.index.name = None
         st.markdown(f"**SCFF CTE File Counts — ACYR {acyr}**")
-        st.dataframe(table1, use_container_width=False)
+        st.dataframe(table1, width="content")
     else:
         st.info(f"No SCFF CTE data for ACYR {acyr}.")
 
@@ -55,7 +55,7 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
             data_cols += ["Total"]
         table2 = table2[data_cols]
         st.markdown(f"**SX Submitted Match Counts — ACYR {acyr}**")
-        st.dataframe(table2, use_container_width=True)
+        st.dataframe(table2, width="stretch")
 
         # Table 3 — SX Count of Students and Sum of Units by DICD Code
         match_filter = st.radio(
@@ -122,7 +122,7 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
             for col in ["861_count", "862_count"]:
                 table3[col] = table3[col].astype(int)
             st.markdown(f"**SX Count of Students and Sum of Units by DICD Code — ACYR {acyr}**")
-            st.dataframe(table3, use_container_width=True)
+            st.dataframe(table3, width="stretch")
     else:
         st.info(f"No SX submitted data for ACYR {acyr}.")
 

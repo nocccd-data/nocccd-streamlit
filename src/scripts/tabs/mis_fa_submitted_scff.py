@@ -133,7 +133,7 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
         table1.loc["Total"] = table1["count"].sum()
         table1.index.name = None
         st.markdown(f"**SCFF File Counts — ACYR {acyr}**")
-        st.dataframe(table1, use_container_width=False)
+        st.dataframe(table1, width="content")
     else:
         st.info(f"No SCFF data for ACYR {acyr}.")
 
