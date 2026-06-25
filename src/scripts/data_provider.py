@@ -179,3 +179,8 @@ def fetch_bot_goal3_finaid(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_bot_goal3_units(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
     return _download_and_read("bot_goal3_units", "acyr_code", acyr_codes)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_bot_goal4_xfer_ready(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
+    return _download_and_read("bot_goal4_xfer_ready", "acyr_code", acyr_codes)
