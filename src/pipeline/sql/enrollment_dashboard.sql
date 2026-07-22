@@ -1,3 +1,30 @@
+-- ============================================================================
+-- INOPERABLE AS WRITTEN -- dwh.mv_enrollment_by_date_5yrs NO LONGER EXISTS.
+--
+-- The MV was dropped from DWHDB on 2026-07-22, along with its PUBLIC synonym.
+-- Its refresh job had already been dropped on 2026-06-23 after recurring
+-- ORA-01555 (snapshot too old) failures -- the daily COMPLETE refresh rebuilt
+-- all 5 years / 3.77M rows over the Banner dblink and routinely outlived
+-- Banner's undo retention. It is not being rebuilt.
+--
+-- Impact: the MV is the DRIVING TABLE of the final SELECT below (FROM ... a),
+-- so this query now fails outright with ORA-00942 -- it does not degrade. The
+-- `enrollment_dashboard` pipeline job (python -m src.pipeline.run
+-- enrollment_dashboard) will fail, and its Tableau Cloud publish will not
+-- refresh.
+--
+-- Note also that the MV had been frozen at 2026-06-20 ever since its refresh
+-- job was dropped, so anything this job published between then and now was a
+-- static snapshot rather than current data.
+--
+-- To revive this, the 5-year enrollment-by-date grain has to come from
+-- somewhere else (e.g. a dbt incremental model in edw_prod keyed on term_code;
+-- closed terms never change, so ~3.4M of the 3.77M rows are static).
+--
+-- The ad-hoc twin of this query, nocccd-sql/district/queries/
+-- enrollment_dashboard.sql, carries the same FROM clause and the same note.
+-- ============================================================================
+
 WITH
 
     insm AS (
