@@ -54,7 +54,10 @@ def _write_hyper(name: str, df: pd.DataFrame) -> Path:
 
     pantab.frame_to_hyper(df, hyper_path, table="Extract")
 
-    print(f"  Wrote {hyper_path} ({len(df):,} rows)")
+    # flush: launchd sends stdout and stderr to the same log, and block-buffered
+    # stdout otherwise lands minutes after the unbuffered logging lines it
+    # belongs between, which makes the log hard to read after a failure.
+    print(f"  Wrote {hyper_path} ({len(df):,} rows)", flush=True)
     return hyper_path
 
 

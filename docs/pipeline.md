@@ -9,6 +9,20 @@ ETL flow that extracts Oracle data, writes local `.hyper` files, and publishes t
 3. **`publish.py`** — uploads `.hyper` to "Streamlit Data" project on Tableau Cloud; also has `download_hyper()` which downloads `.tdsx`, extracts `.hyper` from the ZIP
 4. **`run.py`** — CLI orchestrator, reads Tableau credentials from `.streamlit/secrets.toml`
 
+## Scheduled refresh & failure isolation
+
+The daily refresh is a **launchd agent** (`~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`), not cron and not AppleScript. It runs `python -m src.pipeline.run` with no arguments at 12:00, which selects every dataset whose config lacks `skip_refresh: True`. Runs normally take 143–197 min.
+
+`run.py` has three guards, all added after a July 2026 post-mortem:
+
+- **Preflight** — probes each distinct `db_section` once with `SELECT 1 FROM dual` before extracting. Off VPN the DSN does not resolve and every dataset fails identically; probing once turns 28 duplicate stack traces into one line per section. A section that fails is skipped while other sections still run. Bypass with `--no-preflight`.
+- **Per-dataset isolation** — each dataset runs in its own `try`/`except`; one failure no longer aborts the rest. Failures are reported as one line (Oracle puts the actionable `ORA-xxxxx` first) and summarized at the end. *Before this, a single unreachable DSN on the first dataset meant a run that published nothing at all — which is what happened on 12 of the 24 days from 2026-06-25 to 07-18.*
+- **Watchdog** — `--timeout` (default 5h) hard-aborts the process via `os._exit`. This must be `os._exit` from a separate thread: a thread blocked inside the Oracle client's C code never returns to the interpreter, so exceptions and signals are never delivered. On 2026-07-18 a mid-run VPN drop left the process blocked in `recv()` for 93 hours, and because **launchd will not start a second instance of a label that is still running**, the next four scheduled refreshes never fired.
+
+Exit codes: `0` all datasets succeeded · `1` some failed or were skipped · `2` unknown dataset name · `3` no section reachable · `75` watchdog abort.
+
+**Connection timeouts are thick-mode-limited.** `libs/sql.py` passes `tcp_connect_timeout` and `expire_time`, but these only bind in *thin* mode. This project runs thick (an Instant Client is present), and a measured probe against an unroutable host with `tcp_connect_timeout=5` still failed at exactly 60.0s — the client's own default. Connects are therefore bounded at 60s either way, but **reads on an already-established socket are not bounded at all**, which is the hang above. Bounding those needs `SQLNET.RECV_TIMEOUT` in a `sqlnet.ora` (machine config outside this repo) and risks killing legitimate long queries — `bot_goal4_xfer_ready` alone runs 11–12 min between round trips. The watchdog is the guard that actually covers this case.
+
 ## SQL parameterization
 
 Two patterns are supported by `extract.py`:
