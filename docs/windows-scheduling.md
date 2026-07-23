@@ -86,9 +86,18 @@ Done. 1 succeeded, 0 failed, 0 skipped of 1.
 `echo $LASTEXITCODE` → `0`.
 
 Common failures and what they mean:
+- `DPY-3001: Native Network Encryption and Data Integrity is only supported in ...
+  thick mode` → the client fell back to **thin** mode because `ORACLE_HOME`/`ORA_HOME`
+  was not set, so it never loaded the Instant Client. The log shows the tell one line
+  above: `No Oracle client path resolved from ORA_HOME/ORACLE_HOME; attempting thin
+  mode`. The district DB requires Native Network Encryption, which only works in thick
+  mode. **Fix: set `ORACLE_HOME`** (see #4). This is the most likely first error on this
+  network — it is not `DPI-1047`, because thin mode never tries to load a DLL.
 - `DPY-4027: no configuration directory specified` → `ORACLE_HOME` not set in this shell.
-- `DPI-1047 ... cannot locate ... Oracle Client` → Instant Client not found, or the VC++
-  redistributable is missing.
+- `DPI-1047 ... cannot locate ... Oracle Client` → `ORACLE_HOME` *is* set and the client
+  was found, but the DLLs won't load — the VC++ redistributable is missing. (A later,
+  different failure than `DPY-3001`: you only reach the DLL-load step once thick mode is
+  actually attempted.)
 - `ORA-12154 / ORA-12545` → `tnsnames.ora` missing or not found (`TNS_ADMIN` wrong), or
   no network route to the DB host.
 
@@ -115,17 +124,17 @@ up the scheduler. See `docs/pipeline.md` → "Scheduled refresh & failure isolat
 ## Step 2 — create a wrapper script
 
 Task Scheduler, unlike launchd, does not capture stdout/stderr or set env vars for you.
-Put both in a wrapper. Create `run_pipeline.ps1` somewhere stable (it contains
+Put both in a wrapper. Create `run_streamlit_pipeline.ps1` somewhere stable (it contains
 machine-specific paths, so keep it **out of the repo** — e.g. `C:\Scripts\`):
 
 ```powershell
-# run_pipeline.ps1 — daily NOCCCD Streamlit data refresh
+# run_streamlit_pipeline.ps1 — daily NOCCCD Streamlit data refresh
 $ErrorActionPreference = "Stop"
 
 # ---- EDIT: machine-specific paths ----
 $Repo       = "C:\path\to\nocccd-streamlit"
 $OracleHome = "C:\Oracle\instantclient_23_x"
-$LogDir     = "C:\Logs\nocccd"
+$LogDir     = "C:\Users\<you>\logs\streamlit-pipeline"   # LOCAL disk — NOT OneDrive (see note)
 # --------------------------------------
 
 $env:ORACLE_HOME = $OracleHome
@@ -139,6 +148,12 @@ $Python = Join-Path $Repo ".venv\Scripts\python.exe"
 Set-Location $Repo
 Add-Content $Log "==== run started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===="
 
+# run.py returns meaningful non-zero exit codes (1 = partial, 75 = watchdog).
+# On PowerShell 7.4+ a native command's non-zero exit throws under
+# $ErrorActionPreference='Stop', which would skip the exit-code logging below.
+# Disable that so we capture and log the code. (Harmless no-op on PS 5.1.)
+$PSNativeCommandUseErrorActionPreference = $false
+
 & $Python -m src.pipeline.run *>> $Log      # *>> redirects ALL streams (stdout+stderr)
 $code = $LASTEXITCODE
 
@@ -146,36 +161,56 @@ Add-Content $Log "==== run finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ex
 exit $code
 ```
 
+Two things in that wrapper are deliberate:
+- **Keep `$LogDir` on local disk, not in OneDrive / a synced folder.** OneDrive holds a
+  file open while syncing it; with `$ErrorActionPreference = "Stop"`, the first
+  `Add-Content` could then throw on a sync lock and abort the whole refresh before it
+  starts — your logging destination must never be able to kill the run. A synced,
+  ever-growing log also churns uploads and spawns conflict copies.
+- **`$PSNativeCommandUseErrorActionPreference = $false`** — `run.py`'s meaningful exit
+  codes (1 = partial, 75 = watchdog) are exactly the days you want logged, and on
+  PowerShell 7.4+ a non-zero native exit *throws* under `Stop`, which would skip the
+  `exit=$code` line and surface a PowerShell exception to Task Scheduler instead of a
+  clean `exit=1`. This one line keeps the codes intact (and is a no-op on PS 5.1).
+
 Test the wrapper by itself once (it will do a full ~3h run and log to `$LogDir`):
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Scripts\run_pipeline.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Scripts\run_streamlit_pipeline.ps1
 ```
 
 ## Step 3 — register the scheduled task
 
 Use `Register-ScheduledTask` (more capable than `schtasks` for the settings that
-actually matter here). Run this in an **elevated** PowerShell:
+actually matter here). Run this in an **elevated** PowerShell (registering a
+store-the-password task requires it):
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Scripts\run_pipeline.ps1"'
+# --- edit to match where you saved the wrapper ---
+$Script = "C:\Scripts\run_streamlit_pipeline.ps1"
 
-$trigger = New-ScheduledTaskTrigger -Daily -At 12:00pm
+$action  = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Script`""
+
+$trigger = New-ScheduledTaskTrigger -Daily -At "12:00PM"
 
 $settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 6) `  # hard stop; > the app's 5h watchdog
-    -MultipleInstances IgnoreNew `                 # never overlap two runs
-    -StartWhenAvailable `                          # catch up if the box was off at noon
-    -WakeToRun                                     # wake from sleep to run (if it sleeps)
+    -ExecutionTimeLimit (New-TimeSpan -Hours 6) `   # hard stop; > the app's 5h watchdog
+    -MultipleInstances IgnoreNew `                  # never overlap two runs
+    -StartWhenAvailable `                           # catch up if the box was off at noon
+    -WakeToRun `                                    # wake from sleep to run (if it sleeps)
+    -AllowStartIfOnBatteries `                      # don't skip on a phantom/UPS battery state
+    -DontStopIfGoingOnBatteries
 
-# LogonType Password = "Run whether user is logged on or not" — REQUIRED, or the task
-# will silently not fire when the machine is locked / no one is logged in.
-$principal = New-ScheduledTaskPrincipal -UserId "DOMAIN\youruser" `
-    -LogonType Password -RunLevel Limited
+# "Run whether user is logged on or not" needs the account password stored, so the task
+# can create a logon session with no interactive user. Supplying -Password does exactly
+# that. Get-Credential prompts securely instead of putting the password in the command.
+$cred = Get-Credential -UserName "DOMAIN\youruser" -Message "Password for the scheduled-task account"
 
 Register-ScheduledTask -TaskName "NOCCCD Pipeline Refresh" `
-    -Action $action -Trigger $trigger -Settings $settings -Principal $principal
-# You will be prompted for the account password (stored by Windows to run headless).
+    -Action $action -Trigger $trigger -Settings $settings `
+    -User $cred.UserName `
+    -Password $cred.GetNetworkCredential().Password `
+    -RunLevel Limited
 ```
 
 Why these settings — each maps to a lesson from the Mac side:
@@ -187,19 +222,47 @@ Why these settings — each maps to a lesson from the Mac side:
 - **`-MultipleInstances IgnoreNew`** — like launchd, Task Scheduler will not start a
   second copy while one is running. Combined with the timeout above, a stuck run clears
   well before the next noon fire instead of blocking it indefinitely.
-- **`-LogonType Password`** — the single most common Windows Task Scheduler mistake is
-  leaving it "run only when logged on," so it never runs on a locked/headless box.
+- **`-User`/`-Password` (stored credential)** — makes it "run whether user is logged on
+  or not." The single most common Task Scheduler mistake is leaving it "run only when
+  logged on," so it never fires on a locked/headless box. **Run as the human user, not
+  `SYSTEM`** — `ORACLE_HOME` is a *User* env var and the venv, `config.ini`, and
+  `.streamlit\secrets.toml` all live in that user's profile, which `SYSTEM` cannot see.
+- **`-RunLevel Limited`** — the run needs no elevation (Oracle read, `.hyper` write,
+  Tableau upload are all user-level); least privilege even if the account is an admin.
 - **`-StartWhenAvailable`** — if the machine happens to be off at noon, run at next wake.
+
+> **Password rotation gotcha.** The stored password is a snapshot. If district policy
+> forces the account's password to change, the task starts failing to launch
+> (`0x8007052E` "password expired" / logon failure) and silently stops running — the
+> same silent-outage class we designed against. When you change the password, re-run the
+> block above (or update it in Task Scheduler → task → Properties → OK, re-enter). Note it
+> if the account is on a rotation policy.
 
 ## Step 4 — verify
 
+First confirm it registered, without running it:
 ```powershell
-Get-ScheduledTask -TaskName "NOCCCD Pipeline Refresh" | Get-ScheduledTaskInfo
-Start-ScheduledTask -TaskName "NOCCCD Pipeline Refresh"   # kick it off now as a live test
+Get-ScheduledTask     -TaskName "NOCCCD Pipeline Refresh"    # State: Ready (or Disabled)
+Get-ScheduledTaskInfo -TaskName "NOCCCD Pipeline Refresh"    # NextRunTime, LastTaskResult
 ```
-Then watch the log grow: `Get-Content C:\Logs\nocccd\nocccd-pipeline.log -Wait -Tail 20`.
+
+**A registered task is enabled and will auto-fire at the next noon.** Do not let that
+happen until (a) this box has pulled the resilience code and (b) the Mac scheduler is
+out of the way — otherwise you get a stale-code run and/or two machines publishing to the
+same Tableau site. Until you are ready, park it:
+```powershell
+Disable-ScheduledTask -TaskName "NOCCCD Pipeline Refresh"
+# ...after the code is pulled and a manual wrapper run is green...
+Enable-ScheduledTask  -TaskName "NOCCCD Pipeline Refresh"
+```
+
+When you do want a live end-to-end test (full ~3h run that publishes to Tableau):
+```powershell
+Start-ScheduledTask -TaskName "NOCCCD Pipeline Refresh"
+Get-Content "C:\Users\<you>\logs\streamlit-pipeline\nocccd-pipeline.log" -Wait -Tail 20
+```
 A healthy run ends with `Done. 28 succeeded, 0 failed, 0 skipped of 28.` and the wrapper
-appends `exit=0`. `Get-ScheduledTaskInfo` shows `LastTaskResult 0`.
+appends `exit=0`. `Get-ScheduledTaskInfo` then shows `LastTaskResult 0`.
 
 ## Step 5 — tell the author to disable the Mac scheduler
 
