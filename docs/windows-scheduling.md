@@ -193,13 +193,10 @@ $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
 
 $trigger = New-ScheduledTaskTrigger -Daily -At "12:00PM"
 
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 6) `   # hard stop; > the app's 5h watchdog
-    -MultipleInstances IgnoreNew `                  # never overlap two runs
-    -StartWhenAvailable `                           # catch up if the box was off at noon
-    -WakeToRun `                                    # wake from sleep to run (if it sleeps)
-    -AllowStartIfOnBatteries `                      # don't skip on a phantom/UPS battery state
-    -DontStopIfGoingOnBatteries
+# One line on purpose: a `#` comment after a line-continuation backtick breaks the
+# continuation, and PowerShell then parses each -Parameter as its own command
+# ("The term '-WakeToRun' is not recognized..."). See the settings explained below.
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 6) -MultipleInstances IgnoreNew -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
 # "Run whether user is logged on or not" needs the account password stored, so the task
 # can create a logon session with no interactive user. Supplying -Password does exactly
