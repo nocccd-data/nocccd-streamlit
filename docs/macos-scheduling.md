@@ -38,13 +38,13 @@ Same four runtime dependencies as Windows; none are in the git clone.
 3. **`.streamlit/secrets.toml`** — Tableau Cloud credentials (gitignored): `SERVER`,
    `SITE_NAME`, `PAT_NAME`, `PAT_VALUE`. Needed only for the publish step.
 
-4. **Oracle Instant Client** (thick mode), at `/Users/hoonywise/Oracle/instantclient_23_3`:
+4. **Oracle Instant Client** (thick mode), at `/Users/hoonywise/Oracle/instantclient`:
    - **SIP symlink workaround** — macOS System Integrity Protection strips `DYLD_*`
      environment variables from child processes, so `DYLD_LIBRARY_PATH` cannot be used
      to point at the client libs. The fix in place is a self-symlink inside the client
      dir so `$ORACLE_HOME/lib/libclntsh.dylib` resolves on its own:
      ```bash
-     ln -s . /Users/hoonywise/Oracle/instantclient_23_3/lib
+     ln -s . /Users/hoonywise/Oracle/instantclient/lib
      ```
      Without this, thick-mode init fails with `DPI-1047 (cannot locate Oracle Client)`.
    - `tnsnames.ora` with `REPT_DB` and `DWHDB_DB` entries lives at
@@ -57,7 +57,7 @@ Same four runtime dependencies as Windows; none are in the git clone.
 
 With the VPN connected:
 ```bash
-export ORACLE_HOME=/Users/hoonywise/Oracle/instantclient_23_3
+export ORACLE_HOME=/Users/hoonywise/Oracle/instantclient
 cd /Users/hoonywise/GitHub/nocccd-data/nocccd-streamlit
 
 # Smallest real check: one tiny dataset, no Tableau upload.
@@ -138,9 +138,9 @@ File: `~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`
     <key>EnvironmentVariables</key>
     <dict>
         <key>ORACLE_HOME</key>
-        <string>/Users/hoonywise/Oracle/instantclient_23_3</string>
+        <string>/Users/hoonywise/Oracle/instantclient</string>
         <key>PATH</key>
-        <string>/Users/hoonywise/Oracle/instantclient_23_3:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/Users/hoonywise/Oracle/instantclient:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 </dict>
 </plist>
