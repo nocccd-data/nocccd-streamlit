@@ -12,7 +12,9 @@ Shared engineering guidance lives in `docs/` and is loaded on demand only when r
 |------------------------|------|
 | First-time orientation, architecture, commands, deployment, hard constraints | `docs/agent-guidance.md` |
 | Cross-repo workflow (notebooks → streamlit), `nocccd-scff` / `nocccd-sql` ports | `docs/workflow.md` |
-| `src/pipeline/`: dataset config, `extract.py`, SQL parameterization, bind-variable + db_section gotchas | `docs/pipeline.md` |
+| `src/pipeline/`: dataset config, `extract.py`, SQL parameterization, bind-variable + db_section gotchas, scheduled refresh & failure isolation | `docs/pipeline.md` |
+| Scheduling the daily refresh on **macOS** (launchd — the current setup) | `docs/macos-scheduling.md` |
+| Scheduling the daily refresh on **Windows** (Task Scheduler handoff) | `docs/windows-scheduling.md` |
 | `src/scripts/tabs/`: tab system, adding-a-tab checklist, cascading filters, Seat Count layout, Persistence projections, Class Schedule Heatmap, admin auth, sidebar download patterns, PDF rendering rules | `docs/tabs.md` |
 | `src/scripts/tabs/bot_*`: BOT goal/metric tabs, base population rules, `_TITLES` flags, BOT PDF generator + paper coordinates, Excel helpers | `docs/bot-tabs.md` |
 | `src/pipeline/seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`: bulk PDF/Excel exports | `docs/exports.md` |
