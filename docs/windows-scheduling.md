@@ -164,6 +164,7 @@ $ErrorActionPreference = "Stop"
 $Repo       = "C:\path\to\nocccd-streamlit"
 $OracleHome = "C:\Oracle\instantclient_23_x"
 $LogDir     = "C:\Users\<you>\logs\streamlit-pipeline"   # LOCAL disk — NOT OneDrive (see note)
+$Git        = "C:\Program Files\Git\cmd\git.exe"         # full path: don't rely on the task's PATH
 # --------------------------------------
 
 $env:ORACLE_HOME = $OracleHome
@@ -181,7 +182,7 @@ Add-Content $Log "==== run started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===
 # $ErrorActionPreference='Stop' treats the FIRST stderr line a native command emits as
 # a terminating error and aborts the wrapper the instant Python logs anything. Native
 # stderr is NOT a failure here -- the exit code is the real signal -- so drop to
-# Continue for the run. ("Stop" still guarded the setup commands above it.)
+# Continue for the git pull and the run below. ("Stop" still guarded the setup above.)
 $ErrorActionPreference = "Continue"
 
 # run.py returns meaningful non-zero exit codes (1 = partial, 75 = watchdog).
@@ -189,6 +190,71 @@ $ErrorActionPreference = "Continue"
 # $ErrorActionPreference='Stop', which would skip the exit-code logging below.
 # Disable that so we capture and log the code. (Harmless no-op on PS 5.1.)
 $PSNativeCommandUseErrorActionPreference = $false
+
+# ---------------------------------------------------------------------------
+# Pull latest code BEFORE the refresh, so today's extracts are built from
+# today's SQL and dataset config. Deliberately NON-FATAL: a failed pull is
+# logged loudly and the run continues on whatever code is already on disk.
+# Yesterday's code producing today's data beats a silent no-refresh day -- the
+# same principle that keeps $LogDir off OneDrive: a support step must never be
+# able to kill the run. A failed pull therefore does NOT change the task's
+# exit code; it shows up only as a [git] WARNING line in this log.
+# ---------------------------------------------------------------------------
+
+# This task runs with no interactive desktop ("run whether user is logged on or
+# not"). Without these two, Git Credential Manager would pop an auth dialog onto
+# a desktop nobody is watching and block until the task's 6h ExecutionTimeLimit
+# killed the whole refresh. Make git fail fast instead of prompting.
+$env:GIT_TERMINAL_PROMPT = "0"
+$env:GCM_INTERACTIVE     = "never"
+
+$ReqFile   = Join-Path $Repo "requirements.txt"
+$reqBefore = if (Test-Path $ReqFile) { (Get-FileHash $ReqFile).Hash } else { "" }
+Add-Content $Log "[git] branch=$(& $Git rev-parse --abbrev-ref HEAD) HEAD before: $(& $Git rev-parse --short HEAD)"
+
+# --ff-only, never a plain merge: on an unattended box the working tree should
+# only ever move forward. If the branch has diverged or a local edit is in the
+# way, this fails cleanly instead of leaving a half-merged tree behind.
+# Start-Process rather than the call operator so the pull can be hard-capped --
+# git has no network timeout of its own, and a half-open connection would sit
+# there eating the refresh window.
+$gitOut = Join-Path $LogDir "git-pull.out"
+$gitErr = Join-Path $LogDir "git-pull.err"
+$proc = Start-Process -FilePath $Git -ArgumentList "pull","--ff-only" `
+    -WorkingDirectory $Repo -NoNewWindow -PassThru `
+    -RedirectStandardOutput $gitOut -RedirectStandardError $gitErr
+
+# Touching .Handle caches the process handle so .ExitCode is still readable
+# after the process dies. Without this, -PassThru hands back an object whose
+# ExitCode reads as $null, every pull logs a false "pull failed", and the
+# requirements.txt check below (inside the success branch) never runs.
+$null = $proc.Handle
+
+if ($proc.WaitForExit(180000)) {
+    $proc.WaitForExit()          # parameterless: lets the redirected streams flush
+    $gitCode = $proc.ExitCode
+} else {
+    $proc.Kill(); $gitCode = "TIMEOUT(180s)"
+}
+
+foreach ($f in @($gitOut, $gitErr)) {
+    if (Test-Path $f) {
+        Get-Content $f | Where-Object { $_ -match '\S' } | ForEach-Object { Add-Content $Log "[git] $_" }
+        Remove-Item $f -Force
+    }
+}
+
+if ($gitCode -eq 0) {
+    Add-Content $Log "[git] HEAD after:  $(& $Git rev-parse --short HEAD)"
+    # --ff-only guarantees the tree only fast-forwarded, so a changed hash here
+    # is a real dependency bump from upstream, not a local edit.
+    $reqAfter = if (Test-Path $ReqFile) { (Get-FileHash $ReqFile).Hash } else { "" }
+    if ($reqAfter -ne $reqBefore) {
+        Add-Content $Log "[git] WARNING: requirements.txt CHANGED -- .venv may be stale. If the run below dies on ImportError, run: $Python -m pip install -r requirements.txt"
+    }
+} else {
+    Add-Content $Log "[git] WARNING: pull failed (exit=$gitCode) -- continuing on the code already on disk."
+}
 
 & $Python -m src.pipeline.run *>> $Log      # *>> redirects ALL streams (stdout+stderr)
 $code = $LASTEXITCODE
@@ -219,6 +285,54 @@ cutover:
   Scheduler instead of a clean `exit=1`/`exit=75`. Harmless no-op on 5.1. (Belt and
   suspenders across both PowerShell versions.)
 
+### The self-updating step (`git pull --ff-only`)
+
+Added 2026-08-02. Without it the box silently drifts: SQL and dataset changes merged to
+`main` never reach the scheduled run, and nothing in the log tells you the code is stale.
+
+**Why it lives in this script rather than its own scheduled task.** Task Scheduler has no
+"run before task X" ordering, so a separate pull task would fire a few minutes early and
+*hope* it finished. The failure mode is bad: git rewriting `src/pipeline/*.sql` while
+Python is already mid-run reading those files per dataset. Inline gives a hard sequencing
+guarantee, one log, and one exit code. The pull adds seconds to a ~3h run, so the existing
+`-ExecutionTimeLimit 6h` still fits.
+
+Four details are load-bearing:
+- **Non-fatal by design.** A failed pull logs `[git] WARNING` and the run continues on the
+  code already on disk. Same principle as keeping `$LogDir` off OneDrive — a support step
+  must never be able to kill the refresh. **Consequence: a pull failure does NOT show up in
+  `LastTaskResult`**, which stays `0`. The log is the only signal; grep it for `[git] WARNING`
+  if the data ever looks like it is running on old logic.
+- **`GIT_TERMINAL_PROMPT=0` + `GCM_INTERACTIVE=never`.** The task runs with no interactive
+  desktop, so an expired credential would otherwise pop a Git Credential Manager dialog onto
+  a desktop nobody is watching and hang until the 6h limit killed the whole refresh. These
+  turn that into a 2-second logged failure. *(As of 2026-08-02 the repo is public, so the
+  pull authenticates anonymously and cannot fail on credentials — these matter the day it
+  goes private.)*
+- **`--ff-only`, never a plain merge.** On an unattended box the tree should only move
+  forward. A diverged branch or a stray local edit fails cleanly instead of leaving a
+  half-merged tree that quietly poisons every later run.
+- **`$null = $proc.Handle` after `Start-Process -PassThru`.** Without it .NET releases the
+  process handle and `$proc.ExitCode` reads back `$null` — so *every* pull logs a false
+  "pull failed" and the `requirements.txt` check (inside the success branch) never runs.
+  This was caught in testing; it is silent and easy to reintroduce.
+
+A healthy run now opens with:
+```
+==== run started 2026-08-02 12:00:01 ====
+[git] branch=main HEAD before: 4878ebd
+[git] Updating 4878ebd..f0bb648
+[git] Fast-forward
+[git]  docs/windows-scheduling.md | 80 ++++++++++++---
+[git] HEAD after:  f0bb648
+```
+
+**`requirements.txt` is detected, not installed.** If the pull changes it you get
+`[git] WARNING: requirements.txt CHANGED -- .venv may be stale`. Deliberate: an unattended
+`pip install` that resolves badly leaves the venv broken for *every* subsequent day, not
+just today. The warning sits directly above the `ImportError` it explains — run the pip
+install by hand.
+
 Test the wrapper by itself once (it will do a full ~3h run and log to `$LogDir`):
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\<you>\scripts\run_streamlit_pipeline.ps1
@@ -228,6 +342,28 @@ Watch it in a second window — the launching window sits silent for the whole r
 ```powershell
 Get-Content "C:\Users\<you>\logs\streamlit-pipeline\nocccd-pipeline.log" -Wait -Tail 30
 ```
+
+**Faster: smoke-test the wrapper in ~10 seconds instead of ~3 hours.** When you have only
+changed the *wrapper* (env vars, the git step, logging) and not the pipeline, you do not
+need a full run to validate it. Copy the script and swap two lines — the log path, so you
+don't pollute the real log, and the Python arguments, so it does one tiny dataset with no
+Tableau publish:
+```powershell
+$src  = Get-Content C:\Users\<you>\scripts\run_streamlit_pipeline.ps1 -Raw
+$test = $src -replace '-m src\.pipeline\.run ', '-m src.pipeline.run kpi_dual_enrollment --extract-only '
+$test = $test -replace [regex]::Escape('C:\Users\<you>\logs\streamlit-pipeline'), "$env:TEMP\smoke"
+Set-Content "$env:TEMP\smoke-wrapper.ps1" $test -Encoding utf8
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\smoke-wrapper.ps1"
+Get-Content "$env:TEMP\smoke\nocccd-pipeline.log"
+
+# Prove you tested the REAL script: exactly two lines should differ.
+Compare-Object (Get-Content C:\Users\<you>\scripts\run_streamlit_pipeline.ps1) `
+               (Get-Content "$env:TEMP\smoke-wrapper.ps1")
+```
+That exercises everything the wrapper owns — env setup, thick-mode client load, the real
+`git pull` against GitHub, DB preflight, exit-code capture, the log header/footer — and
+only skips the other 27 datasets and the publish step. A green smoke test ends with
+`Done. 1 succeeded, 0 failed, 0 skipped of 1.` and `exit=0`.
 
 ## Step 3 — register the scheduled task
 
