@@ -5,6 +5,11 @@ It is self-contained: it assumes only that you have read the project `CLAUDE.md`
 this repo is cloned locally, and that you are on a machine permanently connected to the
 district network (no VPN needed). Do not assume any of the author's Mac context.
 
+> **Status:** set up and **live on the office Windows box since 2026-08-01** (the Mac
+> launchd job is retired). This doc is now both the record of how it was done and the
+> guide to rebuild it on a new machine. Every "Common failures" / "Trap" note below is a
+> real failure hit during that cutover, not a hypothetical.
+
 ## Goal
 
 Move the daily refresh of `python -m src.pipeline.run` off the author's MacBook (a
@@ -47,8 +52,13 @@ exist and are structurally valid, but never print their values.
    recreate it) — it cannot be generated from the repo.
 
 3. **`.streamlit\secrets.toml`** — Tableau Cloud credentials (gitignored). `run.py`
-   reads `SERVER`, `SITE_NAME`, `PAT_NAME`, `PAT_VALUE`. Also copied over by the author.
-   (Only needed for the publish step; a `--extract-only` test run does not read it.)
+   reads `SERVER`, `SITE_NAME`, `PAT_NAME`, `PAT_VALUE` at startup for the publish step.
+   Copy it over from the Mac, same as `config.ini` — it is the *second* hand-copied
+   credentials file, and the easy one to forget. **Trap:** it is only read on a real
+   publish, so a `--extract-only` sanity check passes even when this file is missing —
+   the failure (`FileNotFoundError ... secrets.toml`, at startup, before any dataset)
+   only surfaces on the first full run. Validate it explicitly with a single-dataset
+   *publish*, not just an extract (Step 1).
 
 4. **Oracle Instant Client** (this project runs Oracle **thick** mode). Requirements:
    - Instant Client installed, e.g. `C:\Oracle\instantclient_23_x`.
@@ -101,7 +111,18 @@ Common failures and what they mean:
 - `ORA-12154 / ORA-12545` → `tnsnames.ora` missing or not found (`TNS_ADMIN` wrong), or
   no network route to the DB host.
 
-Only once this is green, do a full dry run of the real thing:
+Then confirm the **publish path** — the `--extract-only` check above never touched
+`secrets.toml` or Tableau, so a full single-dataset run is what actually validates your
+credentials (seconds; publishes one tiny dataset):
+```powershell
+.\.venv\Scripts\python.exe -m src.pipeline.run kpi_dual_enrollment
+```
+Note: **no** `--extract-only` this time. You want `Done. 1 succeeded` again, but the log
+should now also show `Signed into ... Tableau Cloud` and `Published kpi_dual_enrollment`.
+A `FileNotFoundError ... secrets.toml` here means prerequisite #3 is missing — the most
+common reason the full run fails after the extract-only check passed.
+
+Only once *both* are green, do a full dry run of the real thing:
 ```powershell
 .\.venv\Scripts\python.exe -m src.pipeline.run --extract-only    # all 28, no upload; ~2–3h
 ```
@@ -124,8 +145,16 @@ up the scheduler. See `docs/pipeline.md` → "Scheduled refresh & failure isolat
 ## Step 2 — create a wrapper script
 
 Task Scheduler, unlike launchd, does not capture stdout/stderr or set env vars for you.
-Put both in a wrapper. Create `run_streamlit_pipeline.ps1` somewhere stable (it contains
-machine-specific paths, so keep it **out of the repo** — e.g. `C:\Scripts\`):
+Put both in a wrapper. Create `run_streamlit_pipeline.ps1` at a **plain local path** —
+e.g. `C:\Users\<you>\scripts\` — and note the exact path, because the task registration
+(Step 3) must point its `-File` at *this same path*; a mismatch makes every scheduled run
+fail with "the argument … does not exist". Two rules for where it goes:
+- **Not in OneDrive** (or any synced folder). OneDrive Files On-Demand can leave the
+  script as a cloud-only placeholder, and when the task fires headless with you logged
+  off, OneDrive may not be running to hydrate it — so the task can't find its own script.
+  If you keep an authoring copy in OneDrive, the copy the *task* runs must still be the
+  local one, and it is the authoritative one to edit.
+- **Out of the repo** — it holds machine-specific paths.
 
 ```powershell
 # run_streamlit_pipeline.ps1 — daily NOCCCD Streamlit data refresh
@@ -148,6 +177,13 @@ $Python = Join-Path $Repo ".venv\Scripts\python.exe"
 Set-Location $Repo
 Add-Content $Log "==== run started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===="
 
+# Python's logging writes INFO lines to stderr. On Windows PowerShell 5.1,
+# $ErrorActionPreference='Stop' treats the FIRST stderr line a native command emits as
+# a terminating error and aborts the wrapper the instant Python logs anything. Native
+# stderr is NOT a failure here -- the exit code is the real signal -- so drop to
+# Continue for the run. ("Stop" still guarded the setup commands above it.)
+$ErrorActionPreference = "Continue"
+
 # run.py returns meaningful non-zero exit codes (1 = partial, 75 = watchdog).
 # On PowerShell 7.4+ a native command's non-zero exit throws under
 # $ErrorActionPreference='Stop', which would skip the exit-code logging below.
@@ -161,21 +197,36 @@ Add-Content $Log "==== run finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ex
 exit $code
 ```
 
-Two things in that wrapper are deliberate:
+Three things in that wrapper are deliberate — each fixes a failure hit during the real
+cutover:
+- **`$ErrorActionPreference = "Continue"` before the Python call.** This is the one that
+  will bite you on **Windows PowerShell 5.1** (the default). Python's `logging` writes
+  its `INFO` lines to *stderr*, and under the file-top `Stop`, PowerShell treats the
+  first stderr line as a fatal error and aborts the wrapper — you'll see
+  `python.exe : … - INFO - …` + `NativeCommandError` and the script stops the instant the
+  run logs anything. Native stderr is not a failure (the exit code is), so Continue lets
+  the run proceed. `Stop` still guards the setup commands above it. *(Note: even with
+  Continue, PS 5.1 wraps the very first stderr line as one `NativeCommandError` block at
+  the top of the log — cosmetic, harmless; every line after it is clean.)*
 - **Keep `$LogDir` on local disk, not in OneDrive / a synced folder.** OneDrive holds a
   file open while syncing it; with `$ErrorActionPreference = "Stop"`, the first
   `Add-Content` could then throw on a sync lock and abort the whole refresh before it
   starts — your logging destination must never be able to kill the run. A synced,
   ever-growing log also churns uploads and spawns conflict copies.
-- **`$PSNativeCommandUseErrorActionPreference = $false`** — `run.py`'s meaningful exit
-  codes (1 = partial, 75 = watchdog) are exactly the days you want logged, and on
-  PowerShell 7.4+ a non-zero native exit *throws* under `Stop`, which would skip the
-  `exit=$code` line and surface a PowerShell exception to Task Scheduler instead of a
-  clean `exit=1`. This one line keeps the codes intact (and is a no-op on PS 5.1).
+- **`$PSNativeCommandUseErrorActionPreference = $false`** — the PowerShell **7.4+**
+  counterpart of the first fix: there, a non-zero native *exit code* throws under `Stop`,
+  which would skip the `exit=$code` line and surface a PowerShell exception to Task
+  Scheduler instead of a clean `exit=1`/`exit=75`. Harmless no-op on 5.1. (Belt and
+  suspenders across both PowerShell versions.)
 
 Test the wrapper by itself once (it will do a full ~3h run and log to `$LogDir`):
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Scripts\run_streamlit_pipeline.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\<you>\scripts\run_streamlit_pipeline.ps1
+```
+Watch it in a second window — the launching window sits silent for the whole run
+(everything goes to the log), so an early failure won't show there:
+```powershell
+Get-Content "C:\Users\<you>\logs\streamlit-pipeline\nocccd-pipeline.log" -Wait -Tail 30
 ```
 
 ## Step 3 — register the scheduled task
@@ -185,8 +236,9 @@ actually matter here). Run this in an **elevated** PowerShell (registering a
 store-the-password task requires it):
 
 ```powershell
-# --- edit to match where you saved the wrapper ---
-$Script = "C:\Scripts\run_streamlit_pipeline.ps1"
+# --- MUST match the exact local path where you saved the wrapper in Step 2 ---
+# (if these disagree, every scheduled run fails "the argument … does not exist")
+$Script = "C:\Users\<you>\scripts\run_streamlit_pipeline.ps1"
 
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Script`""
