@@ -42,6 +42,7 @@ PROJECTS = [
         "metrics": [
             "Fall-to-spring persistence rates",
             "Fall-to-fall persistence rates",
+            "Persistence by student type",
             "Multi-term trend lines for all campuses",
         ],
     },

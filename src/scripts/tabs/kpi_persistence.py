@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.ticker import FuncFormatter
 
 from src.pipeline.config import DATASETS
 from src.scripts.data_provider import fetch_kpi_persistence
@@ -30,16 +31,31 @@ _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 
 CAMP_MAP = {"1": "Cypress", "2": "Fullerton", "3": "NOCE"}
 
+# Display labels for student types, ordered as they should appear in legends.
+STYP_MAP = {
+    "first_time": "First-Time",
+    "first_time_trans": "First-Time Transfer",
+    "returning": "Returning",
+    "continuing": "Continuing",
+    "adult": "Adult",
+    "concurrent": "Concurrent",
+    "dual_enroll": "Dual Enrollment",
+}
+
+OVERALL_LABEL = "Overall"
+
 RATE_OPTIONS = {
     "Fall → Spring": {
         "rate_col": "spring_persistence_rate",
         "p_count_col": "curr_fall_p_count",
         "headcount_col": "spring_total_headcount",
+        "follow_up": "the following spring",
     },
     "Fall → Next Fall": {
         "rate_col": "next_fall_persistence_rate",
         "p_count_col": "curr_fall_p_count",
         "headcount_col": "next_fall_total_headcount",
+        "follow_up": "the next fall",
     },
 }
 
@@ -48,13 +64,37 @@ RATE_OPTIONS = {
 # Data preparation
 # ---------------------------------------------------------------------------
 
+def _term_label(term_id: int) -> str:
+    """``247`` -> ``Fall 2024`` — the fall term the cohort *starts* in.
+
+    The MV labels this ``2024-25 Fall`` and the tab used to strip the
+    ``" Fall"`` suffix, leaving a bare ``2024-25`` that reads as though it
+    might mean the spring. It is the fall cohort: ``Fall 2024`` persists into
+    Spring 2025 (Fall → Spring) or Fall 2025 (Fall → Next Fall). Naming it the
+    same way as the Applied-to-Enrolled tab keeps one MIS term reading
+    identically across both.
+    """
+    return f"Fall {2000 + int(term_id) // 10}"
+
+
 def _prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["campus"] = out["camp_code"].astype(str).map(CAMP_MAP)
-    out["term_short"] = out["academic_term"].str.replace(" Fall", "", regex=False)
     out["term_sort"] = out["mis_term_id"].astype(int)
-    out = out.sort_values("term_sort")
-    return out
+    out["term_short"] = out["term_sort"].map(_term_label)
+    out["styp_label"] = out["styp_code"].astype(str).map(STYP_MAP).fillna(
+        out["styp_code"].astype(str)
+    )
+    for col in ("curr_fall_p_count", "spring_total_headcount",
+                "next_fall_total_headcount"):
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    # Recompute per-type rates from the raw counts. The MV's own rate columns
+    # are rounded to 2 dp, and the Overall line divides summed counts, so
+    # recomputing keeps every line on one unrounded methodology.
+    denom = out["curr_fall_p_count"].where(out["curr_fall_p_count"] > 0)
+    out["spring_persistence_rate"] = out["spring_total_headcount"] / denom
+    out["next_fall_persistence_rate"] = out["next_fall_total_headcount"] / denom
+    return out.sort_values(["term_sort", "campus", "styp_label"])
 
 
 def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,9 +107,45 @@ def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
             next_fall_total_headcount=("next_fall_total_headcount", "sum"),
         )
     )
-    agg["spring_persistence_rate"] = agg["spring_total_headcount"] / agg["curr_fall_p_count"]
-    agg["next_fall_persistence_rate"] = agg["next_fall_total_headcount"] / agg["curr_fall_p_count"]
+    denom = agg["curr_fall_p_count"].where(agg["curr_fall_p_count"] > 0)
+    agg["spring_persistence_rate"] = agg["spring_total_headcount"] / denom
+    agg["next_fall_persistence_rate"] = agg["next_fall_total_headcount"] / denom
+    agg["styp_label"] = OVERALL_LABEL
     return agg.sort_values("term_sort")
+
+
+def _styp_order(df: pd.DataFrame) -> list[str]:
+    present = set(df["styp_label"].unique())
+    return [label for label in STYP_MAP.values() if label in present]
+
+
+def _drop_incomplete(
+    df_types: pd.DataFrame, df_overall: pd.DataFrame, headcount_col: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Drop campus/term points whose follow-up term has not happened yet.
+
+    The newest fall cohort has no spring (or next-fall) registrations yet, so
+    its rate computes to a flat 0% and plots as a cliff. Completeness is
+    decided per campus/term from the *summed* follow-up headcount, so a single
+    student type that genuinely fell to zero still shows as 0%.
+    """
+    keep = df_overall.loc[df_overall[headcount_col] > 0, ["campus", "term_sort"]]
+    return (
+        df_types.merge(keep, on=["campus", "term_sort"], how="inner"),
+        df_overall.merge(keep, on=["campus", "term_sort"], how="inner"),
+    )
+
+
+def _provisional_term(df_overall: pd.DataFrame) -> str | None:
+    """Label of the newest surviving cohort — its follow-up term is mid-flight.
+
+    Registration for the follow-up term is still open, so this point is a
+    partial count that will rise. It is *not* dropped (unlike a zero), because
+    a partly-loaded rate is still information — it just needs a caveat.
+    """
+    if df_overall.empty:
+        return None
+    return _term_label(int(df_overall["term_sort"].max()))
 
 
 # ---------------------------------------------------------------------------
@@ -78,10 +154,8 @@ def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
 
 def _compute_next_term(df: pd.DataFrame) -> tuple[str, int]:
     """Return (term_short, term_sort) for the next projected fall term."""
-    max_sort = int(df["term_sort"].max())
-    next_sort = max_sort + 10
-    year = 2000 + (next_sort // 10)
-    return f"{year}-{str(year + 1)[-2:]}", next_sort
+    next_sort = int(df["term_sort"].max()) + 10
+    return _term_label(next_sort), next_sort
 
 
 def _project_rate(
@@ -144,45 +218,139 @@ def _compute_projections(
 _HOVER_TEMPLATE = (
     "<b>%{x}</b><br>"
     "Rate: %{y:.1%}<br>"
-    "Headcount: %{customdata[0]:,}<br>"
-    "P-Count: %{customdata[1]:,}"
-    "<extra></extra>"
+    "Persisted: %{customdata[0]:,}<br>"
+    "Fall P-Count: %{customdata[1]:,}"
+    "<extra>%{fullData.name}</extra>"
 )
 
 
-def _build_overall_fig(
-    df_overall: pd.DataFrame, campus: str, persistence_type: str,
-    projection: pd.DataFrame | None = None,
+def _is_dark_theme() -> bool:
+    """True when Streamlit reports a dark theme.
+
+    Plotly traces don't honor the app's CSS ``light-dark()``, so the Overall
+    line's color is chosen at render time. ``type`` is None until the frontend
+    reports it; treat that as light — it corrects on the next rerun.
+    """
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:
+        return False
+
+
+def _overall_line_color(dark: bool) -> str:
+    return "white" if dark else "black"
+
+
+def _term_order(df: pd.DataFrame) -> list[str]:
+    return (
+        df[["term_short", "term_sort"]]
+        .drop_duplicates()
+        .sort_values("term_sort")["term_short"]
+        .tolist()
+    )
+
+
+def _axis_tick(term_id: int, persistence_type: str, sep: str) -> str:
+    """Two-line tick: the fall cohort, then the term it persists into.
+
+    ``247`` + ``Fall → Spring`` -> ``Fall 2024`` / ``→Spr 2025``. Both
+    follow-ups land in the next calendar year (Fall 2024 → Spring 2025, and
+    Fall 2024 → Fall 2025), so only the season differs. The cohort stays on
+    the first line and drives the data identity; the second line exists purely
+    so a chart pasted into a deck still says which term the rate measures.
+    """
+    year = 2000 + int(term_id) // 10
+    dest = "Spr" if persistence_type == "Fall → Spring" else "Fall"
+    return f"Fall {year}{sep}→{dest} {year + 1}"
+
+
+def _axis_ticks(
+    df: pd.DataFrame, persistence_type: str, sep: str,
+    extra: tuple[str, int] | None = None,
+) -> tuple[list[str], list[str]]:
+    """``(tickvals, ticktext)`` for the cohort axis, ``extra`` = projected term."""
+    pairs = (
+        df[["term_short", "term_sort"]]
+        .drop_duplicates()
+        .sort_values("term_sort")
+    )
+    vals = pairs["term_short"].tolist()
+    sorts = pairs["term_sort"].tolist()
+    if extra is not None and extra[0] not in vals:
+        vals.append(extra[0])
+        sorts.append(extra[1])
+    return vals, [_axis_tick(s, persistence_type, sep) for s in sorts]
+
+
+def _build_campus_fig(
+    df_types: pd.DataFrame, df_overall: pd.DataFrame, campus: str,
+    persistence_type: str, projection: pd.DataFrame | None = None,
+    overall_color: str = "black", provisional_term: str | None = None,
 ):
+    """One campus chart: a line per student type plus a bold Overall line."""
     opts = RATE_OPTIONS[persistence_type]
     rate_col = opts["rate_col"]
-    dfc = df_overall[df_overall["campus"] == campus].copy()
-    if persistence_type == "Fall → Next Fall":
-        dfc = dfc[dfc["next_fall_total_headcount"] > 0]
+    dfc = df_types[df_types["campus"] == campus].copy()
+    dfo = df_overall[df_overall["campus"] == campus].sort_values("term_sort")
 
     fig = px.line(
         dfc,
         x="term_short",
         y=rate_col,
+        color="styp_label",
         markers=True,
-        text=rate_col,
         title=f"{campus} — {persistence_type}",
         custom_data=[opts["headcount_col"], opts["p_count_col"]],
+        category_orders={
+            "term_short": _term_order(df_types),
+            "styp_label": _styp_order(df_types),
+        },
     )
-    fig.update_traces(
-        texttemplate="%{y:.0%}",
-        textposition="top center",
-        hovertemplate=_HOVER_TEMPLATE,
-        mode="lines+markers+text",
-    )
-    fig.update_yaxes(range=[0, 1], tickformat=".0%")
-    fig.update_xaxes(tickangle=-45)
-    fig.update_layout(height=350, xaxis_title=None, yaxis_title="Persistence Rate")
+    fig.update_traces(hovertemplate=_HOVER_TEMPLATE, mode="lines+markers")
 
-    if projection is not None and not projection.empty and not dfc.empty:
+    if not dfo.empty:
+        # Only the Overall line prints its values — with eight series on one
+        # chart, per-point labels on every line collide into noise.
+        fig.add_trace(go.Scatter(
+            x=dfo["term_short"],
+            y=dfo[rate_col],
+            mode="lines+markers+text",
+            name=OVERALL_LABEL,
+            line={"color": overall_color, "width": 3, "dash": "dash"},
+            marker={"symbol": "diamond", "size": 9, "color": overall_color},
+            text=[f"{v:.0%}" if pd.notna(v) else "" for v in dfo[rate_col]],
+            textposition="top center",
+            customdata=dfo[[opts["headcount_col"], opts["p_count_col"]]].to_numpy(),
+            hovertemplate=_HOVER_TEMPLATE,
+        ))
+
+    fig.update_yaxes(range=[0, 1], tickformat=".0%")
+    fig.update_layout(
+        height=450,
+        xaxis_title=None,
+        yaxis_title="Persistence Rate",
+        legend_title_text="Student Type",
+    )
+
+    if provisional_term is not None:
+        prov = dfo[dfo["term_short"] == provisional_term]
+        if not prov.empty and pd.notna(prov.iloc[0][rate_col]):
+            # Sits below the marker; the Overall value label is above it.
+            fig.add_annotation(
+                x=provisional_term, y=prov.iloc[0][rate_col],
+                yanchor="top", yshift=-14,
+                text="provisional", showarrow=False,
+                font={"size": 10, "color": "grey"},
+            )
+
+    proj_term: tuple[str, int] | None = None
+    if projection is not None and not projection.empty and not dfo.empty:
         proj_row = projection[projection["campus"] == campus]
         if not proj_row.empty:
-            last = dfc.iloc[-1]
+            last = dfo.iloc[-1]
+            proj_term = (
+                proj_row.iloc[0]["term_short"], int(proj_row.iloc[0]["term_sort"])
+            )
             fig.add_trace(go.Scatter(
                 x=[last["term_short"], proj_row.iloc[0]["term_short"]],
                 y=[last[rate_col], proj_row.iloc[0][rate_col]],
@@ -195,6 +363,13 @@ def _build_overall_fig(
                 hovertemplate="<b>%{x}</b><br>Projected: %{y:.1%}<extra></extra>",
             ))
 
+    # Set ticks last so the projected term gets a label too.
+    tickvals, ticktext = _axis_ticks(
+        df_overall, persistence_type, "<br>", extra=proj_term,
+    )
+    fig.update_xaxes(
+        tickangle=-45, tickmode="array", tickvals=tickvals, ticktext=ticktext,
+    )
     return fig
 
 
@@ -202,32 +377,88 @@ def _build_overall_fig(
 # Excel export (underlying chart data)
 # ---------------------------------------------------------------------------
 
-def _build_excel_sections(df_overall: pd.DataFrame) -> list[ExcelSection]:
-    """One section: overall (all-students) persistence rates + counts."""
-    out = df_overall.sort_values(["campus", "term_sort"]).rename(columns={
-        "campus": "Campus",
-        "term_short": "Term",
-        "curr_fall_p_count": "Fall P-Count",
-        "spring_total_headcount": "Spring Headcount",
-        "next_fall_total_headcount": "Next Fall Headcount",
-        "spring_persistence_rate": "Fall → Spring Rate",
-        "next_fall_persistence_rate": "Fall → Next Fall Rate",
-    })[[
-        "Campus", "Term", "Fall P-Count",
-        "Spring Headcount", "Fall → Spring Rate",
-        "Next Fall Headcount", "Fall → Next Fall Rate",
-    ]]
-    return [ExcelSection(
-        "Persistence Rates (All Students)",
-        out,
-        percent_cols=("Fall → Spring Rate", "Fall → Next Fall Rate"),
-        integer_cols=("Fall P-Count", "Spring Headcount", "Next Fall Headcount"),
-    )]
+_EXCEL_COLS = {
+    "campus": "Campus",
+    "term_short": "Term",
+    "styp_label": "Student Type",
+    "curr_fall_p_count": "Fall P-Count",
+    "spring_total_headcount": "Spring Headcount",
+    "next_fall_total_headcount": "Next Fall Headcount",
+    "spring_persistence_rate": "Fall → Spring Rate",
+    "next_fall_persistence_rate": "Fall → Next Fall Rate",
+}
+_EXCEL_ORDER = [
+    "Campus", "Term", "Student Type", "Fall P-Count",
+    "Spring Headcount", "Fall → Spring Rate",
+    "Next Fall Headcount", "Fall → Next Fall Rate",
+]
+_EXCEL_PERCENTS = ("Fall → Spring Rate", "Fall → Next Fall Rate")
+_EXCEL_INTEGERS = ("Fall P-Count", "Spring Headcount", "Next Fall Headcount")
 
 
-def _generate_excel(df_overall: pd.DataFrame) -> bytes:
+def _blank_incomplete_rates(
+    df: pd.DataFrame, df_overall: pd.DataFrame,
+) -> pd.DataFrame:
+    """Blank rates whose follow-up term hasn't happened yet.
+
+    The charts drop those cohorts outright, but the workbook holds both rate
+    columns side by side and its fall counts are real, so the row stays and
+    only the meaningless rate is emptied — a blank cell rather than a 0% that
+    reads as "nobody persisted". Emptiness is judged per campus/term from the
+    summed headcount, so a student type that genuinely hit zero keeps its 0%.
+    """
+    out = df.copy()
+    for rate_col, hc_col in (
+        ("spring_persistence_rate", "spring_total_headcount"),
+        ("next_fall_persistence_rate", "next_fall_total_headcount"),
+    ):
+        empty = df_overall.loc[df_overall[hc_col] == 0, ["campus", "term_sort"]]
+        if empty.empty:
+            continue
+        keys = set(zip(empty["campus"], empty["term_sort"]))
+        mask = [
+            (campus, term) in keys
+            for campus, term in zip(out["campus"], out["term_sort"])
+        ]
+        out.loc[mask, rate_col] = float("nan")
+    return out
+
+
+def _build_excel_sections(
+    df_types: pd.DataFrame, df_overall: pd.DataFrame,
+) -> list[ExcelSection]:
+    """Overall rates, then the same rates broken out by student type."""
+    overall = _blank_incomplete_rates(df_overall, df_overall).sort_values(
+        ["campus", "term_sort"]
+    ).rename(columns=_EXCEL_COLS)[
+        [col for col in _EXCEL_ORDER if col != "Student Type"]
+    ]
+
+    by_type = _blank_incomplete_rates(df_types, df_overall).sort_values(
+        ["campus", "term_sort", "styp_label"]
+    ).rename(columns=_EXCEL_COLS)[_EXCEL_ORDER]
+
+    return [
+        ExcelSection(
+            "Persistence Rates (All Students)",
+            overall,
+            percent_cols=_EXCEL_PERCENTS,
+            integer_cols=_EXCEL_INTEGERS,
+        ),
+        ExcelSection(
+            "Persistence Rates by Student Type",
+            by_type,
+            percent_cols=_EXCEL_PERCENTS,
+            integer_cols=_EXCEL_INTEGERS,
+        ),
+    ]
+
+
+def _generate_excel(
+    df_types: pd.DataFrame, df_overall: pd.DataFrame,
+) -> bytes:
     return sections_to_excel_bytes(
-        _build_excel_sections(df_overall),
+        _build_excel_sections(df_types, df_overall),
         title="KPI - Persistence - Chart Table Data",
     )
 
@@ -246,20 +477,49 @@ def _add_pdf_footer(fig):
 
 
 def _mpl_line_chart(
-    ax, df_plot: pd.DataFrame, rate_col: str, title: str,
+    ax, df_types: pd.DataFrame, df_overall: pd.DataFrame, rate_col: str,
+    campus: str, title: str, persistence_type: str,
     proj_rate: float | None = None, proj_label: str | None = None,
+    proj_sort: int | None = None, provisional_term: str | None = None,
 ):
-    """Draw a single persistence line chart on a matplotlib Axes."""
-    terms = df_plot["term_short"].tolist()
-    rates = df_plot[rate_col].tolist()
-    ax.plot(terms, rates, marker="o", linewidth=2)
-    for i, (t, r) in enumerate(zip(terms, rates)):
+    """Draw the multi-line persistence chart for one campus on an Axes."""
+    terms = _term_order(df_overall)
+    dfc = df_types[df_types["campus"] == campus]
+
+    for styp in _styp_order(df_types):
+        sub = (
+            dfc[dfc["styp_label"] == styp]
+            .set_index("term_short")
+            .reindex(terms)
+        )
+        ax.plot(terms, sub[rate_col], marker="o", linewidth=1.5, label=styp)
+
+    dfo = (
+        df_overall[df_overall["campus"] == campus]
+        .set_index("term_short")
+        .reindex(terms)
+    )
+    rates = dfo[rate_col].tolist()
+    ax.plot(terms, rates, marker="D", markersize=7, linewidth=2.5,
+            linestyle="--", color="black", label=OVERALL_LABEL)
+    # Values are printed for the Overall line only — eight sets of point
+    # labels would overlap into noise.
+    for i, r in enumerate(rates):
         if pd.notna(r):
             ax.annotate(f"{r:.0%}", (i, r), textcoords="offset points",
-                        xytext=(0, 10), ha="center", fontsize=8)
+                        xytext=(0, 10), ha="center", fontsize=8,
+                        fontweight="bold")
 
+    if provisional_term is not None and provisional_term in terms:
+        idx = terms.index(provisional_term)
+        if pd.notna(rates[idx]):
+            ax.annotate(
+                "provisional", (idx, rates[idx]), textcoords="offset points",
+                xytext=(0, -16), ha="center", fontsize=7, color="grey",
+            )
+
+    proj_term: tuple[str, int] | None = None
     if proj_rate is not None and proj_label is not None and terms:
-        all_terms = terms + [proj_label]
         ax.plot(
             [terms[-1], proj_label],
             [rates[-1], proj_rate],
@@ -271,21 +531,31 @@ def _mpl_line_chart(
             textcoords="offset points", xytext=(0, 10),
             ha="center", fontsize=8, color="grey",
         )
-        ax.set_xticks(range(len(all_terms)))
-        ax.set_xticklabels(all_terms)
+        if proj_sort is not None:
+            proj_term = (proj_label, proj_sort)
+
+    tickvals, ticktext = _axis_ticks(
+        df_overall, persistence_type, "\n", extra=proj_term,
+    )
+    ax.set_xticks(range(len(tickvals)))
+    ax.set_xticklabels(ticktext)
 
     ax.set_ylim(0, 1)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.set_ylabel("Persistence Rate")
     ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.legend(fontsize=8, loc="best", title="Student Type", ncol=2)
     ax.tick_params(axis="x", rotation=45)
     ax.grid(axis="y", alpha=0.3)
 
 
 def _generate_pdf(
+    df_types: pd.DataFrame,
     df_overall: pd.DataFrame,
     persistence_type: str,
     proj_overall: pd.DataFrame | None = None,
     proj_method: str | None = None,
+    provisional_term: str | None = None,
 ) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
@@ -301,32 +571,44 @@ def _generate_pdf(
     # Extract projection value for a campus
     def _get_proj(proj_df, campus_val):
         if proj_df is None or proj_df.empty:
-            return None, None
+            return None, None, None
         row = proj_df[proj_df["campus"] == campus_val]
         if row.empty:
-            return None, None
-        return row.iloc[0][rate_col], row.iloc[0]["term_short"]
+            return None, None, None
+        return (
+            row.iloc[0][rate_col],
+            row.iloc[0]["term_short"],
+            int(row.iloc[0]["term_sort"]),
+        )
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
-        # One page per campus: overall (all students) persistence
+        # One page per campus: a line per student type plus Overall
         for campus in CAMP_MAP.values():
-            dfc_overall = df_overall[df_overall["campus"] == campus].copy()
-            if persistence_type == "Fall → Next Fall":
-                dfc_overall = dfc_overall[dfc_overall["next_fall_total_headcount"] > 0]
+            dfc_overall = df_overall[df_overall["campus"] == campus]
             if dfc_overall.empty:
                 continue
 
-            p_rate, p_label = _get_proj(proj_overall, campus)
+            p_rate, p_label, p_sort = _get_proj(proj_overall, campus)
 
             fig, ax = plt.subplots(figsize=(PAGE_W, PAGE_H))
             fig.text(0.50, 0.97, "KPI - Persistence",
                      fontsize=16, fontweight="bold", ha="center")
             fig.suptitle(f"{campus} — {persistence_type}",
                          fontsize=14, fontweight="bold", y=0.93)
-            fig.subplots_adjust(left=0.10, right=0.92, top=0.88, bottom=0.20)
-            _mpl_line_chart(ax, dfc_overall, rate_col, "",
-                            proj_rate=p_rate, proj_label=p_label)
+            fig.subplots_adjust(left=0.10, right=0.92, top=0.88, bottom=0.22)
+            _mpl_line_chart(ax, df_types, dfc_overall, rate_col, campus, "",
+                            persistence_type,
+                            proj_rate=p_rate, proj_label=p_label,
+                            proj_sort=p_sort, provisional_term=provisional_term)
+            if provisional_term is not None:
+                fig.text(
+                    0.10, 0.06,
+                    f"{provisional_term} is provisional — "
+                    f"{RATE_OPTIONS[persistence_type]['follow_up']} is still "
+                    "enrolling, so its rate will rise.",
+                    fontsize=8, color="grey",
+                )
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
@@ -452,6 +734,7 @@ def render():
             st.warning("No data returned for the selected terms.")
             return
         df_prepared = _prepare_data(df)
+        st.session_state["pbs_df_types"] = df_prepared
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
         clear_pdf_cache("pbs")
         clear_excel_cache("pbs")
@@ -460,17 +743,20 @@ def render():
     if "pbs_df_overall" in st.session_state:
         ptype_val = st.session_state.get("pbs_ptype", "Fall → Spring")
 
+        pdf_types, pdf_overall = _drop_incomplete(
+            st.session_state["pbs_df_types"],
+            st.session_state["pbs_df_overall"],
+            RATE_OPTIONS[ptype_val]["headcount_col"],
+        )
+        pdf_provisional = _provisional_term(pdf_overall)
+
         # Compute projections for PDF (uses current sidebar selections)
         pdf_proj_overall = None
-        if show_projection and proj_method:
-            opts = RATE_OPTIONS[ptype_val]
-            rate_col = opts["rate_col"]
-            df_o = st.session_state["pbs_df_overall"].copy()
-            if ptype_val == "Fall → Next Fall":
-                df_o = df_o[df_o["next_fall_total_headcount"] > 0]
-            if not df_o.empty:
-                pdf_proj_overall = _compute_projections(
-                    df_o, rate_col, ["campus"], proj_method)
+        if show_projection and proj_method and not pdf_overall.empty:
+            pdf_proj_overall = _compute_projections(
+                pdf_overall, RATE_OPTIONS[ptype_val]["rate_col"],
+                ["campus"], proj_method,
+            )
 
         pdf_bytes = cached_pdf_bytes(
             "pbs",
@@ -481,10 +767,12 @@ def render():
                 proj_method,
             ),
             lambda: _generate_pdf(
-                st.session_state["pbs_df_overall"],
+                pdf_types,
+                pdf_overall,
                 ptype_val,
                 proj_overall=pdf_proj_overall,
                 proj_method=proj_method if show_projection else None,
+                provisional_term=pdf_provisional,
             ),
         )
         st.sidebar.download_button(
@@ -497,7 +785,10 @@ def render():
         excel_bytes = cached_excel_bytes(
             "pbs",
             (id(st.session_state["pbs_df_overall"]),),
-            lambda: _generate_excel(st.session_state["pbs_df_overall"]),
+            lambda: _generate_excel(
+                st.session_state["pbs_df_types"],
+                st.session_state["pbs_df_overall"],
+            ),
         )
         st.sidebar.download_button(
             "Download Excel",
@@ -511,8 +802,6 @@ def render():
         st.info("Select Term IDs and press **Query** to load data.")
         return
 
-    df_overall = st.session_state["pbs_df_overall"]
-
     # --- Filter: persistence type ---
     persistence_type = st.radio(
         "Persistence Type",
@@ -520,24 +809,55 @@ def render():
         key="pbs_ptype",
         horizontal=True,
     )
+    opts = RATE_OPTIONS[persistence_type]
+
+    # Cohorts whose follow-up term hasn't happened yet would plot as 0%.
+    df_types, df_overall = _drop_incomplete(
+        st.session_state["pbs_df_types"],
+        st.session_state["pbs_df_overall"],
+        opts["headcount_col"],
+    )
+    if df_overall.empty:
+        st.warning(
+            f"No cohort in the selected terms has reached "
+            f"{opts['follow_up']} yet."
+        )
+        return
+    provisional_term = _provisional_term(df_overall)
+
+    st.caption(
+        "Each point is a **fall cohort**: *Fall 2024* means students enrolled "
+        "in Fall 2024, persisting into Spring 2025 (Fall → Spring) or Fall "
+        "2025 (Fall → Next Fall). The denominator is that fall's headcount "
+        "**minus students who completed a degree that fall**; the numerator is "
+        "the follow-up term's headcount. Lines show each student type, with a "
+        "count-weighted **Overall** line across all types."
+    )
+    if provisional_term:
+        st.caption(
+            f":grey[**{provisional_term} is provisional** — "
+            f"{opts['follow_up']} is still enrolling, so that point is a "
+            "partial count and will rise.]"
+        )
 
     # --- Compute projections for charts ---
     proj_overall = None
     if show_projection and proj_method:
-        opts = RATE_OPTIONS[persistence_type]
-        rate_col = opts["rate_col"]
-        df_o = df_overall.copy()
-        if persistence_type == "Fall → Next Fall":
-            df_o = df_o[df_o["next_fall_total_headcount"] > 0]
-        if not df_o.empty:
-            proj_overall = _compute_projections(
-                df_o, rate_col, ["campus"], proj_method)
+        proj_overall = _compute_projections(
+            df_overall, opts["rate_col"], ["campus"], proj_method)
 
     # --- Persistence by campus (all three) ---
+    dark = _is_dark_theme()
+    overall_color = _overall_line_color(dark)
     for campus in CAMP_MAP.values():
+        if campus not in set(df_overall["campus"].unique()):
+            continue
         st.plotly_chart(
-            _build_overall_fig(df_overall, campus, persistence_type,
-                               projection=proj_overall),
+            _build_campus_fig(
+                df_types, df_overall, campus, persistence_type,
+                projection=proj_overall, overall_color=overall_color,
+                provisional_term=provisional_term,
+            ),
             width="stretch",
         )
 
