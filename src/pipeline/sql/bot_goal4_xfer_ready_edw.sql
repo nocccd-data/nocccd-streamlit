@@ -7,14 +7,17 @@
 -- upstream in int_course).
 --
 -- ============================================================================
--- !! CURRENTLY POINTED AT THE DEV SCHEMA (jahn.) FOR VALIDATION !!
+-- Points at the edw_prod schema (was the jahn dev schema during validation).
 --
--- Before pasting into nocccd-streamlit/src/pipeline/sql/bot_goal4_xfer_ready.sql,
--- replace every "jahn." with "edw_prod." -- 6 occurrences. Shipping this file
--- as-is would point a production dashboard at a personal dev schema.
+-- NOT WIRED IN: no DATASETS entry references this file, and the pipeline only
+-- loads SQL named in DATASETS[...]["sql_file"], so nothing runs it yet. It is
+-- kept for comparison against bot_goal4_xfer_ready.sql; swapping it in is a
+-- separate, undecided step.
 --
--- Prod also needs PR #84 merged and a prod refresh first: dim_academic_history
--- and dim_term.cutoff_term do not exist in EDW_PROD yet.
+-- STILL BLOCKED ON PROD: this needs PR #84 merged and a prod refresh --
+-- dim_academic_history and dim_term.cutoff_term did not exist in EDW_PROD as
+-- of this change, and it was not re-verified when the schema was switched.
+-- Confirm both objects exist before running or wiring this in.
 -- ============================================================================
 WITH
     acyr AS (
@@ -27,7 +30,7 @@ WITH
             academic_year_code AS acyr_code,
             academic_year_title,
             cutoff_term
-        FROM jahn.dim_term
+        FROM edw_prod.dim_term
         WHERE academic_year_code = :acyr_code
           AND SUBSTR(term_code, -1) = '0'
     ),
@@ -56,10 +59,10 @@ WITH
             -- ('Black or African American', 'Multiethnicity', 'Unreported', ...),
             -- so the warehouse column can be used directly.
             b.ipeds_ethnicity_description AS race_description
-        FROM jahn.dim_student_term a
-            JOIN jahn.dim_student b
+        FROM edw_prod.dim_student_term a
+            JOIN edw_prod.dim_student b
                 ON (a.student_key = b.student_key)
-            JOIN jahn.dim_term c
+            JOIN edw_prod.dim_term c
                 ON (a.term_key = c.term_key)
         WHERE c.academic_year_code = :acyr_code
           -- Census enrollment at a credit college, i.e. the original's
@@ -96,11 +99,11 @@ WITH
                     h.shrtckn_seq_no DESC
                 ) AS rn
         FROM enrolled e
-            JOIN jahn.dim_academic_history h
+            JOIN edw_prod.dim_academic_history h
                 ON (h.student_key = e.student_key)
             -- course_key is hash(term_code, subject_code, course_number), so the
             -- term is already baked in -- no separate term predicate needed.
-            JOIN jahn.dim_course d
+            JOIN edw_prod.dim_course d
                 ON (h.course_key = d.course_key)
             CROSS JOIN acyr t
         WHERE d.csu_uc_transferable_flag = 'Y'
