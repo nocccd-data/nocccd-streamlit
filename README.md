@@ -117,7 +117,7 @@ Datasets are defined in `src/pipeline/config.py`. Each entry maps a dataset name
 | `cte_sx_submitted` | `cte_sx_submitted.sql` | `mis_acyr_id` | `dwhdb` | MIS SX submitted CTE comparison |
 | `class_schedule_heatmap` | `class_schedule_heatmap.sql` | `mis_term_id` | `dwhdb` | Class Schedule Heatmap tab |
 | `kpi_persistence` | `kpi_persistence.sql` | `mis_term_id` | `dwhdb` | KPI - Persistence tab |
-| `kpi_applied_to_enrolled` | `kpi_applied_to_enrolled.sql` | `mis_term_id` | `dwhdb` | KPI - Applied to Enrolled tab |
+| `kpi_applied_to_enrolled` | `kpi_applied_to_enrolled.sql` | `mis_term_id` | `dwhdb` | KPI - 1st Time Applied to Enrolled tab |
 | `kpi_dual_enrollment` | `kpi_dual_enrollment.sql` | `acyr_code` | `dwhdb` | KPI - Dual Enrollment tab |
 | `enrollment_dashboard` | `enrollment_dashboard.sql` | `banner_term_code` | `dwhdb` | Two-term enrollment-by-date extract enriched with instructional mode + demographics (Banner joins, sliced from the 5-year MV); published to Tableau Cloud only (no app tab yet) |
 | `seat_count_report` | `seat_count_report.sql` | `banner_term_code` | `rept` | Seat Count Report tab, mail reports, and bulk PDF export |

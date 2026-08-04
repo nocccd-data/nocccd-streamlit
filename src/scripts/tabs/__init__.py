@@ -31,7 +31,7 @@ TABS = [
     ("Seat Count Report", seat_count_report_render),
     ("Class Schedule Heatmap", class_schedule_heatmap_render),
     ("KPI - Persistence", kpi_persistence_render),
-    ("KPI - Applied to Enrolled", kpi_applied_to_enrolled_render),
+    ("KPI - 1st Time Applied to Enrolled", kpi_applied_to_enrolled_render),
     ("KPI - Dual Enrollment", kpi_dual_enrollment_render),
     ("COI vs NHRDIST Validation", coi_nhrdist_val_render),
     ("SCFF Degrees - MIS SP Submitted", mis_sp_submitted_scff_render),

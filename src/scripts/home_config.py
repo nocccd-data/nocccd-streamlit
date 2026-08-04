@@ -46,12 +46,13 @@ PROJECTS = [
         ],
     },
     {
-        "tab_label": "KPI - Applied to Enrolled",
+        "tab_label": "KPI - 1st Time Applied to Enrolled",
         "description": "Application-to-enrollment yield rates by student type across all three campuses.",
         "metrics": [
             "% of applicants who enrolled, by student type",
             "Count-weighted overall yield per campus",
             "Multi-term trend lines for all campuses",
+            "Change in yield vs the Fall 2024 baseline",
         ],
     },
     {
