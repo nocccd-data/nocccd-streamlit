@@ -40,16 +40,31 @@ The Seat Count Report shows a different column set per campus, in both the bande
 
 ## Persistence projections (`kpi_persistence.py`)
 
-The KPI - Persistence tab shows one overall ("all students") persistence line chart per campus (Cypress, Fullerton, NOCE), with a `Fall → Spring` / `Fall → Next Fall` radio. It also supports forecasting the next academic year's persistence rates. Two methods are available via a sidebar toggle:
+The KPI - Persistence tab shows one line chart per campus (Cypress, Fullerton, NOCE) with a `Fall → Spring` / `Fall → Next Fall` radio. Each chart carries **one line per student type** (`first_time`, `first_time_trans`, `returning`, `continuing`, `adult`, `concurrent`, `dual_enroll` — NOCE only reports `adult`) plus a bold dashed **Overall** line. The source MV `dwh.mv_persistence_by_styp` has always been per-student-type; the tab used to aggregate that away.
+
+### Reading a data point (this is the tab's most-asked question)
+
+- **Each x value is a fall cohort, not a term in the ratio.** `Fall 2024` means *students enrolled in Fall 2024*, persisting into Spring 2025 (Fall → Spring) or Fall 2025 (Fall → Next Fall). The MV labels this `2024-25 Fall` in its `academic_term` column; the tab previously stripped the `" Fall"` suffix, leaving a bare `2024-25` that reads as though it might mean the spring. `_term_label()` now derives `Fall 2024` from `mis_term_id` instead, matching the Applied-to-Enrolled tab so one MIS term reads identically on both.
+- **The axis tick names both ends** (`_axis_tick()` / `_axis_ticks()`): `Fall 2024` over `→Spr 2025`, switching to `→Fall 2025` with the radio. This is a *display* layer only — `tickvals` stay the plain `term_short` category, so the data, the Excel export, and the cross-tab match with Applied-to-Enrolled are untouched. It exists because a chart pasted into a deck loses the caption, and the cohort-vs-destination question is the tab's most-asked. `_axis_ticks(extra=...)` must also be handed the projected term or the forecast point renders with no tick label.
+- **The denominator drops that fall's graduates, the numerator does not.** Rate = `follow_up_total_headcount / curr_fall_p_count`, where `curr_fall_p_count` = fall headcount − students who completed a degree that fall. Dividing by raw fall headcount instead gives a figure ~2 points lower district-wide (~4 for `continuing`), which is the usual cause of numbers not reconciling against hand-built sheets.
+- Per-type rates are recomputed from the raw counts in `_prepare_data()` rather than read from the MV's `*_persistence_rate` columns, which are rounded to 2 dp. Overall divides summed counts, so every line shares one unrounded methodology.
+
+### Incomplete cohorts
+
+The newest fall cohort has no follow-up registrations yet, so its rate computes to a flat 0%. `_drop_incomplete()` removes those campus/term points from **both** views (previously only `Fall → Next Fall` filtered them, so `Fall → Spring` plotted a 0% cliff — and the projection fitted a line through it, extrapolating a **0% forecast**). Completeness is judged per campus/term from the *summed* follow-up headcount, so a single student type that genuinely fell to zero still shows 0%.
+
+The newest *surviving* point is still partial — its follow-up term is mid-enrollment — so `_provisional_term()` names it and the tab flags it in a caption, on the chart (a grey `provisional` annotation), and in a PDF footnote. It is flagged rather than dropped because a partly-loaded rate is still information; it just rises over the term.
+
+### Projections
 
 - **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per campus. Minimum 2 data points.
 - **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
 
-Projected values are clipped to [0, 1]. The next term label is derived from MIS term ID pattern (IDs increment by 10 per year: 207→217→…→257→267).
+Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The next term label comes from `_term_label(max + 10)` (MIS IDs increment by 10 per year: 207→217→…→257→267).
 
-**PDF export**: One overall page per campus with projected dashed lines, plus a final methodology page (method description, caveat, R² table for linear regression) when projections are active.
+**PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines and the provisional footnote. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
 
-**Excel export**: One `chart_data` sheet with overall persistence rates + counts (Fall→Spring and Fall→Next Fall) per campus/term. Independent of the projection/persistence-type toggles, so its cache key is just `(id(df_overall),)`.
+**Excel export**: One `chart_data` sheet with two sections — overall rates + counts per campus/term, then the same broken out by student type. It carries both rate columns at once and is independent of the projection/persistence-type toggles (cache key is just `(id(df_overall),)`), so instead of dropping incomplete cohorts it keeps their real fall counts and blanks only the meaningless rate cells via `_blank_incomplete_rates()` — an empty cell, never a 0% that reads as "nobody persisted".
 
 Widget prefix: `"pbs_"`
 
