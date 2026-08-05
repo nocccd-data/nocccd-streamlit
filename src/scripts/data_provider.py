@@ -11,13 +11,22 @@ never queries Oracle directly.
 
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 import streamlit as st
 
 
-def _download_and_read(dataset_name: str, filter_col: str, values: tuple[str, ...]) -> pd.DataFrame:
-    """Download a dataset's Hyper from Tableau Cloud and filter to ``values``."""
+def _download_and_read(
+    dataset_name: str,
+    filter_col: str | None = None,
+    values: tuple[str, ...] | None = None,
+) -> pd.DataFrame:
+    """Download a dataset's Hyper from Tableau Cloud and filter to ``values``.
+
+    ``filter_col=None`` returns the whole extract — for small dimensions
+    (``term_calendar``) that are pulled whole and joined, not filtered.
+    """
     import pantab
     from src.pipeline.publish import download_hyper
 
@@ -31,7 +40,17 @@ def _download_and_read(dataset_name: str, filter_col: str, values: tuple[str, ..
             pat_name=secrets["PAT_NAME"],
             pat_value=secrets["PAT_VALUE"],
         )
-        df = pantab.frame_from_hyper(hyper_path, table="Extract")
+        # pantab types this as `DataFrame | PantabStream`; only the reader API
+        # is used here, and `table=` always yields a frame.
+        df = cast(pd.DataFrame, pantab.frame_from_hyper(hyper_path, table="Extract"))
+
+    if filter_col is None:
+        return df
+
+    if values is None:
+        raise ValueError(
+            f"{dataset_name!r}: filter_col={filter_col!r} given without values."
+        )
 
     if filter_col not in df.columns:
         available = ", ".join(map(str, df.columns))
@@ -104,6 +123,12 @@ def fetch_class_schedule_heatmap(terms: tuple[str, ...]) -> pd.DataFrame:
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_kpi_persistence(terms: tuple[str, ...]) -> pd.DataFrame:
     return _download_and_read("kpi_persistence", "mis_term_id", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_term_calendar() -> pd.DataFrame:
+    """Banner term start/end dates, whole. Join on ``stvterm_code`` only."""
+    return _download_and_read("term_calendar")
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")

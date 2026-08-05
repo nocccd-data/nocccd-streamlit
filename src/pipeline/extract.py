@@ -68,10 +68,30 @@ def extract_dataset(name: str) -> Path:
     """
     cfg = DATASETS[name]
     sql_path = SQL_DIR / cfg["sql_file"]
-    param_name = cfg["param_name"]
+    param_name = cfg.get("param_name")
 
     base_sql = sql_path.read_text(encoding="utf-8")
     engine = get_engine(section=cfg.get("db_section", "dwhdb"))
+
+    # Unparameterized datasets (small dimensions pulled whole) run once with no
+    # binds. The placeholder guard is not optional: without it, a SQL file that
+    # *should* have been parameterized but is missing `param_name` in config
+    # would ship a literal `:t1` to Oracle. Same failure the IN-expansion
+    # assertion below catches, reached from the opposite direction.
+    if param_name is None:
+        # Strip `--` comments before scanning: prose like "1:many" in a SQL
+        # header is not a bind placeholder. The lookbehind then excludes any
+        # colon preceded by a word character (`12:30`) or another colon.
+        sql_body = re.sub(r"--[^\n]*", "", base_sql)
+        stray = re.search(r"(?<![\w:]):(\w+)", sql_body)
+        if stray:
+            raise RuntimeError(
+                f"{sql_path.name} contains bind placeholder ':{stray.group(1)}' "
+                f"but dataset {name!r} has no 'param_name' in config."
+            )
+        with engine.connect() as conn:
+            df = pd.read_sql(base_sql, conn)
+        return _write_hyper(name, df)
 
     values = cfg[param_name]
 
