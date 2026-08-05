@@ -44,20 +44,43 @@ STYP_MAP = {
 
 OVERALL_LABEL = "Overall"
 
+# The two rates do NOT share a denominator. Fall → Spring divides by the fall
+# cohort minus that fall's completers (``curr_fall_p_count``); Fall → Next Fall
+# divides by the fall cohort minus anyone who completed in the fall *or the
+# following spring* (``next_fall_p_denominator``), since a student who already
+# earned a credential would not be expected to re-enroll. Using
+# ``curr_fall_p_count`` for both — as this tab did before the MV was rebuilt —
+# understates Fall → Next Fall by several points and makes the chart disagree
+# with the MV's own rate columns.
 RATE_OPTIONS = {
     "Fall → Spring": {
         "rate_col": "spring_persistence_rate",
         "p_count_col": "curr_fall_p_count",
+        "p_count_label": "Fall P-Count",
         "headcount_col": "spring_total_headcount",
         "follow_up": "the following spring",
     },
     "Fall → Next Fall": {
         "rate_col": "next_fall_persistence_rate",
-        "p_count_col": "curr_fall_p_count",
+        "p_count_col": "next_fall_p_denominator",
+        "p_count_label": "Fall P-Count (less spring completers)",
         "headcount_col": "next_fall_total_headcount",
         "follow_up": "the next fall",
     },
 }
+
+# Columns `_prepare_data` / `_build_overall` cannot work without. An extract
+# built before the MV rebuild has no `next_fall_p_denominator`, which would
+# otherwise surface as a bare KeyError traceback.
+_REQUIRED_COLS = frozenset({
+    "mis_term_id",
+    "camp_code",
+    "styp_code",
+    "curr_fall_p_count",
+    "next_fall_p_denominator",
+    "spring_total_headcount",
+    "next_fall_total_headcount",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -85,15 +108,23 @@ def _prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     out["styp_label"] = out["styp_code"].astype(str).map(STYP_MAP).fillna(
         out["styp_code"].astype(str)
     )
-    for col in ("curr_fall_p_count", "spring_total_headcount",
-                "next_fall_total_headcount"):
+    for col in ("curr_fall_p_count", "next_fall_p_denominator",
+                "spring_total_headcount", "next_fall_total_headcount"):
         out[col] = pd.to_numeric(out[col], errors="coerce")
     # Recompute per-type rates from the raw counts. The MV's own rate columns
     # are rounded to 2 dp, and the Overall line divides summed counts, so
-    # recomputing keeps every line on one unrounded methodology.
-    denom = out["curr_fall_p_count"].where(out["curr_fall_p_count"] > 0)
-    out["spring_persistence_rate"] = out["spring_total_headcount"] / denom
-    out["next_fall_persistence_rate"] = out["next_fall_total_headcount"] / denom
+    # recomputing keeps every line on one unrounded methodology. Each rate uses
+    # its own denominator — see RATE_OPTIONS.
+    spring_denom = out["curr_fall_p_count"].where(out["curr_fall_p_count"] > 0)
+    next_fall_denom = out["next_fall_p_denominator"].where(
+        out["next_fall_p_denominator"] > 0
+    )
+    out["spring_persistence_rate"] = (
+        out["spring_total_headcount"] / spring_denom
+    )
+    out["next_fall_persistence_rate"] = (
+        out["next_fall_total_headcount"] / next_fall_denom
+    )
     return out.sort_values(["term_sort", "campus", "styp_label"])
 
 
@@ -103,13 +134,21 @@ def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
         df.groupby(["campus", "term_short", "term_sort"], as_index=False)
         .agg(
             curr_fall_p_count=("curr_fall_p_count", "sum"),
+            next_fall_p_denominator=("next_fall_p_denominator", "sum"),
             spring_total_headcount=("spring_total_headcount", "sum"),
             next_fall_total_headcount=("next_fall_total_headcount", "sum"),
         )
     )
-    denom = agg["curr_fall_p_count"].where(agg["curr_fall_p_count"] > 0)
-    agg["spring_persistence_rate"] = agg["spring_total_headcount"] / denom
-    agg["next_fall_persistence_rate"] = agg["next_fall_total_headcount"] / denom
+    spring_denom = agg["curr_fall_p_count"].where(agg["curr_fall_p_count"] > 0)
+    next_fall_denom = agg["next_fall_p_denominator"].where(
+        agg["next_fall_p_denominator"] > 0
+    )
+    agg["spring_persistence_rate"] = (
+        agg["spring_total_headcount"] / spring_denom
+    )
+    agg["next_fall_persistence_rate"] = (
+        agg["next_fall_total_headcount"] / next_fall_denom
+    )
     agg["styp_label"] = OVERALL_LABEL
     return agg.sort_values("term_sort")
 
@@ -215,13 +254,21 @@ def _compute_projections(
 # Plotly figures
 # ---------------------------------------------------------------------------
 
-_HOVER_TEMPLATE = (
-    "<b>%{x}</b><br>"
-    "Rate: %{y:.1%}<br>"
-    "Persisted: %{customdata[0]:,}<br>"
-    "Fall P-Count: %{customdata[1]:,}"
-    "<extra>%{fullData.name}</extra>"
-)
+def _hover_template(persistence_type: str) -> str:
+    """Hover text for one persistence mode.
+
+    The denominator label is per-mode: the two rates divide by different
+    counts, so a single hard-coded "Fall P-Count" would print a number that
+    does not reproduce the rate shown above it.
+    """
+    return (
+        "<b>%{x}</b><br>"
+        "Rate: %{y:.1%}<br>"
+        "Persisted: %{customdata[0]:,}<br>"
+        f"{RATE_OPTIONS[persistence_type]['p_count_label']}: "
+        "%{customdata[1]:,}"
+        "<extra>%{fullData.name}</extra>"
+    )
 
 
 def _is_dark_theme() -> bool:
@@ -290,6 +337,7 @@ def _build_campus_fig(
     """One campus chart: a line per student type plus a bold Overall line."""
     opts = RATE_OPTIONS[persistence_type]
     rate_col = opts["rate_col"]
+    hover = _hover_template(persistence_type)
     dfc = df_types[df_types["campus"] == campus].copy()
     dfo = df_overall[df_overall["campus"] == campus].sort_values("term_sort")
 
@@ -306,7 +354,7 @@ def _build_campus_fig(
             "styp_label": _styp_order(df_types),
         },
     )
-    fig.update_traces(hovertemplate=_HOVER_TEMPLATE, mode="lines+markers")
+    fig.update_traces(hovertemplate=hover, mode="lines+markers")
 
     if not dfo.empty:
         # Only the Overall line prints its values — with eight series on one
@@ -321,7 +369,7 @@ def _build_campus_fig(
             text=[f"{v:.0%}" if pd.notna(v) else "" for v in dfo[rate_col]],
             textposition="top center",
             customdata=dfo[[opts["headcount_col"], opts["p_count_col"]]].to_numpy(),
-            hovertemplate=_HOVER_TEMPLATE,
+            hovertemplate=hover,
         ))
 
     fig.update_yaxes(range=[0, 1], tickformat=".0%")
@@ -377,23 +425,31 @@ def _build_campus_fig(
 # Excel export (underlying chart data)
 # ---------------------------------------------------------------------------
 
+# Each rate sits next to the P-Count it actually divides by. The two counts are
+# both fall-cohort counts but are not interchangeable — the next-fall one also
+# removes the following spring's completers — so neither is labelled with a bare
+# "Fall P-Count" that would invite reconciling a rate against the wrong column.
 _EXCEL_COLS = {
     "campus": "Campus",
     "term_short": "Term",
     "styp_label": "Student Type",
-    "curr_fall_p_count": "Fall P-Count",
+    "curr_fall_p_count": "Fall P-Count (→Spring)",
+    "next_fall_p_denominator": "Fall P-Count (→Next Fall)",
     "spring_total_headcount": "Spring Headcount",
     "next_fall_total_headcount": "Next Fall Headcount",
     "spring_persistence_rate": "Fall → Spring Rate",
     "next_fall_persistence_rate": "Fall → Next Fall Rate",
 }
 _EXCEL_ORDER = [
-    "Campus", "Term", "Student Type", "Fall P-Count",
-    "Spring Headcount", "Fall → Spring Rate",
-    "Next Fall Headcount", "Fall → Next Fall Rate",
+    "Campus", "Term", "Student Type",
+    "Fall P-Count (→Spring)", "Spring Headcount", "Fall → Spring Rate",
+    "Fall P-Count (→Next Fall)", "Next Fall Headcount", "Fall → Next Fall Rate",
 ]
 _EXCEL_PERCENTS = ("Fall → Spring Rate", "Fall → Next Fall Rate")
-_EXCEL_INTEGERS = ("Fall P-Count", "Spring Headcount", "Next Fall Headcount")
+_EXCEL_INTEGERS = (
+    "Fall P-Count (→Spring)", "Fall P-Count (→Next Fall)",
+    "Spring Headcount", "Next Fall Headcount",
+)
 
 
 def _blank_incomplete_rates(
@@ -733,6 +789,15 @@ def render():
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return
+        missing = _REQUIRED_COLS.difference(df.columns)
+        if missing:
+            st.error(
+                "The persistence extract is missing "
+                f"`{'`, `'.join(sorted(missing))}` — it predates the "
+                "`dwh.mv_persistence_by_styp` rebuild. Refresh the MV, then "
+                "run `python -m src.pipeline.run kpi_persistence`."
+            )
+            return
         df_prepared = _prepare_data(df)
         st.session_state["pbs_df_types"] = df_prepared
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
@@ -825,13 +890,23 @@ def render():
         return
     provisional_term = _provisional_term(df_overall)
 
+    denominator_note = (
+        "that fall's headcount **minus students who completed a degree that "
+        "fall**"
+        if persistence_type == "Fall → Spring" else
+        "that fall's headcount **minus students who completed a degree that "
+        "fall or the following spring** (a completer would not be expected to "
+        "re-enroll)"
+    )
     st.caption(
         "Each point is a **fall cohort**: *Fall 2024* means students enrolled "
         "in Fall 2024, persisting into Spring 2025 (Fall → Spring) or Fall "
-        "2025 (Fall → Next Fall). The denominator is that fall's headcount "
-        "**minus students who completed a degree that fall**; the numerator is "
-        "the follow-up term's headcount. Lines show each student type, with a "
-        "count-weighted **Overall** line across all types."
+        f"2025 (Fall → Next Fall). The denominator is {denominator_note}; the "
+        "numerator is the follow-up term's headcount. Lines show each student "
+        "type, with a count-weighted **Overall** line across all types. "
+        "Special admits who are neither CCAP nor early-college — concurrent "
+        "enrollment — are excluded, since they are not expected to persist "
+        "past one term."
     )
     if provisional_term:
         st.caption(
