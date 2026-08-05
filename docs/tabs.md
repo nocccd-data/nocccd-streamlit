@@ -61,7 +61,11 @@ The KPI - Persistence tab shows one line chart per campus (Cypress, Fullerton, N
 
 The newest fall cohort has no follow-up registrations yet, so its rate computes to a flat 0%. `_drop_incomplete()` removes those campus/term points from **both** views (previously only `Fall → Next Fall` filtered them, so `Fall → Spring` plotted a 0% cliff — and the projection fitted a line through it, extrapolating a **0% forecast**). Completeness is judged per campus/term from the *summed* follow-up headcount, so a single student type that genuinely fell to zero still shows 0%.
 
-The newest *surviving* point is still partial — its follow-up term is mid-enrollment — so `_provisional_term()` names it and the tab flags it in a caption, on the chart (a grey `provisional` annotation), and in a PDF footnote. It is flagged rather than dropped because a partly-loaded rate is still information; it just rises over the term.
+The newest *surviving* point may still be partial if its follow-up term is mid-enrollment. **This is not flagged.** A `provisional` caveat used to name that cohort in a caption, a grey chart annotation, and a PDF footnote, but it was driven by `_provisional_term()`, which simply labelled the newest surviving cohort unconditionally — with no test of whether that term had actually finished. It therefore fired on cohorts whose follow-up term was long over: viewed in August 2026, the Fall 2025 → Spring 2026 point was still marked provisional even though Spring 2026 ended in May.
+
+Detecting completeness properly needs a term calendar the extract does not carry — `stvterm_start_date` / `stvterm_end_date` per track, since NOCE's spring (`'35'`) ends on a different calendar than the credit spring (`'20'`). Rather than infer it from a heuristic or borrow another tab's query, the note was removed (2026-08-05) pending a dedicated source. Re-adding it means adding follow-up-term dates to `mv_persistence_by_styp` and comparing against the render date; decide then whether "complete" means the term has started (matching what the caveat actually claimed — that the count is still rising) or has ended.
+
+`_drop_incomplete()` is unaffected and still runs — cohorts whose follow-up has *no* data are dropped outright.
 
 ### Projections
 
@@ -70,7 +74,7 @@ The newest *surviving* point is still partial — its follow-up term is mid-enro
 
 Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The next term label comes from `_term_label(max + 10)` (MIS IDs increment by 10 per year: 207→217→…→257→267).
 
-**PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines and the provisional footnote. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
+**PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
 
 **Excel export**: One `chart_data` sheet with two sections — overall rates + counts per campus/term, then the same broken out by student type. It carries both rate columns at once and is independent of the projection/persistence-type toggles (cache key is just `(id(df_overall),)`), so instead of dropping incomplete cohorts it keeps their real fall counts and blanks only the meaningless rate cells via `_blank_incomplete_rates()` — an empty cell, never a 0% that reads as "nobody persisted".
 
