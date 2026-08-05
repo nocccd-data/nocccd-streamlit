@@ -175,18 +175,6 @@ def _drop_incomplete(
     )
 
 
-def _provisional_term(df_overall: pd.DataFrame) -> str | None:
-    """Label of the newest surviving cohort — its follow-up term is mid-flight.
-
-    Registration for the follow-up term is still open, so this point is a
-    partial count that will rise. It is *not* dropped (unlike a zero), because
-    a partly-loaded rate is still information — it just needs a caveat.
-    """
-    if df_overall.empty:
-        return None
-    return _term_label(int(df_overall["term_sort"].max()))
-
-
 # ---------------------------------------------------------------------------
 # Projection helpers
 # ---------------------------------------------------------------------------
@@ -332,7 +320,7 @@ def _axis_ticks(
 def _build_campus_fig(
     df_types: pd.DataFrame, df_overall: pd.DataFrame, campus: str,
     persistence_type: str, projection: pd.DataFrame | None = None,
-    overall_color: str = "black", provisional_term: str | None = None,
+    overall_color: str = "black",
 ):
     """One campus chart: a line per student type plus a bold Overall line."""
     opts = RATE_OPTIONS[persistence_type]
@@ -379,17 +367,6 @@ def _build_campus_fig(
         yaxis_title="Persistence Rate",
         legend_title_text="Student Type",
     )
-
-    if provisional_term is not None:
-        prov = dfo[dfo["term_short"] == provisional_term]
-        if not prov.empty and pd.notna(prov.iloc[0][rate_col]):
-            # Sits below the marker; the Overall value label is above it.
-            fig.add_annotation(
-                x=provisional_term, y=prov.iloc[0][rate_col],
-                yanchor="top", yshift=-14,
-                text="provisional", showarrow=False,
-                font={"size": 10, "color": "grey"},
-            )
 
     proj_term: tuple[str, int] | None = None
     if projection is not None and not projection.empty and not dfo.empty:
@@ -536,7 +513,7 @@ def _mpl_line_chart(
     ax, df_types: pd.DataFrame, df_overall: pd.DataFrame, rate_col: str,
     campus: str, title: str, persistence_type: str,
     proj_rate: float | None = None, proj_label: str | None = None,
-    proj_sort: int | None = None, provisional_term: str | None = None,
+    proj_sort: int | None = None,
 ):
     """Draw the multi-line persistence chart for one campus on an Axes."""
     terms = _term_order(df_overall)
@@ -565,14 +542,6 @@ def _mpl_line_chart(
             ax.annotate(f"{r:.0%}", (i, r), textcoords="offset points",
                         xytext=(0, 10), ha="center", fontsize=8,
                         fontweight="bold")
-
-    if provisional_term is not None and provisional_term in terms:
-        idx = terms.index(provisional_term)
-        if pd.notna(rates[idx]):
-            ax.annotate(
-                "provisional", (idx, rates[idx]), textcoords="offset points",
-                xytext=(0, -16), ha="center", fontsize=7, color="grey",
-            )
 
     proj_term: tuple[str, int] | None = None
     if proj_rate is not None and proj_label is not None and terms:
@@ -611,7 +580,6 @@ def _generate_pdf(
     persistence_type: str,
     proj_overall: pd.DataFrame | None = None,
     proj_method: str | None = None,
-    provisional_term: str | None = None,
 ) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
@@ -656,15 +624,7 @@ def _generate_pdf(
             _mpl_line_chart(ax, df_types, dfc_overall, rate_col, campus, "",
                             persistence_type,
                             proj_rate=p_rate, proj_label=p_label,
-                            proj_sort=p_sort, provisional_term=provisional_term)
-            if provisional_term is not None:
-                fig.text(
-                    0.10, 0.06,
-                    f"{provisional_term} is provisional — "
-                    f"{RATE_OPTIONS[persistence_type]['follow_up']} is still "
-                    "enrolling, so its rate will rise.",
-                    fontsize=8, color="grey",
-                )
+                            proj_sort=p_sort)
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
@@ -813,7 +773,6 @@ def render():
             st.session_state["pbs_df_overall"],
             RATE_OPTIONS[ptype_val]["headcount_col"],
         )
-        pdf_provisional = _provisional_term(pdf_overall)
 
         # Compute projections for PDF (uses current sidebar selections)
         pdf_proj_overall = None
@@ -837,7 +796,6 @@ def render():
                 ptype_val,
                 proj_overall=pdf_proj_overall,
                 proj_method=proj_method if show_projection else None,
-                provisional_term=pdf_provisional,
             ),
         )
         st.sidebar.download_button(
@@ -888,7 +846,6 @@ def render():
             f"{opts['follow_up']} yet."
         )
         return
-    provisional_term = _provisional_term(df_overall)
 
     denominator_note = (
         "that fall's headcount **minus students who completed a degree that "
@@ -908,12 +865,6 @@ def render():
         "enrollment — are excluded, since they are not expected to persist "
         "past one term."
     )
-    if provisional_term:
-        st.caption(
-            f":grey[**{provisional_term} is provisional** — "
-            f"{opts['follow_up']} is still enrolling, so that point is a "
-            "partial count and will rise.]"
-        )
 
     # --- Compute projections for charts ---
     proj_overall = None
@@ -931,7 +882,6 @@ def render():
             _build_campus_fig(
                 df_types, df_overall, campus, persistence_type,
                 projection=proj_overall, overall_color=overall_color,
-                provisional_term=provisional_term,
             ),
             width="stretch",
         )
