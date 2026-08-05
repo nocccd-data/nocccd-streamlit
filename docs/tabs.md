@@ -61,11 +61,21 @@ The KPI - Persistence tab shows one line chart per campus (Cypress, Fullerton, N
 
 The newest fall cohort has no follow-up registrations yet, so its rate computes to a flat 0%. `_drop_incomplete()` removes those campus/term points from **both** views (previously only `Fall → Next Fall` filtered them, so `Fall → Spring` plotted a 0% cliff — and the projection fitted a line through it, extrapolating a **0% forecast**). Completeness is judged per campus/term from the *summed* follow-up headcount, so a single student type that genuinely fell to zero still shows 0%.
 
-The newest *surviving* point may still be partial if its follow-up term is mid-enrollment. **This is not flagged.** A `provisional` caveat used to name that cohort in a caption, a grey chart annotation, and a PDF footnote, but it was driven by `_provisional_term()`, which simply labelled the newest surviving cohort unconditionally — with no test of whether that term had actually finished. It therefore fired on cohorts whose follow-up term was long over: viewed in August 2026, the Fall 2025 → Spring 2026 point was still marked provisional even though Spring 2026 ended in May.
+### Provisional points (`_attach_completeness`)
 
-Detecting completeness properly needs a term calendar the extract does not carry — `stvterm_start_date` / `stvterm_end_date` per track, since NOCE's spring (`'35'`) ends on a different calendar than the credit spring (`'20'`). Rather than infer it from a heuristic or borrow another tab's query, the note was removed (2026-08-05) pending a dedicated source. Re-adding it means adding follow-up-term dates to `mv_persistence_by_styp` and comparing against the render date; decide then whether "complete" means the term has started (matching what the caveat actually claimed — that the count is still rising) or has ended.
+A surviving point can still be partial if its follow-up term is mid-enrollment. `_attach_completeness()` decides that from Banner's term calendar rather than guessing: **complete iff `stvterm_end_date < today`**, so a term is provisional through its own end date inclusive. Flagged points get a grey `provisional` annotation below the marker, a caption, and a PDF footnote.
 
-`_drop_incomplete()` is unaffected and still runs — cohorts whose follow-up has *no* data are dropped outright.
+An earlier version was driven by `_provisional_term()`, which labelled the newest surviving cohort *unconditionally*, with no test of whether that term had finished. It fired on cohorts whose follow-up was long over — viewed in August 2026 the Fall 2025 → Spring 2026 point was marked provisional though Spring 2026 ended in May. It was removed (2026-08-05) and replaced by this check; see `docs/superpowers/specs/2026-08-05-persistence-term-completeness-design.md` for the full design.
+
+Three things worth knowing:
+
+- **The join is on `stvterm_code`, never `mis_term_id`.** One MIS term maps to *two* Banner terms — the credit term (suffix `0`) and the NOCE term (suffix `5`) — so joining on `mis_term_id` fans every row 2:1 and attaches the wrong track's calendar to half of them. `mv_persistence_by_styp` resolves the track in Oracle, where `camp_code` is known, and emits `spring_term_code` / `next_fall_term_code` per row. `RATE_OPTIONS[...]["term_code_col"]` picks the right one per mode. The `term_calendar` extract deliberately does **not** carry `mis_term_id`, so the unsafe join is not available.
+- **The flag is per campus.** NOCE's spring ends on a different date than the credit spring — for 2026, 5/21 vs 5/30 — so for nine days NOCE is settled while Cypress and Fullerton are not. A single global label cannot express that.
+- **A missing calendar row means provisional, never complete.** An unmatched code yields `NaT`, and every comparison with `NaT` is False, so it lands on the safe side. `has_calendar` exists so the gap is surfaced in a caption rather than passing as a silent caveat — this is not hypothetical, as Banner may define a credit term (`202710`) before its NOCE counterpart (`202715`). `stvterm` also carries a `999999` sentinel term dated 2999, outside pandas' nanosecond range, which is why the date parse uses `errors="coerce"`.
+
+The PDF cache key includes `today`; without it a PDF cached before a term ended would keep its stale footnote after the flag flipped.
+
+`_drop_incomplete()` is separate and still runs — cohorts whose follow-up has *no* data are dropped outright.
 
 ### Projections
 
@@ -74,7 +84,7 @@ Detecting completeness properly needs a term calendar the extract does not carry
 
 Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The next term label comes from `_term_label(max + 10)` (MIS IDs increment by 10 per year: 207→217→…→257→267).
 
-**PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
+**PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines and, when that campus has a provisional point, a footnote naming it. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
 
 **Excel export**: One `chart_data` sheet with two sections — overall rates + counts per campus/term, then the same broken out by student type. It carries both rate columns at once and is independent of the projection/persistence-type toggles (cache key is just `(id(df_overall),)`), so instead of dropping incomplete cohorts it keeps their real fall counts and blanks only the meaningless rate cells via `_blank_incomplete_rates()` — an empty cell, never a 0% that reads as "nobody persisted".
 

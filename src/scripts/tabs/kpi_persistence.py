@@ -11,7 +11,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.ticker import FuncFormatter
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_kpi_persistence
+from src.scripts.data_provider import fetch_kpi_persistence, fetch_term_calendar
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -58,6 +58,7 @@ RATE_OPTIONS = {
         "p_count_col": "curr_fall_p_count",
         "p_count_label": "Fall P-Count",
         "headcount_col": "spring_total_headcount",
+        "term_code_col": "spring_term_code",
         "follow_up": "the following spring",
     },
     "Fall → Next Fall": {
@@ -65,13 +66,18 @@ RATE_OPTIONS = {
         "p_count_col": "next_fall_p_denominator",
         "p_count_label": "Fall P-Count (less spring completers)",
         "headcount_col": "next_fall_total_headcount",
+        "term_code_col": "next_fall_term_code",
         "follow_up": "the next fall",
     },
 }
 
+# Term codes carried per row so the follow-up term's calendar can be looked up.
+# They are grouped, never aggregated — see `_build_overall`.
+_TERM_CODE_COLS = ("spring_term_code", "next_fall_term_code")
+
 # Columns `_prepare_data` / `_build_overall` cannot work without. An extract
-# built before the MV rebuild has no `next_fall_p_denominator`, which would
-# otherwise surface as a bare KeyError traceback.
+# built before an MV rebuild lacks `next_fall_p_denominator` or the follow-up
+# term codes, which would otherwise surface as a bare KeyError traceback.
 _REQUIRED_COLS = frozenset({
     "mis_term_id",
     "camp_code",
@@ -80,6 +86,7 @@ _REQUIRED_COLS = frozenset({
     "next_fall_p_denominator",
     "spring_total_headcount",
     "next_fall_total_headcount",
+    *_TERM_CODE_COLS,
 })
 
 
@@ -129,9 +136,18 @@ def _prepare_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute overall persistence per campus/term (weighted average)."""
+    """Compute overall persistence per campus/term (weighted average).
+
+    The follow-up term codes are grouping keys, not aggregates: they are
+    constant within a campus/term (one track per campus), so grouping by them
+    carries them through without adding rows — the same reason the MV repeats
+    these expressions in its own GROUP BY.
+    """
     agg = (
-        df.groupby(["campus", "term_short", "term_sort"], as_index=False)
+        df.groupby(
+            ["campus", "term_short", "term_sort", *_TERM_CODE_COLS],
+            as_index=False,
+        )
         .agg(
             curr_fall_p_count=("curr_fall_p_count", "sum"),
             next_fall_p_denominator=("next_fall_p_denominator", "sum"),
@@ -173,6 +189,69 @@ def _drop_incomplete(
         df_types.merge(keep, on=["campus", "term_sort"], how="inner"),
         df_overall.merge(keep, on=["campus", "term_sort"], how="inner"),
     )
+
+
+def _attach_completeness(
+    df: pd.DataFrame,
+    calendar: pd.DataFrame,
+    term_code_col: str,
+    today: pd.Timestamp,
+) -> pd.DataFrame:
+    """Flag rows whose follow-up term has not finished yet.
+
+    Adds ``is_provisional`` (the follow-up term is still running, so the count
+    is partial) and ``has_calendar`` (False when the term code has no
+    ``stvterm`` row).
+
+    A term is provisional through its own end date *inclusive* — complete iff
+    ``end_date < today``.
+
+    The join is on ``stvterm_code`` and never on ``mis_term_id``: one MIS term
+    maps to both a credit term (suffix ``0``) and a NOCE term (suffix ``5``),
+    so joining on it would fan every row 2:1 and attach the wrong track's
+    calendar to half of them. The MV resolves the track per campus and hands
+    us the resolved code.
+
+    A missing calendar row yields ``NaT``, and every comparison against ``NaT``
+    is False, so an unmatched term lands on *provisional* — the safe
+    direction, since claiming a term is final is the costlier error. That is
+    deliberate rather than incidental, and ``has_calendar`` exists so a gap can
+    be surfaced instead of passing as a silent caveat. This is not theoretical:
+    Banner may define a credit term before its NOCE counterpart.
+    """
+    cal = calendar[["stvterm_code", "stvterm_end_date"]].copy()
+    cal["stvterm_code"] = cal["stvterm_code"].astype(str).str.strip()
+    if not cal["stvterm_code"].is_unique:
+        dupes = cal.loc[cal["stvterm_code"].duplicated(), "stvterm_code"].unique()
+        raise ValueError(
+            f"term_calendar has duplicate stvterm_code values: {', '.join(dupes)}. "
+            "It must be one row per term to be a safe lookup."
+        )
+    # `errors="coerce"` is load-bearing: stvterm carries a `999999` sentinel
+    # term ending 2999-05-15, which is outside pandas' nanosecond datetime64
+    # range and would otherwise raise OutOfBoundsDatetime for the whole lookup.
+    # Coercing it to NaT is also semantically right — an end date we cannot
+    # represent is certainly not in the past, so it lands on provisional.
+    end_by_code = pd.to_datetime(
+        cal.set_index("stvterm_code")["stvterm_end_date"], errors="coerce"
+    )
+
+    out = df.copy()
+    end = out[term_code_col].astype(str).str.strip().map(end_by_code)
+    out["has_calendar"] = end.notna()
+    out["is_provisional"] = ~(end < today)
+    return out
+
+
+def _provisional_by_campus(df_overall: pd.DataFrame) -> dict[str, list[str]]:
+    """``{campus: [term_short, ...]}`` for points still mid-flight."""
+    if "is_provisional" not in df_overall.columns:
+        return {}
+    prov = df_overall[df_overall["is_provisional"]]
+    return {
+        str(campus): grp.sort_values("term_sort")["term_short"].tolist()
+        for campus, grp in prov.groupby("campus")
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +447,19 @@ def _build_campus_fig(
         legend_title_text="Student Type",
     )
 
+    # Provisional markers come off this campus's own rows, so NOCE can be
+    # flagged while the credit colleges are not (their springs end on
+    # different calendars). Sits below the marker; the value label is above.
+    if "is_provisional" in dfo.columns:
+        for row in dfo[dfo["is_provisional"]].itertuples():
+            if pd.notna(getattr(row, rate_col)):
+                fig.add_annotation(
+                    x=row.term_short, y=getattr(row, rate_col),
+                    yanchor="top", yshift=-14,
+                    text="provisional", showarrow=False,
+                    font={"size": 10, "color": "grey"},
+                )
+
     proj_term: tuple[str, int] | None = None
     if projection is not None and not projection.empty and not dfo.empty:
         proj_row = projection[projection["campus"] == campus]
@@ -543,6 +635,16 @@ def _mpl_line_chart(
                         xytext=(0, 10), ha="center", fontsize=8,
                         fontweight="bold")
 
+    # `dfo` is already reindexed onto `terms`, so the flag lines up positionally
+    # with `rates`. Per campus, matching the Plotly chart.
+    if "is_provisional" in dfo.columns:
+        for i, (prov, r) in enumerate(zip(dfo["is_provisional"], rates)):
+            if prov is True and pd.notna(r):
+                ax.annotate(
+                    "provisional", (i, r), textcoords="offset points",
+                    xytext=(0, -16), ha="center", fontsize=7, color="grey",
+                )
+
     proj_term: tuple[str, int] | None = None
     if proj_rate is not None and proj_label is not None and terms:
         ax.plot(
@@ -625,6 +727,18 @@ def _generate_pdf(
                             persistence_type,
                             proj_rate=p_rate, proj_label=p_label,
                             proj_sort=p_sort)
+            # Footnote names this campus's own provisional cohorts — a PDF page
+            # is per campus, and the tracks can differ.
+            prov_terms = _provisional_by_campus(dfc_overall).get(campus, [])
+            if prov_terms:
+                fig.text(
+                    0.10, 0.06,
+                    f"{', '.join(prov_terms)} "
+                    f"{'is' if len(prov_terms) == 1 else 'are'} provisional — "
+                    f"{RATE_OPTIONS[persistence_type]['follow_up']} has not "
+                    "ended, so the rate will rise.",
+                    fontsize=8, color="grey",
+                )
             _add_pdf_footer(fig)
             pdf.savefig(fig)
             plt.close(fig)
@@ -767,11 +881,16 @@ def render():
     # --- PDF download in sidebar (after query block) ---
     if "pbs_df_overall" in st.session_state:
         ptype_val = st.session_state.get("pbs_ptype", "Fall → Spring")
+        today = pd.Timestamp.today().normalize()
 
         pdf_types, pdf_overall = _drop_incomplete(
             st.session_state["pbs_df_types"],
             st.session_state["pbs_df_overall"],
             RATE_OPTIONS[ptype_val]["headcount_col"],
+        )
+        pdf_overall = _attach_completeness(
+            pdf_overall, fetch_term_calendar(),
+            RATE_OPTIONS[ptype_val]["term_code_col"], today,
         )
 
         # Compute projections for PDF (uses current sidebar selections)
@@ -789,6 +908,9 @@ def render():
                 ptype_val,
                 show_projection,
                 proj_method,
+                # Without the date, a PDF cached before a term ended would keep
+                # its stale "provisional" footnote after the flag flipped.
+                today,
             ),
             lambda: _generate_pdf(
                 pdf_types,
@@ -847,6 +969,10 @@ def render():
         )
         return
 
+    df_overall = _attach_completeness(
+        df_overall, fetch_term_calendar(), opts["term_code_col"], today,
+    )
+
     denominator_note = (
         "that fall's headcount **minus students who completed a degree that "
         "fall**"
@@ -865,6 +991,31 @@ def render():
         "enrollment — are excluded, since they are not expected to persist "
         "past one term."
     )
+
+    # Provisional points, named per campus — the two tracks end on different
+    # calendars, so NOCE can be settled while the credit colleges are not.
+    prov = _provisional_by_campus(df_overall)
+    if prov:
+        st.caption(
+            ":grey["
+            + "; ".join(
+                f"**{campus}: {', '.join(terms)}** provisional"
+                for campus, terms in sorted(prov.items())
+            )
+            + f" — {opts['follow_up']} has not ended, so those points are "
+            "partial counts and will rise.]"
+        )
+
+    # A term code with no stvterm row cannot be tested, so it stays flagged
+    # provisional. Surfaced rather than left silent: Banner may define a credit
+    # term before its NOCE counterpart, and a quiet gap looks like a real caveat.
+    gaps = df_overall.loc[~df_overall["has_calendar"], opts["term_code_col"]]
+    if not gaps.empty:
+        st.caption(
+            f":grey[Term {', '.join(sorted(set(gaps.astype(str))))} is not in "
+            "the term calendar yet, so cohorts pointing at it stay marked "
+            "provisional.]"
+        )
 
     # --- Compute projections for charts ---
     proj_overall = None
