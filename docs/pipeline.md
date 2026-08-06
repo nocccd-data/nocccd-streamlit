@@ -25,11 +25,20 @@ Exit codes: `0` all datasets succeeded · `1` some failed or were skipped · `2`
 
 ## SQL parameterization
 
-Two patterns are supported by `extract.py`:
+Three patterns are supported by `extract.py`:
+- **Unparameterized** (small dimensions pulled whole): no binds at all. The config entry omits `param_name` and sets **`"unparameterized": True`**. `term_calendar` is the only one today.
 - **Multi-acyr**: SQL uses `IN (:t1...)`. The placeholder list is expanded to match the number of values via case-insensitive regex substitution (`re.IGNORECASE`). SQL files may use uppercase `IN` or lowercase `in` — both work, and the count is rebuilt from the config value list, so the SQL can hardcode any starter count (e.g. `IN (:t1,:t2)`). `enrollment_dashboard` uses this to limit its enrichment query to the two terms being compared.
 - **Single-acyr**: SQL uses a single named bind like `:mis_acyr_id`. The runner detects this (no `IN` expansion match) and loops over each value, concatenating results.
 
 `extract.py` dispatches on the `IN (:t1` pattern (multi vs single). A SQL file's parameterization style plus its config entry are the single source of truth — no per-caller flag.
+
+### Unparameterized datasets
+
+**Pulling a whole table is an explicit opt-in, never inferred from a missing `param_name`.** A config entry with neither `param_name` nor `"unparameterized": True` raises immediately. This matters because the natural way to add a dataset is to copy an existing entry, and dropping the `param_name` line while editing is easy — if absence implied "pull everything", that typo would ship every row of every term to the app with no error, exactly the unfiltered-data case this repo forbids. Setting both keys is also an error.
+
+For an unparameterized dataset, `extract.py` scans the SQL for a stray `:bind` placeholder and raises if it finds one — catching a file that *should* have been parameterized but whose config lost its `param_name`. This is the mirror of the no-op assertion on `IN (:t1)` expansion. The scan strips `--` comments, `/* */` blocks, and `'single-quoted literals'` first, so prose like `1:many` in a SQL header and Oracle format masks like `'HH24:MI:SS'` are not mistaken for binds. `tests/test_extract.py` pins all four cases plus the config invariant.
+
+Consumer side: `_download_and_read(dataset_name)` with no `filter_col` returns the extract whole. `filter_col` and `values` must be passed together or both omitted — supplying one without the other raises, so a fetcher that loses its column name in a refactor fails instead of silently shipping the full extract to a tab.
 
 **Bind variable arithmetic gotcha**: Avoid `:acyr_code + 1` when the target column is VARCHAR2. The Python-bound `:acyr_code` is VARCHAR2; `+ 1` forces an implicit conversion to NUMBER, and Oracle then applies another implicit conversion to the compared column — **disabling index use and causing full table scans**. Use `TO_CHAR(TO_NUMBER(:acyr_code) + 1)` to keep both sides VARCHAR2 explicitly. See `bot_goal2_wage_denom.sql` for a working example.
 

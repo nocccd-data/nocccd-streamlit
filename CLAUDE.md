@@ -20,6 +20,7 @@ Shared engineering guidance lives in `docs/` and is loaded on demand only when r
 | `src/pipeline/seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`: bulk PDF/Excel exports | `docs/exports.md` |
 | `src/pipeline/mail/`: mass mailing, `REPORT_REGISTRY`, `CAMPAIGNS`, sender, GitHub Actions | `docs/mail.md` |
 | `src/scripts/theme.py`, CSS, color palettes, Streamlit 1.55 gotchas, NOCCCD brand colors | `docs/theme.md` |
+| Known issues deliberately left unfixed, and the decision each one is waiting on | `docs/deferred.md` |
 
 ## Quick Defaults
 
