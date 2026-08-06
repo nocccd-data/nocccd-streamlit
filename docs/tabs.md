@@ -79,19 +79,20 @@ The PDF cache key includes `today`; without it a PDF cached before a term ended 
 
 ### Projections
 
-- **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per campus. Minimum 2 data points.
-- **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
+- **Linear Regression**: `np.polyfit(x, y, 1)` over **real years** — x comes from `term_sort`, not row position — extrapolated to the projected term. Reports R² (goodness of fit) per campus. Minimum 2 *distinct* terms.
+- **Weighted Moving Average**: last 3 completed points weighted [1×, 2×, 3×]. Minimum 3 data points. It never references an x axis, so term spacing cannot affect it.
 
 **Provisional cohorts are excluded from the fit.** A provisional rate is a partial count — its follow-up term is still enrolling — so including it projects a decline that reflects the calendar rather than the students. Measured on the 2020–2025 history, including the single provisional point moved Fullerton's Fall → Next Fall forecast from 53.9% to 47.1% and collapsed its R² from **0.89 to 0.20**, turning a real trend into noise.
 
-Two mechanics make this work, and both are easy to get wrong:
+Three mechanics make this work, and all are easy to get wrong:
 
-- **Provisional rates are masked to `NaN`, not dropped.** `_project_rate` already skips `NaN` while keeping each point's original x position, and it extrapolates at `len(rates)` — one step past the last *plotted* term. Dropping the rows would shorten the series and aim the forecast at the provisional cohort's own slot, drawing the projection on top of a point already on the chart.
+- **The x axis is the term, not the row.** `_project_rate` takes `terms` alongside `rates`, fits on `(term_sort - base) / 10` — academic years — and extrapolates at the projected term's own offset. The sidebar multiselect permits any subset, so gaps are the user's to choose and the fit has to honour them. Fitting on `enumerate` position made the slope per *selection step* instead. Measured on the even-year selection (NOCE Fall → Spring fits Fall 2020/2022/2024 at 79.11/65.80/64.66 — the live rates, quoted to enough precision to reproduce — a -3.6 pp/yr trend, so Fall 2025 is 59.0%): the chart read **55.4% under a "Fall 2025" label** — that same line's **Fall 2026** value, one 2-year step out. Worst measured case: *selecting* Fall 2020/2023/2026 — where Fall 2026 then drops out as incomplete, leaving a single 3-year step between the two survivors — moved NOCE **11.0 pp**. Contiguous selections, including the default, are bit-identical either way, which is how this survived as `docs/deferred.md` cluster 3.
+- **Provisional rates are masked to `NaN`, not dropped**, so the rate list stays aligned with the term list row for row; `_project_rate` skips them. Which points are excluded can no longer move the line or the horizon — before the term-derived x axis, both were positional (`enumerate` and `len(rates)`) and the masking was load-bearing for that reason.
 - **The dashed segment anchors on the last *completed* point** (`_last_completed`), in both the Plotly and matplotlib charts. Starting it at a provisional marker would imply the forecast was projected out of it. The segment spans the provisional point instead.
 
 **R² is suppressed below 3 completed terms** and renders as `n/a (<3 terms)` via `_fmt_r_squared`. A straight line fits two points perfectly, so R² at n=2 is 1.0 by construction — it looks like strong evidence while carrying none. At n=5 it discriminates properly: Fullerton 0.89 (real trend) against NOCE 0.02 (none, correctly refusing to fit a line through COVID-era volatility).
 
-Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The next term label comes from `_term_label(max + 10)` (MIS IDs increment by 10 per year: 207→217→…→257→267).
+Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The projected term comes from `_compute_next_term` (`max + 10`; MIS IDs increment by 10 per year: 207→217→…→257→267) and is passed to `_project_rate` as the extrapolation target, so the label on the chart and the point the arithmetic actually estimates cannot drift apart.
 
 **PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines and, when that campus has a provisional point, a footnote naming it. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.
 
