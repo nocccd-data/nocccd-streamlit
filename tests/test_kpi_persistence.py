@@ -220,16 +220,18 @@ def test_projection_ignores_the_provisional_point():
     # Fit on the flat completed history projects near it, not below it.
     assert out.iloc[0]["rate"] > 0.52
     # And the same series WITH the partial point included drags it down.
-    dragged, _ = _project_rate([0.51, 0.51, 0.53, 0.53, 0.52, 0.45],
-                               "Linear Regression")
+    dragged, _ = _project_rate(
+        [207, 217, 227, 237, 247, 257],
+        [0.51, 0.51, 0.53, 0.53, 0.52, 0.45],
+        "Linear Regression", 267,
+    )
     assert dragged is not None and dragged < out.iloc[0]["rate"]
 
 
 def test_projected_term_is_past_the_last_plotted_term():
-    """Masking, not dropping — the horizon must not shift back a year.
+    """The forecast lands one year past the last selected term.
 
-    Dropping the provisional row would shorten the series and aim the
-    forecast at that cohort's own slot, drawing it on a point already there.
+    Not on the provisional cohort's own slot, where a point already sits.
     """
     df = _series([0.51, 0.51, 0.53, 0.53, 0.52, 0.45], [False] * 5 + [True])
     out = _compute_projections(df, "rate", ["campus"], "Linear Regression")
@@ -247,10 +249,12 @@ def test_weighted_moving_average_uses_the_last_3_completed():
 
 def test_r_squared_is_suppressed_below_three_completed_terms():
     """A line fits 2 points perfectly, so R2=1.0 there is an artifact."""
-    two, r2_two = _project_rate([0.50, 0.52], "Linear Regression")
+    two, r2_two = _project_rate(
+        [207, 217], [0.50, 0.52], "Linear Regression", 227)
     assert two is not None
     assert r2_two is None
-    three, r2_three = _project_rate([0.50, 0.52, 0.54], "Linear Regression")
+    three, r2_three = _project_rate(
+        [207, 217, 227], [0.50, 0.52, 0.54], "Linear Regression", 237)
     assert three is not None and r2_three is not None
 
 
@@ -283,6 +287,108 @@ def test_no_projection_when_completeness_is_unknown():
         no_flag, "rate", ["campus"], "Linear Regression").empty
     assert _compute_projections(
         no_flag, "rate", ["campus"], "Weighted Moving Average").empty
+
+
+# ---------------------------------------------------------------------------
+# A gapped term selection is fit on real years (docs/deferred.md cluster 3)
+# ---------------------------------------------------------------------------
+
+def _series_at(terms, rates, provisional_flags):
+    """`_series`, but with the caller choosing which terms are selected."""
+    return pd.DataFrame({
+        "campus": ["NOCE"] * len(rates),
+        "term_short": [f"Fall {2020 + (t - 207) // 10}" for t in terms],
+        "term_sort": terms,
+        "rate": rates,
+        "is_provisional": provisional_flags,
+    })
+
+
+def test_gapped_selection_is_fit_on_years_not_positions():
+    """Deselecting terms must not compress the x axis.
+
+    NOCE's real Fall → Spring rates for the even-year selection, as they
+    reach `_compute_projections` (Fall 2026 is dropped upstream by
+    `_drop_incomplete` — no spring registrations yet). The trend through
+    79.1/65.8/64.7 is -3.6 pp/yr, so Fall 2025 is 59.1%. On list position
+    (x = 0,1,2) the slope doubles to -7.2 pp per step and the extrapolation
+    at len(rates) = 3 lands on 55.5% — that same line's *Fall 2026* value,
+    shown under a "Fall 2025" label.
+    """
+    df = _series_at([207, 227, 247], [0.791, 0.658, 0.647], [False] * 3)
+    out = _compute_projections(df, "rate", ["campus"], "Linear Regression")
+    assert out.iloc[0]["term_sort"] == 257
+    assert out.iloc[0]["term_short"] == "Fall 2025"
+    assert out.iloc[0]["rate"] == pytest.approx(0.5906667, abs=1e-6)
+    # The positional answer, held out so a regression cannot pass silently.
+    assert out.iloc[0]["rate"] != pytest.approx(0.5546667, abs=1e-4)
+
+
+def test_masked_provisional_tail_does_not_extend_the_reach():
+    """Gaps and masking together — the two mechanics must not compound.
+
+    A masked provisional row still occupies a slot in `rates`, so the old
+    `len(rates)` horizon counted it: the same NOCE fit projected 48.3% (its
+    Fall 2028 value) under the Fall 2027 label. The target term is now passed
+    in, so the masked slot cannot push the forecast further out.
+    """
+    df = _series_at(
+        [207, 227, 247, 267],
+        [0.791, 0.658, 0.647, float("nan")],
+        [False, False, False, True],
+    )
+    out = _compute_projections(df, "rate", ["campus"], "Linear Regression")
+    assert out.iloc[0]["term_sort"] == 277        # one year past Fall 2026
+    assert out.iloc[0]["rate"] == pytest.approx(0.5186667, abs=1e-6)
+    assert out.iloc[0]["rate"] != pytest.approx(0.4826667, abs=1e-4)
+
+
+def test_contiguous_selection_projects_one_year_out():
+    """The default view — every term selected — is unaffected by the fix.
+
+    With no gaps, position and year are the same axis up to a scale factor,
+    so this is the case that must not move.
+    """
+    df = _series_at([207, 217, 227, 237],
+                    [0.50, 0.52, 0.54, 0.56], [False] * 4)
+    out = _compute_projections(df, "rate", ["campus"], "Linear Regression")
+    assert out.iloc[0]["term_sort"] == 247
+    assert out.iloc[0]["rate"] == pytest.approx(0.58)      # +2 pp/yr
+    assert out.iloc[0]["_r_squared"] == pytest.approx(1.0)
+
+
+def test_weighted_moving_average_does_not_depend_on_spacing():
+    """WMA averages the last 3 completed cohorts whatever years those are.
+
+    It never references an x axis, so cluster 3 never reached it — pinned so
+    that stays true.
+    """
+    gapped = _project_rate([207, 237, 267], [0.40, 0.50, 0.60],
+                           "Weighted Moving Average", 277)
+    tight = _project_rate([207, 217, 227], [0.40, 0.50, 0.60],
+                          "Weighted Moving Average", 237)
+    assert gapped[0] == pytest.approx((0.40 + 0.50 * 2 + 0.60 * 3) / 6)
+    assert gapped == tight
+
+
+def test_projection_is_independent_of_row_order():
+    """"The last 3" is decided by term, not by arrival order."""
+    ordered = _project_rate([207, 217, 227], [0.40, 0.50, 0.60],
+                            "Weighted Moving Average", 237)
+    shuffled = _project_rate([227, 207, 217], [0.60, 0.40, 0.50],
+                             "Weighted Moving Average", 237)
+    assert ordered == shuffled
+
+
+def test_projection_needs_two_distinct_terms():
+    """One term repeated is not a trend — polyfit would return garbage."""
+    assert _project_rate([207, 207], [0.50, 0.60],
+                         "Linear Regression", 217) == (None, None)
+
+
+def test_project_rate_rejects_misaligned_inputs():
+    with pytest.raises(ValueError, match="must align"):
+        _project_rate([207, 217], [0.50], "Linear Regression", 227)
 
 
 def test_held_out_points_say_why_they_were_held_out():

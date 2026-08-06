@@ -379,18 +379,47 @@ def _compute_next_term(df: pd.DataFrame) -> tuple[str, int]:
 
 
 def _project_rate(
-    rates: list[float], method: str,
+    terms: list[int], rates: list[float], method: str, target_term: int,
 ) -> tuple[float | None, float | None]:
-    """Project one step ahead. Returns (projected_rate, r_squared|None)."""
-    valid = [(i, r) for i, r in enumerate(rates) if pd.notna(r)]
+    """Project ``target_term``'s rate. Returns (projected_rate, r_squared|None).
+
+    ``terms`` are ``term_sort`` values — MIS term ids, +10 per academic year —
+    and they, not list position, carry the x axis. The distinction only shows
+    up when the sidebar selection has gaps, which it may: the multiselect
+    permits any subset.
+
+    Fitting on position makes the slope per *selection step* instead of per
+    year, and extrapolating at ``len(rates)`` aims one selection step past the
+    last point while the label from `_compute_next_term` says one year.
+    Measured on the even-year selection (NOCE Fall → Spring, fitting Fall
+    2020/2022/2024 at 79.1/65.8/64.7): the trend is -3.6 pp/yr, so Fall 2025
+    is 59.0% — but the chart read **55.4% under a "Fall 2025" label**, which
+    is that same line's *Fall 2026* value, one 2-year step out. Dividing by 10
+    is cosmetic to the fit (any affine x gives the same prediction) but keeps
+    the slope readable as points per year.
+    """
+    if len(terms) != len(rates):
+        raise ValueError(
+            f"terms and rates must align: {len(terms)} vs {len(rates)}")
+
+    # Sorted here rather than relying on the caller so "the last 3" below
+    # means the 3 most recent terms no matter how the frame arrived.
+    valid = sorted(
+        ((t, r) for t, r in zip(terms, rates) if pd.notna(r)),
+        key=lambda pair: pair[0],
+    )
 
     if method == "Linear Regression":
-        if len(valid) < 2:
+        if len({t for t, _ in valid}) < 2:
+            # Fewer than 2 *distinct* terms: no line to fit. Counting rows
+            # instead would let a degenerate x through to polyfit, which
+            # returns garbage rather than raising.
             return None, None
-        x = np.array([v[0] for v in valid], dtype=float)
-        y = np.array([v[1] for v in valid])
+        base = valid[0][0]
+        x = np.array([(t - base) / 10 for t, _ in valid], dtype=float)
+        y = np.array([r for _, r in valid])
         coeffs = np.polyfit(x, y, 1)
-        projected = float(np.polyval(coeffs, len(rates)))
+        projected = float(np.polyval(coeffs, (target_term - base) / 10))
         # R² through two points is 1.0 by construction — a line always fits
         # two points perfectly, so the number would say nothing about the
         # trend while looking like strong evidence. Report it only where it
@@ -403,10 +432,12 @@ def _project_rate(
             r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
         return float(np.clip(projected, 0, 1)), r_sq
 
-    # Weighted Moving Average
+    # Weighted Moving Average. Term spacing does not enter here — the method
+    # is defined as the last 3 completed cohorts, whatever years those are —
+    # so a gapped selection changes which points are averaged but never how.
     if len(valid) < 3:
         return None, None
-    last3 = [v[1] for v in valid[-3:]]
+    last3 = [r for _, r in valid[-3:]]
     projected = float(np.average(last3, weights=[1, 2, 3]))
     return float(np.clip(projected, 0, 1)), None
 
@@ -431,12 +462,12 @@ def _compute_projections(
     from 53.9% to 47.1% and collapsed its R² from 0.89 to 0.20, turning a
     genuine trend into noise.
 
-    Provisional rates are **masked to NaN rather than dropped**, which matters
-    twice: `_project_rate` skips NaN but keeps each point's original x
-    position, so the fitted line is not shifted, and it projects at
-    ``len(rates)`` — one step past the last *plotted* term. Dropping the rows
-    would shorten the series and aim the forecast at the provisional term's
-    own slot, drawing it on top of a point that is already there.
+    Provisional rates are masked to NaN rather than dropped so the rate list
+    stays aligned with the term list row for row; `_project_rate` skips them.
+    Which points are excluded can no longer move the line or the horizon —
+    the x axis comes from ``term_sort`` and the target term is passed in
+    explicitly. Both used to be positional (x from ``enumerate``, target from
+    ``len(rates)``), and masking was load-bearing for that reason.
 
     **No ``is_provisional`` column means no projection at all.** That column is
     absent only when the term calendar could not be loaded, i.e. when we cannot
@@ -455,7 +486,12 @@ def _compute_projections(
     for keys, grp in df.groupby(group_cols, observed=True):
         grp_sorted = grp.sort_values("term_sort")
         rate_series = grp_sorted[rate_col].where(~grp_sorted["is_provisional"])
-        proj_val, r_sq = _project_rate(rate_series.tolist(), method)
+        proj_val, r_sq = _project_rate(
+            grp_sorted["term_sort"].astype(int).tolist(),
+            rate_series.tolist(),
+            method,
+            next_sort,
+        )
         if proj_val is None:
             continue
         if not isinstance(keys, tuple):
