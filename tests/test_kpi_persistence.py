@@ -317,3 +317,26 @@ def test_last_completed_treats_unknown_rows_as_not_completed():
         ["Fall 2020", "Fall 2021", "Fall 2022", "Fall 2099"]
     )
     assert _last_completed(reindexed).name == "Fall 2021"
+
+
+def test_methodology_page_text_always_clears_the_footer():
+    """A copy edit must not silently push content off the PDF page.
+
+    The body advance is derived from the line count, so the block lands at
+    `_METHOD_TEXT_FLOOR` however long the text grows. With the old fixed 0.03
+    advance, adding four lines to the Linear Regression text put the R2 table
+    at y=0.000 — under the footer and off the page, with no error.
+    """
+    from src.scripts.tabs.kpi_persistence import _METHOD_TEXT_FLOOR
+
+    # Worst case below the body: caveat, then the R2 heading, header row and
+    # one row per campus. Mirrors the offsets in `_generate_pdf`.
+    below = 0.02 + 0.05 + 0.035 + 0.025 + 0.025 * 3
+    assert _METHOD_TEXT_FLOOR - below > 0.02, "R2 table would reach the footer"
+
+    for n_lines in (10, 23, 40, 80):
+        weighted = float(n_lines)
+        step = min(0.03, (0.85 - _METHOD_TEXT_FLOOR) / weighted)
+        assert 0.85 - step * n_lines >= _METHOD_TEXT_FLOOR - 1e-9, (
+            f"{n_lines} lines overflow the floor"
+        )

@@ -748,6 +748,11 @@ def _generate_excel(
 # PDF export (matplotlib)
 # ---------------------------------------------------------------------------
 
+# Lowest y the methodology page's body text may reach. Below this sit the
+# caveat block (~0.02) and, for Linear Regression, the R² table (~0.185 with
+# three campuses) — which must still clear the footer at 0.02.
+_METHOD_TEXT_FLOOR = 0.30
+
 _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
 _PDF_FOOTER_RIGHT = "Author: Jihoon Ahn  jahn@nocccd.edu"
 
@@ -936,10 +941,14 @@ def _generate_pdf(
                     "regression. The projected value is the extrapolated",
                     "point for the next fall term.",
                     "",
-                    "Cohorts marked provisional are EXCLUDED from the fit.",
-                    "Their follow-up term is still enrolling, so the rate is",
-                    "a partial count; including one projects a decline that",
-                    "reflects the calendar rather than the students.",
+                    "Cohorts marked provisional or unverified are EXCLUDED",
+                    "from the fit. A provisional cohort's follow-up term is",
+                    "still enrolling, so its rate is a partial count and",
+                    "including one projects a decline that reflects the",
+                    "calendar rather than the students. An unverified",
+                    "cohort's follow-up term is missing from the term",
+                    "calendar, so it could not be checked at all and may",
+                    "already be final.",
                     "",
                     "R² (goodness of fit) indicates how well the linear",
                     "model fits the historical data. Values closer to 1.0",
@@ -959,19 +968,32 @@ def _generate_pdf(
                     "window. This method responds quickly to recent changes",
                     "without assuming a long-term trend.",
                     "",
-                    "Cohorts marked provisional are excluded — their",
-                    "follow-up term is still enrolling, so the rate is a",
-                    "partial count that will rise.",
+                    "Cohorts marked provisional or unverified are excluded.",
+                    "A provisional cohort's follow-up term is still",
+                    "enrolling, so its rate is a partial count that will",
+                    "rise. An unverified cohort's follow-up term is missing",
+                    "from the term calendar, so it could not be checked at",
+                    "all and may already be final.",
                 ]
 
+            # The advance is derived from the line count rather than fixed, so
+            # the block always lands at `_METHOD_TEXT_FLOOR` and leaves room
+            # for the caveat and the R² table below it. With a fixed 0.03 a
+            # copy edit silently pushed content off the page bottom — adding
+            # four lines to the Linear Regression text put the R² table at
+            # y=0.000, under the footer. Capped at 0.03 so short text keeps
+            # its original spacing rather than stretching to fill.
+            span = 0.85 - _METHOD_TEXT_FLOOR
+            weighted = sum(0.5 if line == "" else 1.0 for line in lines)
+            step = min(0.03, span / weighted) if weighted else 0.03
             for line in lines:
                 if line == "":
-                    y -= 0.015
+                    y -= step / 2
                     continue
                 weight = "bold" if line.startswith("Method:") else "normal"
                 fig.text(0.10, y, line, fontsize=11, fontweight=weight,
                          va="top")
-                y -= 0.03
+                y -= step
 
             y -= 0.02
             fig.text(0.10, y,
@@ -1252,10 +1274,14 @@ def render():
                     "**completed** historical points using least-squares "
                     "regression. The projected value is the extrapolated point "
                     "for the next fall term.\n\n"
-                    "**Provisional cohorts are excluded from the fit.** Their "
-                    "follow-up term is still enrolling, so the rate is a "
-                    "partial count — including one projects a decline that "
-                    "reflects the calendar rather than the students.\n\n"
+                    "**Provisional and unverified cohorts are excluded from "
+                    "the fit.** A *provisional* cohort's follow-up term is "
+                    "still enrolling, so its rate is a partial count — "
+                    "including one projects a decline that reflects the "
+                    "calendar rather than the students. An *unverified* "
+                    "cohort's follow-up term is missing from the term "
+                    "calendar, so it could not be checked at all and may "
+                    "already be final.\n\n"
                     "**R²** indicates how well the linear model fits the "
                     "historical data. Values closer to 1.0 mean a stronger "
                     "linear trend; values near 0 suggest no clear trend and "
@@ -1271,9 +1297,12 @@ def render():
                     "giving the most recent year triple the influence of the "
                     "oldest year in the window. This method responds quickly "
                     "to recent changes without assuming a long-term trend.\n\n"
-                    "**Provisional cohorts are excluded** — their follow-up "
-                    "term is still enrolling, so the rate is a partial count "
-                    "that will rise."
+                    "**Provisional and unverified cohorts are excluded.** A "
+                    "*provisional* cohort's follow-up term is still enrolling, "
+                    "so its rate is a partial count that will rise. An "
+                    "*unverified* cohort's follow-up term is missing from the "
+                    "term calendar, so it could not be checked at all and may "
+                    "already be final."
                 )
 
             st.caption(
