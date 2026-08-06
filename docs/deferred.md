@@ -29,6 +29,8 @@ the gap — never renumber.
 | # | Cluster | Type | Sev | Effort | State |
 |---|---|---|---|---|---|
 | 3 | [A non-contiguous term selection compresses gaps in the projection](#3-a-non-contiguous-term-selection-compresses-gaps-in-the-projection) | Bug | Med | S | ready |
+| 4 | [One flag label is applied to all of a campus's held-out terms](#4-one-flag-label-is-applied-to-all-of-a-campuss-held-out-terms) | Bug | Low | XS | ready |
+| 5 | [The PDF methodology page renders when no page carries a projection](#5-the-pdf-methodology-page-renders-when-no-page-carries-a-projection) | Bug | Low | XS | ready |
 | 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
 
 ---
@@ -65,6 +67,57 @@ real-year spacing — and extrapolate at the projected term's own offset instead
 which is a different problem, and does not help here because a deselected term never enters the
 frame at all. Prefer this over enforcing contiguous selections in the UI, which would take a
 capability away to work around a fixable defect.
+
+---
+
+## 4. One flag label is applied to all of a campus's held-out terms
+
+**[Bug · Low · XS · ready]**
+
+Surfaced by `/code-review` on PR #22, 2026-08-05. **PRE-EXISTING** — introduced by PR #21,
+not by the closed PR that surfaced it.
+
+**Symptom:** on a PDF page for a campus that has both a still-running follow-up term *and* one
+missing from the calendar, the footnote calls both **unverified** and says they "may already be
+final" — while the chart directly above labels each point correctly and separately.
+
+**Root cause:** `kpi_persistence.py::_generate_pdf` picks a single label for the whole
+comma-joined list — `label = _FLAG_UNVERIFIED if gaps else _FLAG_RUNNING` — so the presence of
+any gap term relabels every held-out term on that page. The per-point annotations come from
+`kpi_persistence.py::_flag_text`, which decides per row and is therefore right.
+
+**Severity:** `Low` — it needs one campus to carry both kinds at once, which takes a calendar
+gap and an in-flight term in the same view. The rates are unaffected; only the footnote's
+explanation is wrong, and the chart on the same page contradicts it.
+
+**Fix:** group the terms by their own flag and emit one clause each, reusing `_flag_text`'s
+per-row decision rather than re-deriving a page-level one.
+
+---
+
+## 5. The PDF methodology page renders when no page carries a projection
+
+**[Bug · Low · XS · ready]**
+
+Surfaced by `/code-review` on PR #22, 2026-08-05. **PRE-EXISTING** — the gate dates to
+`ed0a8aa`, long before this line of work.
+
+**Symptom:** a PDF can end with a full "Projection Methodology" page describing a forecast that
+appears nowhere in the document.
+
+**Root cause:** the page is gated on `proj_overall is not None`, but
+`kpi_persistence.py::_compute_projections` returns an **empty DataFrame**, not `None`, when no
+campus qualifies — so an empty frame passes the gate.
+
+**To observe:** select two terms and enable *Show Projection* → *Weighted Moving Average*
+(which needs 3 completed cohorts). The export comes out as three campus charts with no dashed
+line, followed by a methodology page for a projection that was never drawn.
+
+**Severity:** `Low` — a spurious page, no wrong number. Reachable only when every campus falls
+below the method's minimum.
+
+**Fix:** gate on `proj_overall is not None and not proj_overall.empty`, matching how the campus
+pages already decide whether to draw a projection.
 
 ---
 
