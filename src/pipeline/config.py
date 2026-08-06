@@ -73,11 +73,13 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    # Small dimension, pulled whole -- the only dataset with no `param_name`.
-    # `extract_dataset` runs it once with no binds. Joined on `stvterm_code`
-    # (never `mis_term_id`, which is 1:many against stvterm); see the SQL header.
+    # Small dimension, pulled whole. `unparameterized` is a deliberate opt-in,
+    # not the absence of `param_name` -- a config that merely forgot its
+    # param_name must fail, not silently pull every row. Joined on
+    # `stvterm_code` (never `mis_term_id`, 1:many against stvterm); see the SQL.
     "term_calendar": {
         "sql_file": "term_calendar.sql",
+        "unparameterized": True,
         "db_section": "rept",
     },
     "kpi_applied_to_enrolled": {

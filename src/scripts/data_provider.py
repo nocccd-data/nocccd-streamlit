@@ -44,13 +44,18 @@ def _download_and_read(
         # is used here, and `table=` always yields a frame.
         df = cast(pd.DataFrame, pantab.frame_from_hyper(hyper_path, table="Extract"))
 
-    if filter_col is None:
-        return df
-
-    if values is None:
+    # Both or neither. Checked symmetrically and *before* the unfiltered
+    # return: `values` supplied without `filter_col` — a fetcher that lost its
+    # column name in a refactor — would otherwise ship the entire extract to
+    # the calling tab with no error and no visible sign anything was wrong.
+    if (filter_col is None) != (values is None):
         raise ValueError(
-            f"{dataset_name!r}: filter_col={filter_col!r} given without values."
+            f"{dataset_name!r}: filter_col={filter_col!r} and values must be "
+            "given together, or both omitted to read the extract whole."
         )
+
+    if filter_col is None or values is None:
+        return df
 
     if filter_col not in df.columns:
         available = ", ".join(map(str, df.columns))

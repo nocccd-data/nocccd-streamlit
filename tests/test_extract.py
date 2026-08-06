@@ -81,3 +81,62 @@ def test_concat_query_frames_skips_empty_then_concatenates_rest():
     out = _concat_query_frames([empty, populated])
     assert len(out) == 1
     assert out.iloc[0]["count"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Unparameterized datasets — pulling a whole table must be an explicit opt-in
+# ---------------------------------------------------------------------------
+
+def _stray_bind(sql: str):
+    """Mirror of the placeholder scan in `extract_dataset`.
+
+    Kept in lockstep with the implementation; asserts on the regex rather than
+    on Oracle, so it runs without a database.
+    """
+    body = re.sub(r"--[^\n]*", "", sql)
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    body = re.sub(r"'[^']*'", "", body)
+    m = re.search(r"(?<![\w:]):(\w+)", body)
+    return m.group(1) if m else None
+
+
+def test_stray_bind_detects_a_real_placeholder():
+    """A SQL file that should have been parameterized must not run unfiltered."""
+    assert _stray_bind("SELECT 1 FROM t WHERE x = :acyr_code") == "acyr_code"
+    assert _stray_bind("SELECT 1 FROM t WHERE x IN (:t1)") == "t1"
+
+
+def test_stray_bind_ignores_prose_in_comments():
+    """`1:many` in a SQL header is not a bind placeholder."""
+    assert _stray_bind("-- one MIS term is 1:many against stvterm\nSELECT 1") is None
+
+
+def test_stray_bind_ignores_oracle_format_masks():
+    """'HH24:MI:SS' inside a string literal would otherwise false-positive."""
+    sql = "SELECT TO_CHAR(d, 'YYYY-MM-DD HH24:MI:SS') FROM t"
+    assert _stray_bind(sql) is None
+
+
+def test_stray_bind_ignores_block_comments():
+    assert _stray_bind("/* ratio is 1:many */ SELECT 1 FROM t") is None
+
+
+def test_missing_param_name_is_a_config_error_not_a_whole_table_pull():
+    """Absence of `param_name` must fail, never imply "pull everything".
+
+    A config entry copy-pasted from another dataset that loses its
+    `param_name` line would otherwise ship every row of every term to the app
+    with no error, which is exactly the unfiltered-data case the repo forbids.
+    """
+    from src.pipeline.config import DATASETS
+
+    for name, cfg in DATASETS.items():
+        has_param = "param_name" in cfg
+        opted_in = cfg.get("unparameterized", False)
+        assert has_param or opted_in, (
+            f"dataset {name!r} has neither 'param_name' nor "
+            "'unparameterized': True"
+        )
+        assert not (has_param and opted_in), (
+            f"dataset {name!r} sets both 'param_name' and 'unparameterized'"
+        )
