@@ -16,6 +16,7 @@ from src.scripts.tabs.kpi_persistence import (
     _build_overall,
     _calendar_gaps,
     _compute_projections,
+    _flag_text,
     _fmt_r_squared,
     _last_completed,
     _project_rate,
@@ -282,3 +283,37 @@ def test_no_projection_when_completeness_is_unknown():
         no_flag, "rate", ["campus"], "Linear Regression").empty
     assert _compute_projections(
         no_flag, "rate", ["campus"], "Weighted Moving Average").empty
+
+
+def test_held_out_points_say_why_they_were_held_out():
+    """"provisional" and "unverified" are different claims.
+
+    Since `is_provisional` became load-bearing for the fit, a point can leave
+    the regression for two reasons: its follow-up term is genuinely still
+    enrolling (it WILL rise), or the term has no calendar row so we never
+    checked it (it may already be final). Labelling both "provisional"
+    asserts the first when only the second is known.
+    """
+    running = _attach_completeness(
+        _rows([("Cypress", "Fall 2026", 267, "202610")]),   # future, in calendar
+        CALENDAR, "next_fall_term_code", TODAY,
+    )
+    unverified = _attach_completeness(
+        _rows([("NOCE", "Fall 2026", 267, "202799")]),      # absent from calendar
+        CALENDAR, "next_fall_term_code", TODAY,
+    )
+    assert _flag_text(next(running.itertuples())) == "provisional"
+    assert _flag_text(next(unverified.itertuples())) == "unverified"
+
+
+def test_last_completed_treats_unknown_rows_as_not_completed():
+    """The matplotlib frame is reindexed onto the full term axis.
+
+    A term this campus has no row for arrives as all-NaN; treating that as
+    completed would anchor the projection segment on an empty term.
+    """
+    df = _series([0.51, 0.52, 0.45], [False, False, True])
+    reindexed = df.set_index("term_short").reindex(
+        ["Fall 2020", "Fall 2021", "Fall 2022", "Fall 2099"]
+    )
+    assert _last_completed(reindexed).name == "Fall 2021"
