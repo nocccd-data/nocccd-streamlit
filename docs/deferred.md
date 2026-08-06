@@ -1,81 +1,117 @@
-# Deferred issues
+# Deferred / Backlog
 
-Known problems we have decided **not** to fix yet, with enough context to act on later
-without re-deriving the analysis.
+Ranked, actionable work. Everything here is something to do — a problem that is real and
+understood but deliberately left alone, with enough context to act on later without
+re-deriving the analysis.
 
-An entry belongs here when the issue is real and understood but deferred — usually because
-the fix needs a product decision, is out of scope for the change that surfaced it, or has a
-cost that has not been weighed yet. Things that are simply unfinished belong in a branch or
-a plan, not here.
+Something that is merely unfinished belongs in a branch or a plan, not here. An entry earns
+a place when the fix needs a decision, is out of scope for the change that surfaced it, or
+has a cost nobody has weighed yet.
 
-**Format.** Newest first. Each entry states what is wrong, how to reproduce or observe it,
-why it was deferred, what fixing it involves, and — where relevant — the open question
-someone has to answer before the fix can be written. Delete an entry when it is fixed;
-the git history keeps the record.
+**When an item is done, delete it here** and let the git history carry the record. Do not
+leave a checkmark behind — a heading that announces a fix while still holding live items is
+how a file like this goes wrong.
+
+**Cite `file.py::symbol`, never `file.py:NN`.** Line numbers rot.
+
+**Cluster numbers are stable IDs, not positions.** When a cluster closes, delete it and leave
+the gap — never renumber.
+
+| axis | values |
+|---|---|
+| Type | `Bug` · `Feature` · `Chore` · `Nit` · `Validation` |
+| Severity | `High` (data loss, silently wrong output) · `Med` (user-visible defect with a workaround) · `Low` (cosmetic or latent) |
+| Effort | `XS` (<1h) · `S` (one sitting) · `M` (one change cycle) · `L` · `XL` (needs its own design cycle) |
+| State | `ready` · `spec'd` · `needs-decision` · `not-scoped` |
+
+`needs-decision (N)` — N open decisions in the cluster body.
+
+| # | Cluster | Type | Sev | Effort | State |
+|---|---|---|---|---|---|
+| 1 | [Persistence projections fit through provisional points](#1-persistence-projections-fit-through-provisional-points) | Bug | Med | S | needs-decision (1) |
+| 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
 
 ---
 
-## Persistence projections fit through provisional points
+## 1. Persistence projections fit through provisional points
 
-**Status:** open · **Surfaced:** 2026-08-05, `/code-review-custom` on PR #19 (CONFIRMED)
-**Where:** `src/scripts/tabs/kpi_persistence.py` — `_compute_projections` call sites in
-`render()` and `_generate_pdf`
+**[Bug · Med · S · needs-decision (1)]**
 
-`_compute_projections` receives the frame straight from `_views_for_mode` without excluding
-rows where `is_provisional` is True. So when a cohort's follow-up term is still running, its
-partial rate — necessarily depressed, because not all follow-up registrations have posted —
-is fed into `np.polyfit` as if it were final. It pulls the fitted trend line down and skews
-the R² printed on the PDF's methodology page. The chart annotates that point as
-`provisional`, but the projection drawn through it carries no matching caveat, so the least
-trustworthy point silently steers the forecast.
+Surfaced by `/code-review-custom` (xhigh fleet, CONFIRMED) on PR #19, 2026-08-05. Correctly
+tagged **PRE-EXISTING** — not introduced by that PR.
+
+**Symptom:** with *Show Projection* enabled, the forecast is fitted through a data point the
+same chart annotates as `provisional`. The fitted trend line and the R² printed on the PDF's
+methodology page are both pulled downward.
+
+**Root cause:** `kpi_persistence.py::_compute_projections` receives the frame straight from
+`kpi_persistence.py::_views_for_mode` with no filter on `is_provisional`. A cohort whose
+follow-up term is still enrolling has a necessarily depressed rate — not all follow-up
+registrations have posted — and it feeds `_project_rate`'s `np.polyfit` as an equal
+observation. The point carries a caveat; the projection drawn through it does not.
 
 **To observe:** enable *Show Projection* → *Linear Regression* on `Fall → Next Fall` while a
-follow-up term is mid-enrollment (e.g. any time before mid-December for the current fall).
-The final grey diamond is fitted through the provisional point.
+follow-up term is mid-enrollment (any time before mid-December for the current fall). The
+final grey diamond is fitted through the annotated point.
 
-**Why deferred.** Not introduced by PR #19 — `main` already projected through the newest
-point. What changed is that `is_provisional` is now a *reliable* signal, so the fix is newly
-possible; before, the flag was unconditional and excluding on it would have been wrong. That
-makes this a pre-existing issue newly worth fixing, not a regression to block a merge on.
+**Severity, checked in both directions.** Not `High`: the projection is captioned as an
+estimate in three places, the offending point is visibly annotated, and the underlying rates
+are correct — nothing here is silently wrong *data*. Not `Low`: the skew itself is invisible,
+so a reader cannot tell the forecast was dragged, and the whole point of the provisional flag
+shipped in PR #19 was to stop presenting partial counts as settled. Landed at `Med` — a
+user-visible defect whose workaround is to turn projections off.
 
-**Open question (needs a decision, not just code).** Excluding provisional points makes the
-forecast honest but costs the most recent year of data:
+**Why deferred:** `main` already projected through the newest point before PR #19. What
+changed is that `is_provisional` became a *reliable* signal — previously the flag was
+unconditional, so filtering on it would have been wrong. That makes this a pre-existing issue
+newly worth fixing, not a regression to block a merge on.
 
-- **Linear Regression** would fit on 2 points instead of 3 in the common case — still valid,
-  but R² becomes far less meaningful.
-- **Weighted Moving Average** needs 3 points minimum (`_project_rate` returns `None` below
-  that), so dropping one means projecting from a window ending *two* years back, or no
-  projection at all for campuses with short history.
+**Open decision — the fix is a product call, not a patch.** Excluding provisional points
+makes the forecast honest but costs the most recent year:
 
-Three options worth weighing: exclude provisional rows entirely; include them but label the
-projection as provisional too; or weight them down rather than dropping them. The right
-answer depends on how these forecasts get used — a board packet reading a single number
-argues for exclusion, a trend-watching analyst may prefer the recency.
+- **Linear Regression** would fit 2 points instead of 3 in the common case. Still valid, but
+  R² stops carrying much meaning at n=2.
+- **Weighted Moving Average** requires 3 points — `kpi_persistence.py::_project_rate` returns
+  `None` below that — so dropping one means projecting from a window ending *two* years back,
+  or offering no projection at all for a campus with short history.
+
+Three directions:
+- **(a) Exclude provisional rows** from the fit. Honest, cheapest, and costs recency.
+- **(b) Include them but mark the projection provisional too** — carry the caveat forward
+  instead of dropping data.
+- **(c) Down-weight rather than drop** — keeps n, reduces the skew, adds a tuning constant
+  nobody can defend from first principles.
+
+The right answer depends on how these forecasts are read. A board packet taking a single
+number argues for (a); an analyst watching a trend may prefer (b). Decide before starting.
 
 ---
 
-## PDF cache key does not track term-calendar republishes
+## 2. The persistence PDF cache key does not track term-calendar republishes
 
-**Status:** open · **Surfaced:** 2026-08-05, `/code-review-custom` on PR #19 (PLAUSIBLE)
-**Where:** `src/scripts/tabs/kpi_persistence.py` — `cached_pdf_bytes("pbs", ...)` key
+**[Bug · Low · XS · ready]**
 
-The PDF cache key includes `today`, which covers a day rollover. It does not include
-anything identifying the `term_calendar` snapshot the footnote was rendered from, and that
-extract refreshes on its own cadence: a 600-second `st.cache_data` TTL plus the scheduled
-daily pipeline publish (`docs/macos-scheduling.md`, noon).
+Surfaced by `/code-review-custom` (xhigh fleet, PLAUSIBLE) on PR #19, 2026-08-05. Not among
+the eight fixes applied on that PR; recorded here so it is not lost.
 
-So within a single day the on-screen chart and a cached PDF can disagree. A user downloads
-the PDF in the morning while a term is missing from the calendar (footnoted provisional);
-the noon job republishes with that term now present and already ended; the chart picks the
-change up when the TTL expires, but the cached PDF keeps the stale footnote until the date
-rolls over.
+**Symptom:** within a single day, a downloaded PDF's provisional footnote can disagree with
+the on-screen chart for the same cohort.
 
-**Why deferred.** Narrow and self-correcting — it needs a same-day calendar change to bite,
-which happens at most once a day and only when Banner gains or edits a term. The numbers are
-never wrong, only the caveat. It was not part of the eight fixes applied on PR #19 and is
-recorded here so it is not lost.
+**Root cause:** the `cached_pdf_bytes("pbs", ...)` key in `kpi_persistence.py::render`
+includes `today`, which covers a date rollover, but nothing identifying the `term_calendar`
+snapshot the footnote was rendered from. That extract refreshes on its own cadence — a 600 s
+`st.cache_data` TTL on `data_provider.py::fetch_term_calendar`, plus the scheduled daily
+pipeline publish (see [macos-scheduling.md](macos-scheduling.md), noon).
 
-**Fix sketch.** Add a cheap fingerprint of the calendar to the cache key — row count plus
-max `stvterm_end_date` would be enough to catch a republish, and both are already in the
-frame. Alternatively key on the extract's published timestamp if `download_hyper` can
-surface it.
+**To observe:** download the PDF while a term is missing from the calendar (footnoted
+provisional), let the noon job republish with that term now present and already ended. The
+chart updates when the TTL expires; the cached PDF keeps the stale footnote until midnight.
+
+**Severity:** `Low` — it needs a same-day calendar change to bite, which happens at most once
+a day and only when Banner gains or edits a term. The rates are never affected; only the
+caveat is. Self-correcting at the next date rollover.
+
+**Fix:** add a cheap fingerprint of the calendar to the cache key — row count plus
+`max(stvterm_end_date)` is enough to catch a republish, and both are already in the frame the
+caller holds. Alternatively key on the extract's published timestamp, if
+`publish.py::download_hyper` can be made to surface it.
