@@ -10,9 +10,15 @@
 -- here only with that caveat attached.
 --
 -- No bind parameters: this is a small dimension pulled whole, registered in config.py without
--- a param_name. The acyr floor is deliberately loose -- the calendar must stay a SUPERSET of
--- every term any consumer can reference, and a floor duplicated in two places turns a lowered
--- consumer floor into silently missing dates rather than an error. ~30 rows a year.
+-- a param_name.
+--
+-- DELIBERATELY UNFILTERED. The calendar must stay a SUPERSET of every term any consumer can
+-- reference, and a floor here duplicates a floor over there: when mv_persistence_by_styp's
+-- own floor dropped from 237 to 207, an `acyr_code >= '2023'` filter would have left the new
+-- cohorts' spring follow-ups (202020, 202035, ...) with no calendar row -- and the consumer
+-- fails SAFE, so they would have been marked "provisional" forever rather than raising.
+-- Silently missing dates, not an error. At ~7 rows a year the whole table is free; keep it
+-- that way rather than re-deriving the right floor every time a consumer changes.
 --
 -- Not filtered on stvterm_code: Banner carries a '999999' sentinel term dated 2999, which is
 -- outside pandas' nanosecond datetime range. It is kept so the extract mirrors stvterm, and
@@ -24,4 +30,3 @@ SELECT
     stvterm_start_date,
     stvterm_end_date
 FROM stvterm
-WHERE stvterm_acyr_code >= '2023'

@@ -67,9 +67,12 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
+    # Must match the MV's own floor (`stvterm_mis_term_id >= '207'` in
+    # cte_params). A term the MV holds but this list omits simply never
+    # reaches the app -- the extract SQL filters on it.
     "kpi_persistence": {
         "sql_file": "kpi_persistence.sql",
-        "mis_term_id": ["237", "247", "257", "267"],
+        "mis_term_id": ["207", "217", "227", "237", "247", "257", "267"],
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },

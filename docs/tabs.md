@@ -82,6 +82,15 @@ The PDF cache key includes `today`; without it a PDF cached before a term ended 
 - **Linear Regression**: `np.polyfit(x, y, 1)` — extrapolates a least-squares trend line. Reports R² (goodness of fit) per campus. Minimum 2 data points.
 - **Weighted Moving Average**: last 3 data points weighted [1×, 2×, 3×]. Minimum 3 data points.
 
+**Provisional cohorts are excluded from the fit.** A provisional rate is a partial count — its follow-up term is still enrolling — so including it projects a decline that reflects the calendar rather than the students. Measured on the 2020–2025 history, including the single provisional point moved Fullerton's Fall → Next Fall forecast from 53.9% to 47.1% and collapsed its R² from **0.89 to 0.20**, turning a real trend into noise.
+
+Two mechanics make this work, and both are easy to get wrong:
+
+- **Provisional rates are masked to `NaN`, not dropped.** `_project_rate` already skips `NaN` while keeping each point's original x position, and it extrapolates at `len(rates)` — one step past the last *plotted* term. Dropping the rows would shorten the series and aim the forecast at the provisional cohort's own slot, drawing the projection on top of a point already on the chart.
+- **The dashed segment anchors on the last *completed* point** (`_last_completed`), in both the Plotly and matplotlib charts. Starting it at a provisional marker would imply the forecast was projected out of it. The segment spans the provisional point instead.
+
+**R² is suppressed below 3 completed terms** and renders as `n/a (<3 terms)` via `_fmt_r_squared`. A straight line fits two points perfectly, so R² at n=2 is 1.0 by construction — it looks like strong evidence while carrying none. At n=5 it discriminates properly: Fullerton 0.89 (real trend) against NOCE 0.02 (none, correctly refusing to fit a line through COVID-era volatility).
+
 Projections run on the *filtered* frame, and are computed on the Overall line only. Projected values are clipped to [0, 1]. The next term label comes from `_term_label(max + 10)` (MIS IDs increment by 10 per year: 207→217→…→257→267).
 
 **PDF export**: One page per campus — all student-type lines plus Overall, with projected dashed lines and, when that campus has a provisional point, a footnote naming it. Values are printed for the Overall line only; eight sets of point labels would collide. A final methodology page (method description, caveat, R² table for linear regression) is appended when projections are active.

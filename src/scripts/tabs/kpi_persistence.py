@@ -322,6 +322,41 @@ def _calendar_gaps(df_overall: pd.DataFrame, term_code_col: str) -> list[str]:
     })
 
 
+# A point can be held out of the fit for two different reasons, and saying
+# "provisional" for both overclaims. A term we checked and know is still
+# enrolling WILL rise; a term with no calendar row was never checked at all and
+# may already be final. Since `is_provisional` became load-bearing for the
+# regression, that difference decides whether a dropped point is a partial
+# count or a real observation we could not confirm.
+_FLAG_RUNNING = "provisional"
+_FLAG_UNVERIFIED = "unverified"
+
+
+def _flag_text(row) -> str:
+    """Chart annotation for a held-out point, by *why* it is held out."""
+    has_cal = getattr(row, "has_calendar", True)
+    return _FLAG_RUNNING if has_cal is not False else _FLAG_UNVERIFIED
+
+
+def _last_completed(dfo: pd.DataFrame) -> pd.Series:
+    """The newest non-provisional row, or the newest row if all are flagged.
+
+    Used to anchor the projection segment. Falls back to the last row rather
+    than returning nothing: with no completed cohort there is no projection to
+    anchor anyway, and a caller that still draws one gets the old behaviour
+    instead of an exception.
+    """
+    if "is_provisional" in dfo.columns:
+        # `.eq(False)` rather than `~flag`: the matplotlib caller's frame is
+        # reindexed onto the full term axis and can carry all-NaN rows for a
+        # term this campus has no data in. Only an explicit False counts as
+        # completed, so an unknown row can never become the anchor.
+        completed = dfo[dfo["is_provisional"].eq(False)]
+        if not completed.empty:
+            return completed.iloc[-1]
+    return dfo.iloc[-1]
+
+
 def _provisional_by_campus(df_overall: pd.DataFrame) -> dict[str, list[str]]:
     """``{campus: [term_short, ...]}`` for points still mid-flight."""
     if "is_provisional" not in df_overall.columns:
@@ -356,10 +391,16 @@ def _project_rate(
         y = np.array([v[1] for v in valid])
         coeffs = np.polyfit(x, y, 1)
         projected = float(np.polyval(coeffs, len(rates)))
-        y_pred = np.polyval(coeffs, x)
-        ss_res = float(np.sum((y - y_pred) ** 2))
-        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
-        r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        # R² through two points is 1.0 by construction — a line always fits
+        # two points perfectly, so the number would say nothing about the
+        # trend while looking like strong evidence. Report it only where it
+        # can discriminate. (Measured at n=5: Fullerton 0.89 vs NOCE 0.02.)
+        r_sq = None
+        if len(valid) >= 3:
+            y_pred = np.polyval(coeffs, x)
+            ss_res = float(np.sum((y - y_pred) ** 2))
+            ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+            r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
         return float(np.clip(projected, 0, 1)), r_sq
 
     # Weighted Moving Average
@@ -370,19 +411,51 @@ def _project_rate(
     return float(np.clip(projected, 0, 1)), None
 
 
+def _fmt_r_squared(value) -> str:
+    """R² for display. ``None`` when fewer than 3 completed cohorts were fit."""
+    return "n/a (<3 terms)" if value is None or pd.isna(value) else f"{value:.3f}"
+
+
 def _compute_projections(
     df: pd.DataFrame,
     rate_col: str,
     group_cols: list[str],
     method: str,
 ) -> pd.DataFrame:
-    """Compute one projected row per group."""
+    """Compute one projected row per group, fitting only completed cohorts.
+
+    A provisional cohort's rate is a partial count — its follow-up term is
+    still enrolling — so feeding it to the fit projects a decline that is an
+    artifact of the calendar, not the students. Measured on the 2020–2025
+    history: including the one provisional point moved Fullerton's forecast
+    from 53.9% to 47.1% and collapsed its R² from 0.89 to 0.20, turning a
+    genuine trend into noise.
+
+    Provisional rates are **masked to NaN rather than dropped**, which matters
+    twice: `_project_rate` skips NaN but keeps each point's original x
+    position, so the fitted line is not shifted, and it projects at
+    ``len(rates)`` — one step past the last *plotted* term. Dropping the rows
+    would shorten the series and aim the forecast at the provisional term's
+    own slot, drawing it on top of a point that is already there.
+
+    **No ``is_provisional`` column means no projection at all.** That column is
+    absent only when the term calendar could not be loaded, i.e. when we cannot
+    tell which cohorts are partial — and fitting through possibly-partial data
+    is the exact defect this function exists to avoid. Treating its absence as
+    "nothing is provisional" would silently restore the old behaviour while the
+    methodology text on screen and in the PDF still claimed completed cohorts
+    only. The refusal lives here rather than at the two call sites so it cannot
+    be applied to one and missed by the other.
+    """
+    if "is_provisional" not in df.columns:
+        return pd.DataFrame()
+
     next_label, next_sort = _compute_next_term(df)
     rows: list[dict] = []
     for keys, grp in df.groupby(group_cols, observed=True):
         grp_sorted = grp.sort_values("term_sort")
-        rates = grp_sorted[rate_col].tolist()
-        proj_val, r_sq = _project_rate(rates, method)
+        rate_series = grp_sorted[rate_col].where(~grp_sorted["is_provisional"])
+        proj_val, r_sq = _project_rate(rate_series.tolist(), method)
         if proj_val is None:
             continue
         if not isinstance(keys, tuple):
@@ -535,7 +608,7 @@ def _build_campus_fig(
                 fig.add_annotation(
                     x=row.term_short, y=getattr(row, rate_col),
                     yanchor="top", yshift=-14,
-                    text="provisional", showarrow=False,
+                    text=_flag_text(row), showarrow=False,
                     font={"size": 10, "color": "grey"},
                 )
 
@@ -543,7 +616,11 @@ def _build_campus_fig(
     if projection is not None and not projection.empty and not dfo.empty:
         proj_row = projection[projection["campus"] == campus]
         if not proj_row.empty:
-            last = dfo.iloc[-1]
+            # Anchor on the last COMPLETED point, not the last plotted one.
+            # The fit excludes provisional cohorts, so drawing the segment from
+            # a provisional marker would imply the forecast was projected out
+            # of it. The line spans the provisional point instead.
+            last = _last_completed(dfo)
             proj_term = (
                 proj_row.iloc[0]["term_short"], int(proj_row.iloc[0]["term_sort"])
             )
@@ -717,18 +794,28 @@ def _mpl_line_chart(
     # `dfo` is already reindexed onto `terms`, so the flag lines up positionally
     # with `rates`. Per campus, matching the Plotly chart.
     if "is_provisional" in dfo.columns:
-        for i, (prov, r) in enumerate(zip(dfo["is_provisional"], rates)):
-            if prov is True and pd.notna(r):
+        for i, (row, r) in enumerate(zip(dfo.itertuples(), rates)):
+            if getattr(row, "is_provisional", None) is True and pd.notna(r):
                 ax.annotate(
-                    "provisional", (i, r), textcoords="offset points",
+                    _flag_text(row), (i, r), textcoords="offset points",
                     xytext=(0, -16), ha="center", fontsize=7, color="grey",
                 )
 
     proj_term: tuple[str, int] | None = None
     if proj_rate is not None and proj_label is not None and terms:
+        # Anchor on the last COMPLETED point, matching the Plotly chart: the
+        # fit excludes provisional cohorts, so starting the segment at one
+        # would imply the forecast came out of it. Shares `_last_completed`
+        # rather than restating the rule — two hand-rolled copies would be
+        # free to drift, and the screen and the PDF would then anchor the same
+        # data on different terms. `dfo` is indexed by term_short here.
+        anchor_label = str(_last_completed(dfo).name)
+        anchor = (
+            terms.index(anchor_label) if anchor_label in terms else len(terms) - 1
+        )
         ax.plot(
-            [terms[-1], proj_label],
-            [rates[-1], proj_rate],
+            [terms[anchor], proj_label],
+            [rates[anchor], proj_rate],
             marker="D", markersize=8, linewidth=2,
             linestyle="--", color="grey",
         )
@@ -814,16 +901,19 @@ def _generate_pdf(
             prov_terms = _provisional_by_campus(dfc_overall).get(campus, [])
             if prov_terms:
                 gaps = _calendar_gaps(dfc_overall, opts["term_code_col"])
+                label = _FLAG_UNVERIFIED if gaps else _FLAG_RUNNING
                 note = (
                     f"{', '.join(prov_terms)} "
-                    f"{'is' if len(prov_terms) == 1 else 'are'} provisional — "
+                    f"{'is' if len(prov_terms) == 1 else 'are'} {label} — "
                 )
                 note += (
                     f"term {', '.join(gaps)} is not in the term calendar, so "
-                    "this rate could not be checked and may already be final."
+                    "this rate could not be checked and may already be final. "
+                    "It is held out of the projection for that reason."
                     if gaps else
                     f"{RATE_OPTIONS[persistence_type]['follow_up']} has not "
-                    "ended, so the rate will rise."
+                    "ended, so the rate will rise. It is held out of the "
+                    "projection."
                 )
                 fig.text(0.10, 0.06, note, fontsize=8, color="grey")
             _add_pdf_footer(fig)
@@ -841,26 +931,37 @@ def _generate_pdf(
                 lines = [
                     "Method: Linear Regression",
                     "",
-                    "A straight line (y = mx + b) is fit through all available",
-                    "historical data points using least-squares regression.",
-                    "The projected value is the extrapolated point for the",
-                    "next fall term.",
+                    "A straight line (y = mx + b) is fit through the",
+                    "COMPLETED historical points using least-squares",
+                    "regression. The projected value is the extrapolated",
+                    "point for the next fall term.",
+                    "",
+                    "Cohorts marked provisional are EXCLUDED from the fit.",
+                    "Their follow-up term is still enrolling, so the rate is",
+                    "a partial count; including one projects a decline that",
+                    "reflects the calendar rather than the students.",
                     "",
                     "R² (goodness of fit) indicates how well the linear",
                     "model fits the historical data. Values closer to 1.0",
                     "mean a stronger linear trend; values near 0 suggest no",
                     "clear trend and the projection should be treated with",
-                    "caution.",
+                    "caution. It is reported only when at least 3 completed",
+                    "terms were fit — a line matches 2 points perfectly, so",
+                    "R² below that says nothing.",
                 ]
             else:
                 lines = [
                     "Method: Weighted Moving Average",
                     "",
-                    "The last 3 data points are averaged with increasing",
-                    "weights (1×, 2×, 3×), giving the most recent",
+                    "The last 3 COMPLETED data points are averaged with",
+                    "increasing weights (1×, 2×, 3×), giving the most recent",
                     "year triple the influence of the oldest year in the",
                     "window. This method responds quickly to recent changes",
                     "without assuming a long-term trend.",
+                    "",
+                    "Cohorts marked provisional are excluded — their",
+                    "follow-up term is still enrolling, so the rate is a",
+                    "partial count that will rise.",
                 ]
 
             for line in lines:
@@ -887,7 +988,7 @@ def _generate_pdf(
                         row = proj_overall[proj_overall["campus"] == campus]
                         if not row.empty:
                             r_sq_data.append(
-                                (campus, f"{row.iloc[0]['_r_squared']:.3f}"))
+                                (campus, _fmt_r_squared(row.iloc[0]["_r_squared"])))
 
                 if r_sq_data:
                     y -= 0.05
@@ -1079,12 +1180,17 @@ def render():
     )
 
     if calendar_error is not None:
-        # The rates above are unaffected — only the caveat is missing.
+        # The rates are unaffected — only the caveat is missing. Projections
+        # are not: a fit through possibly-partial cohorts is the defect the
+        # completed-only rule exists to prevent, so they are suppressed rather
+        # than silently reverting while the methodology text claims otherwise.
         st.warning(
             "Could not load the term calendar, so no point can be checked for "
             "whether its follow-up term has ended. The rates below are still "
-            "correct. Run `python -m src.pipeline.run term_calendar` if this "
-            f"persists. ({calendar_error})"
+            "correct, but **projections are unavailable** — a forecast fitted "
+            "through a cohort that may be incomplete would read as a decline "
+            "that is not real. Run `python -m src.pipeline.run term_calendar` "
+            f"if this persists. ({calendar_error})"
         )
     else:
         # Provisional points, named per campus — the two tracks end on
@@ -1108,9 +1214,13 @@ def render():
         gaps = _calendar_gaps(df_overall, opts["term_code_col"])
         if gaps:
             st.caption(
-                f":grey[Term {', '.join(gaps)} is not in the term calendar "
-                "yet, so cohorts pointing at it stay marked provisional — "
-                "their follow-up term may in fact already be over.]"
+                f":grey[Term {', '.join(gaps)} is not in the term calendar, so "
+                "cohorts pointing at it are marked **unverified** rather than "
+                "provisional — their follow-up term may in fact already be "
+                "over. They are held out of any projection for the same "
+                "reason, so the forecast is fitted on fewer points than are "
+                "plotted. Refresh with "
+                "`python -m src.pipeline.run term_calendar`.]"
             )
 
     # --- Compute projections for charts ---
@@ -1138,22 +1248,32 @@ def render():
         with st.expander("Projection Methodology"):
             if proj_method == "Linear Regression":
                 st.markdown(
-                    "**Linear Regression** fits a straight line through all "
-                    "available historical data points using least-squares "
+                    "**Linear Regression** fits a straight line through the "
+                    "**completed** historical points using least-squares "
                     "regression. The projected value is the extrapolated point "
                     "for the next fall term.\n\n"
+                    "**Provisional cohorts are excluded from the fit.** Their "
+                    "follow-up term is still enrolling, so the rate is a "
+                    "partial count — including one projects a decline that "
+                    "reflects the calendar rather than the students.\n\n"
                     "**R²** indicates how well the linear model fits the "
                     "historical data. Values closer to 1.0 mean a stronger "
                     "linear trend; values near 0 suggest no clear trend and "
-                    "the projection should be treated with caution."
+                    "the projection should be treated with caution. It is "
+                    "reported only when at least 3 completed terms were fit — "
+                    "a line matches 2 points perfectly, so R² below that "
+                    "carries no information."
                 )
             else:
                 st.markdown(
-                    "**Weighted Moving Average** uses the last 3 data points "
-                    "with increasing weights (1×, 2×, 3×), "
+                    "**Weighted Moving Average** uses the last 3 **completed** "
+                    "data points with increasing weights (1×, 2×, 3×), "
                     "giving the most recent year triple the influence of the "
                     "oldest year in the window. This method responds quickly "
-                    "to recent changes without assuming a long-term trend."
+                    "to recent changes without assuming a long-term trend.\n\n"
+                    "**Provisional cohorts are excluded** — their follow-up "
+                    "term is still enrolling, so the rate is a partial count "
+                    "that will rise."
                 )
 
             st.caption(
@@ -1171,7 +1291,7 @@ def render():
                         if not row.empty:
                             r_sq_rows.append({
                                 "Campus": campus,
-                                "R²": f"{row.iloc[0]['_r_squared']:.3f}",
+                                "R²": _fmt_r_squared(row.iloc[0]["_r_squared"]),
                             })
                 if r_sq_rows:
                     st.dataframe(
