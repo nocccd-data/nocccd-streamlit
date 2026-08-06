@@ -209,7 +209,7 @@ def test_projection_ignores_the_provisional_point():
     """A partial rate must not drag the fit.
 
     Measured on the real 2020-2025 history: including the provisional point
-    moved Fullerton's forecast from 53.3% to 47.1%.
+    moved Fullerton's forecast from 53.9% to 47.1%.
     """
     # Flat ~52% history, then a partial 45% that would drag a fit downward.
     df = _series([0.51, 0.51, 0.53, 0.53, 0.52, 0.45],
@@ -264,3 +264,21 @@ def test_projection_anchors_on_the_last_completed_point():
     # All-provisional degrades to the last row rather than raising.
     allprov = _series([0.45], [True])
     assert _last_completed(allprov)["term_sort"] == 207
+
+
+def test_no_projection_when_completeness_is_unknown():
+    """A calendar outage must suppress projections, not silently refit.
+
+    Without `is_provisional` the old code fit every point including the
+    partial one, while the methodology text on screen and in the PDF still
+    claimed completed cohorts only. Measured before the fix: Fullerton
+    projected 47.1% instead of 53.9% whenever term_calendar was unavailable.
+    """
+    df = _series([0.51, 0.51, 0.53, 0.53, 0.52, 0.45], [False] * 5 + [True])
+    assert not _compute_projections(
+        df, "rate", ["campus"], "Linear Regression").empty
+    no_flag = df.drop(columns=["is_provisional"])
+    assert _compute_projections(
+        no_flag, "rate", ["campus"], "Linear Regression").empty
+    assert _compute_projections(
+        no_flag, "rate", ["campus"], "Weighted Moving Average").empty

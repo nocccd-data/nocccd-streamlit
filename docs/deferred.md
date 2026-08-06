@@ -28,7 +28,43 @@ the gap — never renumber.
 
 | # | Cluster | Type | Sev | Effort | State |
 |---|---|---|---|---|---|
+| 3 | [A non-contiguous term selection compresses gaps in the projection](#3-a-non-contiguous-term-selection-compresses-gaps-in-the-projection) | Bug | Med | S | ready |
 | 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
+
+---
+
+## 3. A non-contiguous term selection compresses gaps in the projection
+
+**[Bug · Med · S · ready]**
+
+Surfaced by `/octo:review` on PR #21, 2026-08-05. Correctly tagged **PRE-EXISTING** — not
+introduced by that PR.
+
+**Symptom:** deselecting terms in the sidebar so the remaining ones are not consecutive makes
+the projected rate overstate the trend, with nothing on the chart indicating it.
+
+**Root cause:** `kpi_persistence.py::_project_rate` fits on **list positions**, not on the
+terms those positions represent — `valid = [(i, r) for i, r in enumerate(rates) ...]`. The
+sidebar multiselect permits any subset, so selecting 207, 227 and 257 fits them at x = 0, 1, 2
+as though each pair were one year apart when they are two and three. The slope is therefore
+per-*selection-step*, not per-year. It then extrapolates at x = 3 and labels the result from
+`_compute_next_term`, which *does* use the real terms (`max(term_sort) + 10`) — so a step
+worth two-to-three years of change gets presented as one year.
+
+**To observe:** select only 207, 227 and 257, enable *Show Projection* → *Linear Regression*,
+and compare against the same fit with every term selected.
+
+**Severity:** `Med` — a user-visible wrong number, but it needs a deliberately sparse
+selection to reach; the default is every term selected and contiguous. The rates themselves are
+never affected, only the forecast.
+
+**Fix:** derive x from `term_sort` rather than position — `(term_sort - min) / 10` gives
+real-year spacing — and extrapolate at the projected term's own offset instead of
+`len(rates)`. Note this interacts with the NaN-masking in
+`kpi_persistence.py::_compute_projections`: masking preserves positions for *provisional* rows,
+which is a different problem, and does not help here because a deselected term never enters the
+frame at all. Prefer this over enforcing contiguous selections in the UI, which would take a
+capability away to work around a fixable defect.
 
 ---
 

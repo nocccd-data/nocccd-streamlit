@@ -408,7 +408,7 @@ def _compute_projections(
     still enrolling — so feeding it to the fit projects a decline that is an
     artifact of the calendar, not the students. Measured on the 2020–2025
     history: including the one provisional point moved Fullerton's forecast
-    from 53.3% to 47.1% and collapsed its R² from 0.89 to 0.20, turning a
+    from 53.9% to 47.1% and collapsed its R² from 0.89 to 0.20, turning a
     genuine trend into noise.
 
     Provisional rates are **masked to NaN rather than dropped**, which matters
@@ -417,14 +417,24 @@ def _compute_projections(
     ``len(rates)`` — one step past the last *plotted* term. Dropping the rows
     would shorten the series and aim the forecast at the provisional term's
     own slot, drawing it on top of a point that is already there.
+
+    **No ``is_provisional`` column means no projection at all.** That column is
+    absent only when the term calendar could not be loaded, i.e. when we cannot
+    tell which cohorts are partial — and fitting through possibly-partial data
+    is the exact defect this function exists to avoid. Treating its absence as
+    "nothing is provisional" would silently restore the old behaviour while the
+    methodology text on screen and in the PDF still claimed completed cohorts
+    only. The refusal lives here rather than at the two call sites so it cannot
+    be applied to one and missed by the other.
     """
+    if "is_provisional" not in df.columns:
+        return pd.DataFrame()
+
     next_label, next_sort = _compute_next_term(df)
     rows: list[dict] = []
     for keys, grp in df.groupby(group_cols, observed=True):
         grp_sorted = grp.sort_values("term_sort")
-        rate_series = grp_sorted[rate_col]
-        if "is_provisional" in grp_sorted.columns:
-            rate_series = rate_series.where(~grp_sorted["is_provisional"])
+        rate_series = grp_sorted[rate_col].where(~grp_sorted["is_provisional"])
         proj_val, r_sq = _project_rate(rate_series.tolist(), method)
         if proj_val is None:
             continue
@@ -1145,12 +1155,17 @@ def render():
     )
 
     if calendar_error is not None:
-        # The rates above are unaffected — only the caveat is missing.
+        # The rates are unaffected — only the caveat is missing. Projections
+        # are not: a fit through possibly-partial cohorts is the defect the
+        # completed-only rule exists to prevent, so they are suppressed rather
+        # than silently reverting while the methodology text claims otherwise.
         st.warning(
             "Could not load the term calendar, so no point can be checked for "
             "whether its follow-up term has ended. The rates below are still "
-            "correct. Run `python -m src.pipeline.run term_calendar` if this "
-            f"persists. ({calendar_error})"
+            "correct, but **projections are unavailable** — a forecast fitted "
+            "through a cohort that may be incomplete would read as a decline "
+            "that is not real. Run `python -m src.pipeline.run term_calendar` "
+            f"if this persists. ({calendar_error})"
         )
     else:
         # Provisional points, named per campus — the two tracks end on
