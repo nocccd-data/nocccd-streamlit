@@ -915,7 +915,11 @@ def _generate_pdf(
             # the end — a single chart page pasted into a deck leaves that page
             # behind, and then nothing travels with it saying what the dashed
             # line was fitted on. The axes give up ~0.3in to make room.
-            show_note = proj_overall is not None and not proj_overall.empty
+            # Gated per campus, not on `proj_overall` as a whole: a campus with
+            # too few completed cohorts gets no projection row, and its page
+            # would otherwise carry a note explaining a dashed line that is not
+            # on it. `p_rate` is exactly what decides whether one gets drawn.
+            show_note = p_rate is not None
             fig.subplots_adjust(left=0.10, right=0.92,
                                 top=0.865 if show_note else 0.88, bottom=0.22)
             if show_note:
