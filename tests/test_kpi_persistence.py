@@ -12,6 +12,8 @@ import pandas as pd
 import pytest
 
 from src.scripts.tabs.kpi_persistence import (
+    _PROJECTION_NOTE,
+    _PROJECTION_NOTE_LINES,
     _attach_completeness,
     _build_overall,
     _calendar_gaps,
@@ -317,3 +319,17 @@ def test_last_completed_treats_unknown_rows_as_not_completed():
         ["Fall 2020", "Fall 2021", "Fall 2022", "Fall 2099"]
     )
     assert _last_completed(reindexed).name == "Fall 2021"
+
+
+def test_projection_note_is_shared_by_screen_and_pdf():
+    """One source of truth for what the projection does and does not do.
+
+    The screen joins the lines with spaces, the PDF with newlines. Two
+    hand-written copies would be free to drift, which is how the earlier
+    53.3%/53.9% divergence happened.
+    """
+    assert _PROJECTION_NOTE == " ".join(_PROJECTION_NOTE_LINES)
+    # It must say the era part out loud — the whole reason it exists.
+    assert "No adjustment is made for era effects" in _PROJECTION_NOTE
+    assert "2020–21 are included as ordinary years" in _PROJECTION_NOTE
+    assert "completed cohorts only" in _PROJECTION_NOTE

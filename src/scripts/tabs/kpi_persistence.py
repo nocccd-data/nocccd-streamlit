@@ -331,6 +331,29 @@ def _calendar_gaps(df_overall: pd.DataFrame, term_code_col: str) -> list[str]:
 _FLAG_RUNNING = "provisional"
 _FLAG_UNVERIFIED = "unverified"
 
+# What the projection does and does not do, stated wherever a projection is
+# shown. Defined once so the screen and the PDF cannot drift apart.
+#
+# It says the era part out loud on purpose. There is NO COVID adjustment, and
+# the measured case for adding one is weak: dropping the 2020 and 2021 cohorts
+# moves the credit-college forecast by ~1 pp and makes Cypress's fit *worse*
+# (R² 0.61 -> 0.02), because those years sit on the trend rather than off it.
+# NOCE is the exception, and its own R² near 0 already reports that. So the
+# honest note is that no era adjustment exists — not a COVID warning for a
+# distortion the data does not show.
+_PROJECTION_NOTE_LINES = (
+    (
+        "Projections fit completed cohorts only — provisional and unverified "
+        "points are excluded. No adjustment is made for era effects; 2020–21 "
+        "are included as ordinary years."
+    ),
+    (
+        "R² reports whether a straight line fits: near 1.0 is a real trend, "
+        "near 0 means treat the forecast with caution."
+    ),
+)
+_PROJECTION_NOTE = " ".join(_PROJECTION_NOTE_LINES)
+
 
 def _flag_text(row) -> str:
     """Chart annotation for a held-out point, by *why* it is held out."""
@@ -888,7 +911,16 @@ def _generate_pdf(
                      fontsize=16, fontweight="bold", ha="center")
             fig.suptitle(f"{campus} — {persistence_type}",
                          fontsize=14, fontweight="bold", y=0.93)
-            fig.subplots_adjust(left=0.10, right=0.92, top=0.88, bottom=0.22)
+            # The note rides on EVERY page, not just the methodology page at
+            # the end — a single chart page pasted into a deck leaves that page
+            # behind, and then nothing travels with it saying what the dashed
+            # line was fitted on. The axes give up ~0.3in to make room.
+            show_note = proj_overall is not None and not proj_overall.empty
+            fig.subplots_adjust(left=0.10, right=0.92,
+                                top=0.865 if show_note else 0.88, bottom=0.22)
+            if show_note:
+                fig.text(0.10, 0.905, "\n".join(_PROJECTION_NOTE_LINES),
+                         fontsize=7, color="grey", va="top", linespacing=1.5)
             _mpl_line_chart(ax, df_types, dfc_overall, rate_col, campus, "",
                             persistence_type,
                             proj_rate=p_rate, proj_label=p_label,
@@ -1228,6 +1260,12 @@ def render():
     if show_projection and proj_method:
         proj_overall = _compute_projections(
             df_overall, opts["rate_col"], ["campus"], proj_method)
+
+    # Always visible while a projection is on screen, not tucked into the
+    # methodology expander below: a reader who screenshots a chart takes the
+    # caption with them and leaves a collapsed expander behind.
+    if proj_overall is not None and not proj_overall.empty:
+        st.caption(f":grey[{_PROJECTION_NOTE}]")
 
     # --- Persistence by campus (all three) ---
     dark = _is_dark_theme()
