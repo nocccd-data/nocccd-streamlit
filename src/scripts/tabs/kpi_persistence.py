@@ -392,9 +392,10 @@ def _project_rate(
     year, and extrapolating at ``len(rates)`` aims one selection step past the
     last point while the label from `_compute_next_term` says one year.
     Measured on the even-year selection (NOCE Fall → Spring, fitting Fall
-    2020/2022/2024 at 79.1/65.8/64.7): the trend is -3.6 pp/yr, so Fall 2025
-    is 59.0% — but the chart read **55.4% under a "Fall 2025" label**, which
-    is that same line's *Fall 2026* value, one 2-year step out. Dividing by 10
+    2020/2022/2024 at 79.11/65.80/64.66 — the live rates, quoted to enough
+    precision to reproduce): the trend is -3.6 pp/yr, so Fall 2025 is 59.0%
+    — but the chart read **55.4% under a "Fall 2025" label**, which is that
+    same line's *Fall 2026* value, one 2-year step out. Dividing by 10
     is cosmetic to the fit (any affine x gives the same prediction) but keeps
     the slope readable as points per year.
     """

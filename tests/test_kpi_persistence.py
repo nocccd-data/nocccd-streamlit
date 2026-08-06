@@ -357,6 +357,34 @@ def test_contiguous_selection_projects_one_year_out():
     assert out.iloc[0]["_r_squared"] == pytest.approx(1.0)
 
 
+def test_lagging_campus_is_projected_at_the_term_it_is_labelled():
+    """Every campus shares one projected term, so every fit must aim there.
+
+    `_drop_incomplete` runs per campus/term, so one campus can end earlier
+    than another. The label has always been global (`_compute_next_term` runs
+    once, outside the group loop) — but the old positional target was
+    per-group, so a lagging campus got a value computed for its *own* next
+    slot under the shared label. Here NOCE stops at Fall 2023 while Cypress
+    runs to Fall 2025: the old code fit NOCE at Fall 2024 (48.0%) and printed
+    it as Fall 2026. Both campuses are now fit at Fall 2026.
+    """
+    df = pd.DataFrame({
+        "campus": ["Cypress"] * 6 + ["NOCE"] * 4,
+        "term_sort": [207, 217, 227, 237, 247, 257] + [207, 217, 227, 237],
+        "term_short": [f"Fall {2020 + i}" for i in range(6)]
+                      + [f"Fall {2020 + i}" for i in range(4)],
+        "rate": [0.50, 0.52, 0.54, 0.56, 0.58, 0.60]
+                + [0.40, 0.42, 0.44, 0.46],
+        "is_provisional": [False] * 10,
+    })
+    out = _compute_projections(df, "rate", ["campus"], "Linear Regression")
+    assert set(out["term_sort"]) == {267}
+    noce = out[out["campus"] == "NOCE"].iloc[0]
+    # +2 pp/yr from 0.46 at Fall 2023, three years on.
+    assert noce["rate"] == pytest.approx(0.52)
+    assert noce["rate"] != pytest.approx(0.48, abs=1e-4)   # its Fall 2024 value
+
+
 def test_weighted_moving_average_does_not_depend_on_spacing():
     """WMA averages the last 3 completed cohorts whatever years those are.
 
