@@ -322,6 +322,21 @@ def _calendar_gaps(df_overall: pd.DataFrame, term_code_col: str) -> list[str]:
     })
 
 
+def _last_completed(dfo: pd.DataFrame) -> pd.Series:
+    """The newest non-provisional row, or the newest row if all are flagged.
+
+    Used to anchor the projection segment. Falls back to the last row rather
+    than returning nothing: with no completed cohort there is no projection to
+    anchor anyway, and a caller that still draws one gets the old behaviour
+    instead of an exception.
+    """
+    if "is_provisional" in dfo.columns:
+        completed = dfo[~dfo["is_provisional"]]
+        if not completed.empty:
+            return completed.iloc[-1]
+    return dfo.iloc[-1]
+
+
 def _provisional_by_campus(df_overall: pd.DataFrame) -> dict[str, list[str]]:
     """``{campus: [term_short, ...]}`` for points still mid-flight."""
     if "is_provisional" not in df_overall.columns:
@@ -356,10 +371,16 @@ def _project_rate(
         y = np.array([v[1] for v in valid])
         coeffs = np.polyfit(x, y, 1)
         projected = float(np.polyval(coeffs, len(rates)))
-        y_pred = np.polyval(coeffs, x)
-        ss_res = float(np.sum((y - y_pred) ** 2))
-        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
-        r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        # R² through two points is 1.0 by construction — a line always fits
+        # two points perfectly, so the number would say nothing about the
+        # trend while looking like strong evidence. Report it only where it
+        # can discriminate. (Measured at n=5: Fullerton 0.89 vs NOCE 0.02.)
+        r_sq = None
+        if len(valid) >= 3:
+            y_pred = np.polyval(coeffs, x)
+            ss_res = float(np.sum((y - y_pred) ** 2))
+            ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+            r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
         return float(np.clip(projected, 0, 1)), r_sq
 
     # Weighted Moving Average
@@ -370,19 +391,41 @@ def _project_rate(
     return float(np.clip(projected, 0, 1)), None
 
 
+def _fmt_r_squared(value) -> str:
+    """R² for display. ``None`` when fewer than 3 completed cohorts were fit."""
+    return "n/a (<3 terms)" if value is None or pd.isna(value) else f"{value:.3f}"
+
+
 def _compute_projections(
     df: pd.DataFrame,
     rate_col: str,
     group_cols: list[str],
     method: str,
 ) -> pd.DataFrame:
-    """Compute one projected row per group."""
+    """Compute one projected row per group, fitting only completed cohorts.
+
+    A provisional cohort's rate is a partial count — its follow-up term is
+    still enrolling — so feeding it to the fit projects a decline that is an
+    artifact of the calendar, not the students. Measured on the 2020–2025
+    history: including the one provisional point moved Fullerton's forecast
+    from 53.3% to 47.1% and collapsed its R² from 0.89 to 0.20, turning a
+    genuine trend into noise.
+
+    Provisional rates are **masked to NaN rather than dropped**, which matters
+    twice: `_project_rate` skips NaN but keeps each point's original x
+    position, so the fitted line is not shifted, and it projects at
+    ``len(rates)`` — one step past the last *plotted* term. Dropping the rows
+    would shorten the series and aim the forecast at the provisional term's
+    own slot, drawing it on top of a point that is already there.
+    """
     next_label, next_sort = _compute_next_term(df)
     rows: list[dict] = []
     for keys, grp in df.groupby(group_cols, observed=True):
         grp_sorted = grp.sort_values("term_sort")
-        rates = grp_sorted[rate_col].tolist()
-        proj_val, r_sq = _project_rate(rates, method)
+        rate_series = grp_sorted[rate_col]
+        if "is_provisional" in grp_sorted.columns:
+            rate_series = rate_series.where(~grp_sorted["is_provisional"])
+        proj_val, r_sq = _project_rate(rate_series.tolist(), method)
         if proj_val is None:
             continue
         if not isinstance(keys, tuple):
@@ -543,7 +586,11 @@ def _build_campus_fig(
     if projection is not None and not projection.empty and not dfo.empty:
         proj_row = projection[projection["campus"] == campus]
         if not proj_row.empty:
-            last = dfo.iloc[-1]
+            # Anchor on the last COMPLETED point, not the last plotted one.
+            # The fit excludes provisional cohorts, so drawing the segment from
+            # a provisional marker would imply the forecast was projected out
+            # of it. The line spans the provisional point instead.
+            last = _last_completed(dfo)
             proj_term = (
                 proj_row.iloc[0]["term_short"], int(proj_row.iloc[0]["term_sort"])
             )
@@ -726,9 +773,17 @@ def _mpl_line_chart(
 
     proj_term: tuple[str, int] | None = None
     if proj_rate is not None and proj_label is not None and terms:
+        # Anchor on the last COMPLETED point, matching the Plotly chart: the
+        # fit excludes provisional cohorts, so starting the segment at one
+        # would imply the forecast came out of it.
+        anchor = len(terms) - 1
+        if "is_provisional" in dfo.columns:
+            done = [i for i, p in enumerate(dfo["is_provisional"]) if p is not True]
+            if done:
+                anchor = done[-1]
         ax.plot(
-            [terms[-1], proj_label],
-            [rates[-1], proj_rate],
+            [terms[anchor], proj_label],
+            [rates[anchor], proj_rate],
             marker="D", markersize=8, linewidth=2,
             linestyle="--", color="grey",
         )
@@ -841,26 +896,37 @@ def _generate_pdf(
                 lines = [
                     "Method: Linear Regression",
                     "",
-                    "A straight line (y = mx + b) is fit through all available",
-                    "historical data points using least-squares regression.",
-                    "The projected value is the extrapolated point for the",
-                    "next fall term.",
+                    "A straight line (y = mx + b) is fit through the",
+                    "COMPLETED historical points using least-squares",
+                    "regression. The projected value is the extrapolated",
+                    "point for the next fall term.",
+                    "",
+                    "Cohorts marked provisional are EXCLUDED from the fit.",
+                    "Their follow-up term is still enrolling, so the rate is",
+                    "a partial count; including one projects a decline that",
+                    "reflects the calendar rather than the students.",
                     "",
                     "R² (goodness of fit) indicates how well the linear",
                     "model fits the historical data. Values closer to 1.0",
                     "mean a stronger linear trend; values near 0 suggest no",
                     "clear trend and the projection should be treated with",
-                    "caution.",
+                    "caution. It is reported only when at least 3 completed",
+                    "terms were fit — a line matches 2 points perfectly, so",
+                    "R² below that says nothing.",
                 ]
             else:
                 lines = [
                     "Method: Weighted Moving Average",
                     "",
-                    "The last 3 data points are averaged with increasing",
-                    "weights (1×, 2×, 3×), giving the most recent",
+                    "The last 3 COMPLETED data points are averaged with",
+                    "increasing weights (1×, 2×, 3×), giving the most recent",
                     "year triple the influence of the oldest year in the",
                     "window. This method responds quickly to recent changes",
                     "without assuming a long-term trend.",
+                    "",
+                    "Cohorts marked provisional are excluded — their",
+                    "follow-up term is still enrolling, so the rate is a",
+                    "partial count that will rise.",
                 ]
 
             for line in lines:
@@ -887,7 +953,7 @@ def _generate_pdf(
                         row = proj_overall[proj_overall["campus"] == campus]
                         if not row.empty:
                             r_sq_data.append(
-                                (campus, f"{row.iloc[0]['_r_squared']:.3f}"))
+                                (campus, _fmt_r_squared(row.iloc[0]["_r_squared"])))
 
                 if r_sq_data:
                     y -= 0.05
@@ -1138,22 +1204,32 @@ def render():
         with st.expander("Projection Methodology"):
             if proj_method == "Linear Regression":
                 st.markdown(
-                    "**Linear Regression** fits a straight line through all "
-                    "available historical data points using least-squares "
+                    "**Linear Regression** fits a straight line through the "
+                    "**completed** historical points using least-squares "
                     "regression. The projected value is the extrapolated point "
                     "for the next fall term.\n\n"
+                    "**Provisional cohorts are excluded from the fit.** Their "
+                    "follow-up term is still enrolling, so the rate is a "
+                    "partial count — including one projects a decline that "
+                    "reflects the calendar rather than the students.\n\n"
                     "**R²** indicates how well the linear model fits the "
                     "historical data. Values closer to 1.0 mean a stronger "
                     "linear trend; values near 0 suggest no clear trend and "
-                    "the projection should be treated with caution."
+                    "the projection should be treated with caution. It is "
+                    "reported only when at least 3 completed terms were fit — "
+                    "a line matches 2 points perfectly, so R² below that "
+                    "carries no information."
                 )
             else:
                 st.markdown(
-                    "**Weighted Moving Average** uses the last 3 data points "
-                    "with increasing weights (1×, 2×, 3×), "
+                    "**Weighted Moving Average** uses the last 3 **completed** "
+                    "data points with increasing weights (1×, 2×, 3×), "
                     "giving the most recent year triple the influence of the "
                     "oldest year in the window. This method responds quickly "
-                    "to recent changes without assuming a long-term trend."
+                    "to recent changes without assuming a long-term trend.\n\n"
+                    "**Provisional cohorts are excluded** — their follow-up "
+                    "term is still enrolling, so the rate is a partial count "
+                    "that will rise."
                 )
 
             st.caption(
@@ -1171,7 +1247,7 @@ def render():
                         if not row.empty:
                             r_sq_rows.append({
                                 "Campus": campus,
-                                "R²": f"{row.iloc[0]['_r_squared']:.3f}",
+                                "R²": _fmt_r_squared(row.iloc[0]["_r_squared"]),
                             })
                 if r_sq_rows:
                     st.dataframe(
