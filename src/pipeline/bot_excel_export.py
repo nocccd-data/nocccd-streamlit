@@ -72,6 +72,7 @@ from src.scripts.tabs.bot_helpers import (  # noqa: E402
     compute_pct_change,
     visible_genders,
     visible_races,
+    window_bounds,
 )
 
 
@@ -268,7 +269,7 @@ def _count_summary(
 ) -> pd.DataFrame:
     if len(years) < 2:
         return pd.DataFrame()
-    first_yr, last_yr = years[0], years[-1]
+    first_yr, last_yr = window_bounds(years)
     piv = df.pivot_table(
         index=key_col,
         columns="academic_year",
@@ -302,7 +303,7 @@ def _value_summary(
 ) -> pd.DataFrame:
     if len(years) < 2:
         return pd.DataFrame()
-    first_yr, last_yr = years[0], years[-1]
+    first_yr, last_yr = window_bounds(years)
     piv = df.pivot_table(
         index=key_col,
         columns="academic_year",

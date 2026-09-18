@@ -45,6 +45,8 @@ from src.scripts.tabs.bot_helpers import (
     RACE_COLORS,
     RACE_ORDER,
     RACE_SHORT,
+    window_bounds,
+    window_years,
 )
 
 _CFG = DATASETS["bot_goal3_units"]
@@ -136,7 +138,7 @@ def _visible_categories(df, key_col, order, threshold=10):
     """
     if df.empty or "count" not in df.columns:
         return list(order)
-    years = sorted(df["academic_year"].dropna().unique())
+    years = window_years(df["academic_year"].dropna().unique())
     if len(years) < 2:
         max_by_cat = df.groupby(key_col)["count"].max()
         return [c for c in order if max_by_cat.get(c, 0) >= threshold]
@@ -197,9 +199,11 @@ def _pct_change(df_agg, group_col="camp_desc", order=None):
     """5-yr % change in average units per group."""
     rows = []
     keys = order if order is not None else sorted(df_agg[group_col].unique())
+    window = window_years(df_agg["academic_year"].dropna().unique())
     for key in keys:
         grp = df_agg[df_agg[group_col] == key].sort_values("academic_year")
-        grp = grp[grp["avg_units"].notna() & (grp["avg_units"] > 0)]
+        grp = grp[grp["academic_year"].isin(window)
+                  & grp["avg_units"].notna() & (grp["avg_units"] > 0)]
         if len(grp) < 2:
             continue
         first = grp.iloc[0]["avg_units"]
@@ -419,7 +423,7 @@ def _build_race_summary(df_race, years):
     )
     return _build_summary_html(
         _visible_races(df_race), RACE_SHORT, RACE_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -472,7 +476,7 @@ def _build_gender_summary(df_gender, years):
     )
     return _build_summary_html(
         _visible_genders(df_gender), GENDER_LABELS, GENDER_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -524,7 +528,7 @@ def _build_firstgen_summary(df_fg, years):
     )
     return _build_summary_html(
         FIRSTGEN_ORDER, FIRSTGEN_LABELS, FIRSTGEN_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -745,7 +749,7 @@ def _mpl_race_summary(fig, bbox, df_race, years):
     )
     _mpl_summary_table(fig, bbox, _visible_races(df_race),
                        RACE_SHORT, RACE_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_gender_chart(fig, bbox, df_gender, years):
@@ -791,7 +795,7 @@ def _mpl_gender_summary(fig, bbox, df_gender, years):
     )
     _mpl_summary_table(fig, bbox, _visible_genders(df_gender),
                        GENDER_LABELS, GENDER_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_firstgen_chart(fig, bbox, df_fg, years):
@@ -838,7 +842,7 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
         values="avg_units", aggfunc="first",
     )
     _mpl_summary_table(fig, bbox, FIRSTGEN_ORDER, FIRSTGEN_LABELS,
-                       FIRSTGEN_COLORS, piv, years[0], years[-1])
+                       FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
 def _generate_pdf(df) -> bytes:
@@ -857,8 +861,9 @@ def _generate_pdf(df) -> bytes:
     })
     PAGE_W, PAGE_H = 8.5, 11.0
     years = sorted(df["academic_year"].dropna().unique())
+    first_yr, last_yr = window_bounds(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
+        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
         else years[0] if years else ""
     )
 
@@ -1188,8 +1193,9 @@ def render():
 
     df = st.session_state["bg3u_df"]
     years = sorted(df["academic_year"].dropna().unique())
+    first_yr, last_yr = window_bounds(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
+        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
         else years[0] if years else ""
     )
 

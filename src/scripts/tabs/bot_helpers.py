@@ -16,6 +16,8 @@ import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
+from src.pipeline.config import BOT_WINDOW_YEARS
+
 # ---------------------------------------------------------------------------
 # Constants — NOCCCD brand colors & category orders
 # ---------------------------------------------------------------------------
@@ -116,9 +118,10 @@ def aggregate_headcount(
 def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     """5-year % change: (last - first) / first * 100 per campus."""
     rows: list[dict] = []
+    window = window_years(df_agg["academic_year"].dropna().unique())
     for camp in CAMPUS_ORDER:
         grp = df_agg[df_agg["camp_desc"] == camp].sort_values("academic_year")
-        grp = grp[grp["headcount"] > 0]
+        grp = grp[grp["academic_year"].isin(window) & (grp["headcount"] > 0)]
         if len(grp) < 2:
             continue
         first = grp.iloc[0]["headcount"]
@@ -132,9 +135,49 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-# Categories whose first-year AND last-year counts both fall below this
+def _label_start_year(label) -> int | None:
+    """``"2021-2022"`` and the wage tab's shifted ``"2021-22"`` both -> 2021."""
+    try:
+        return int(str(label)[:4])
+    except (TypeError, ValueError):
+        return None
+
+
+def window_years(years) -> list:
+    """The rolling metrics window: the ``BOT_WINDOW_YEARS`` consecutive
+    academic years ending at the latest year present in *years*.
+
+    BOT extracts may carry an older reference year (2018-19) ahead of the
+    rolling window. Charts render every year, but the summary table's
+    first/last columns, the "5-Yr % Change", and small-n suppression must
+    only ever see the window — otherwise a 5-year label silently reports a
+    7-year change. Every first/last derivation goes through here.
+
+    The window is anchored on the latest year and defined by consecutive
+    start years, NOT by taking the last N labels present: if a window year
+    has no rows (SCFF wage files land months late; a user deselects a year
+    in the sidebar) the reference year must not slide in to fill the gap.
+    """
+    labelled = sorted(
+        (start, str(y)) for y in set(years)
+        if (start := _label_start_year(y)) is not None
+    )
+    if not labelled:
+        return []
+    end = labelled[-1][0]
+    lo = end - BOT_WINDOW_YEARS + 1
+    return [label for start, label in labelled if lo <= start <= end]
+
+
+def window_bounds(years) -> tuple:
+    """``(first, last)`` of the metrics window, or ``(None, None)``."""
+    w = window_years(years)
+    return (w[0], w[-1]) if w else (None, None)
+
+
+# Categories whose window first-year OR last-year count falls below this
 # threshold are suppressed from proportion charts and summary tables
-# (if either boundary year is >= threshold, the category is still shown).
+# (both boundary years must be >= threshold for the category to show).
 CATEGORY_MIN_COUNT = 10
 # Legacy alias kept for backward compatibility
 RACE_MIN_COUNT = CATEGORY_MIN_COUNT
@@ -153,7 +196,7 @@ def _visible_categories(df, key_col, order,
     """
     if df is None or df.empty or "count" not in df.columns:
         return list(order)
-    years = sorted(df["academic_year"].dropna().unique())
+    years = window_years(df["academic_year"].dropna().unique())
     if len(years) < 2:
         max_by_cat = df.groupby(key_col)["count"].max()
         return [c for c in order if max_by_cat.get(c, 0) >= threshold]
@@ -501,7 +544,7 @@ def build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         _visible_races(df_race), RACE_SHORT, RACE_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -555,7 +598,7 @@ def build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         _visible_genders(df_gender), GENDER_LABELS, GENDER_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -611,7 +654,7 @@ def build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         FIRSTGEN_ORDER, FIRSTGEN_LABELS, FIRSTGEN_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -657,8 +700,9 @@ def render_bot_charts(
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
     """
     years = sorted(df["academic_year"].dropna().unique())
+    first_yr, last_yr = window_bounds(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
+        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
         else years[0] if years else ""
     )
     org = titles["org"]
@@ -989,7 +1033,7 @@ def _mpl_race_summary(fig, bbox, df_race, years):
     )
     _mpl_summary_table(fig, bbox, _visible_races(df_race),
                        RACE_SHORT, RACE_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_gender_chart(fig, bbox, df_gender, years):
@@ -1040,7 +1084,7 @@ def _mpl_gender_summary(fig, bbox, df_gender, years):
     )
     _mpl_summary_table(fig, bbox, _visible_genders(df_gender),
                        GENDER_LABELS, GENDER_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_firstgen_chart(fig, bbox, df_fg, years):
@@ -1092,7 +1136,7 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
         values="count", aggfunc="first",
     )
     _mpl_summary_table(fig, bbox, FIRSTGEN_ORDER, FIRSTGEN_LABELS,
-                       FIRSTGEN_COLORS, piv, years[0], years[-1])
+                       FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
 def generate_bot_pdf(df, titles, base_df=None) -> bytes:
@@ -1119,8 +1163,9 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
 
     PAGE_W, PAGE_H = 8.5, 11.0
     years = sorted(df["academic_year"].dropna().unique())
+    first_yr, last_yr = window_bounds(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
+        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
         else years[0] if years else ""
     )
     headcount_only = titles.get("headcount_only", False)

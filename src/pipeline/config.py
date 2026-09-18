@@ -122,82 +122,105 @@ DATASETS = {
     "bot_goal1_students": {
         "sql_file": "bot_goal1_students.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_cert": {
         "sql_file": "bot_goal2_cert.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_cert_nc": {
         "sql_file": "bot_goal2_cert_nc.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_cert_nc_denom": {
         "sql_file": "bot_goal2_cert_nc_denom.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_assoc": {
         "sql_file": "bot_goal2_assoc.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_adt": {
         "sql_file": "bot_goal2_adt.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_bac": {
         "sql_file": "bot_goal2_bac.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_xfer": {
         "sql_file": "bot_goal2_xfer.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_wage": {
         "sql_file": "bot_goal2_wage.sql",
         "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "ref_acyr_code": ["2017"],  # +1 display shift renders this as 2018-19
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal2_wage_denom": {
         "sql_file": "bot_goal2_wage_denom.sql",
         "acyr_code": ["2019", "2020", "2021", "2022", "2023"],
+        "ref_acyr_code": ["2017"],  # +1 display shift renders this as 2018-19
         "param_name": "acyr_code",
         "db_section": "dwhdb",
     },
     "bot_goal3_finaid": {
         "sql_file": "bot_goal3_finaid.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal3_units": {
         "sql_file": "bot_goal3_units.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },
     "bot_goal4_xfer_ready": {
         "sql_file": "bot_goal4_xfer_ready.sql",
         "acyr_code": ["2021", "2022", "2023", "2024", "2025"],
+        "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
     }
 }
+
+# Each BOT dataset's `acyr_code` is its rolling metrics window; `ref_acyr_code`
+# holds reference-only years the executives asked to see alongside it (2018-19,
+# added 2026-09-18). extract.py pulls both, but the .hyper carries no marker,
+# so the tabs treat the LAST this-many academic years as the window and
+# anything earlier as reference. Summary-table first/last columns, "5-Yr %
+# Change", and small-n suppression never see a reference year.
+# tests/test_bot_window_years.py pins len(acyr_code) == this for every BOT
+# dataset and every ref year < the window, so the two rules cannot disagree.
+BOT_WINDOW_YEARS = 5
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 HYPER_DIR = Path(__file__).resolve().parent / "hyper"
