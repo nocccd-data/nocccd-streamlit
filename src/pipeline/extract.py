@@ -112,7 +112,10 @@ def extract_dataset(name: str) -> Path:
 
     # Guaranteed by the guards above; restated so the type checker narrows it.
     assert param_name is not None
-    values = cfg[param_name]
+    # A dataset may carry reference-only values under `ref_<param_name>` (the
+    # BOT datasets' `ref_acyr_code`, see config.py). They are extracted exactly
+    # like the main values — the distinction only matters to the consumers.
+    values = list(cfg.get(f"ref_{param_name}", [])) + list(cfg[param_name])
 
     # Multi-acyr templates have an `IN (:t1)` placeholder we expand to one
     # placeholder per supplied value. `\s*` on both sides of `(` AND before

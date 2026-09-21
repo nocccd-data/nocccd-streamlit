@@ -16,6 +16,8 @@ import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
+from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
+
 # ---------------------------------------------------------------------------
 # Constants — NOCCCD brand colors & category orders
 # ---------------------------------------------------------------------------
@@ -116,9 +118,10 @@ def aggregate_headcount(
 def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     """5-year % change: (last - first) / first * 100 per campus."""
     rows: list[dict] = []
+    window = window_years(df_agg["academic_year"].dropna().unique())
     for camp in CAMPUS_ORDER:
         grp = df_agg[df_agg["camp_desc"] == camp].sort_values("academic_year")
-        grp = grp[grp["headcount"] > 0]
+        grp = grp[grp["academic_year"].isin(window) & (grp["headcount"] > 0)]
         if len(grp) < 2:
             continue
         first = grp.iloc[0]["headcount"]
@@ -132,9 +135,102 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-# Categories whose first-year AND last-year counts both fall below this
+def pct_change_axis_range(values) -> tuple[float, float]:
+    """x-axis ``(lo, hi)`` for a horizontal "5-Yr % Change" bar chart.
+
+    Two rules, shared by the Plotly and matplotlib builders:
+
+    * The axis always spans zero — the bars grow from it, so an axis that
+      starts at ``min - 5`` cuts every bar off at the left once all values
+      exceed 5.
+    * Each side is padded for the "outside" text label: proportional to the
+      largest bar on that side, with an absolute floor. Multiplicative
+      padding alone collapses for near-zero values — Goal 4's +0.2% bar got
+      ``0.2 * 1.8 - 0.2 = 0.16`` units of room and its label was clipped.
+    """
+    vals = [float(v) for v in values if v is not None and pd.notna(v)]
+    if not vals:
+        return (-5.0, 5.0)
+    lo_v, hi_v = min(vals), max(vals)
+    lo, hi = min(lo_v, 0.0), max(hi_v, 0.0)
+    extent = max(hi - lo, 2.0)
+    floor = extent * 0.25
+    left = max(abs(lo_v) * 0.8, floor) if lo_v < 0 else floor
+    right = max(hi_v * 0.8, floor) if hi_v > 0 else floor
+    return (lo - left, hi + right)
+
+
+def year_header_fontsize(years) -> int:
+    """Font size for the year headers of the PDF proportion tables.
+
+    The data columns split a fixed strip, so they narrow as years are added.
+    Five 9-character labels fit at 7pt bold; the reference year makes six,
+    and at 7pt the last digit of each disappears under the next label.
+    6pt matches the cell values beneath them.
+    """
+    return 7 if len(years) <= 5 else 6
+
+
+def _label_start_year(label) -> int | None:
+    """``"2021-2022"`` and the wage tab's shifted ``"2021-22"`` both -> 2021."""
+    try:
+        return int(str(label)[:4])
+    except (TypeError, ValueError):
+        return None
+
+
+def _reference_start_years() -> frozenset[int]:
+    """Start years that are reference-only on some BOT chart, from config.
+
+    Every BOT dataset's ``ref_acyr_code`` is included as-is. The wage pair's
+    ref is acyr 2017 and its tab shifts display labels +1 (so it renders as
+    2018-19); including both the raw and shifted forms is harmless because a
+    reference year is always strictly older than every window year, so
+    over-excluding 2017 on a tab whose window starts at 2021 removes nothing.
+    """
+    starts: set[int] = set()
+    for name, cfg in DATASETS.items():
+        if not name.startswith("bot_"):
+            continue
+        for ref in cfg.get("ref_acyr_code", []):
+            starts.add(int(ref))
+            starts.add(int(ref) + 1)
+    return frozenset(starts)
+
+
+def window_years(years) -> list:
+    """The rolling metrics window: the non-reference years in *years*, at
+    most the latest ``BOT_WINDOW_YEARS`` of them.
+
+    BOT extracts may carry an older reference year (2018-19) ahead of the
+    rolling window. Charts render every year, but the summary table's
+    first/last columns, the "5-Yr % Change", and small-n suppression must
+    only ever see the window — otherwise a 5-year label silently reports a
+    7-year change. Every first/last derivation goes through here.
+
+    Reference years are excluded EXPLICITLY, from ``ref_acyr_code`` in
+    config — never inferred from position. Inferring "the last N present"
+    or "N consecutive years ending at the latest" both let the reference
+    year slide into the window whenever a window year is absent: a late
+    SCFF wage file, or a user narrowing the sidebar to 2021-22 alone.
+    """
+    refs = _reference_start_years()
+    labelled = sorted(
+        (start, str(y)) for y in set(years)
+        if (start := _label_start_year(y)) is not None and start not in refs
+    )
+    return [label for _, label in labelled[-BOT_WINDOW_YEARS:]]
+
+
+def window_bounds(years) -> tuple:
+    """``(first, last)`` of the metrics window, or ``(None, None)``."""
+    w = window_years(years)
+    return (w[0], w[-1]) if w else (None, None)
+
+
+# Categories whose window first-year OR last-year count falls below this
 # threshold are suppressed from proportion charts and summary tables
-# (if either boundary year is >= threshold, the category is still shown).
+# (both boundary years must be >= threshold for the category to show).
 CATEGORY_MIN_COUNT = 10
 # Legacy alias kept for backward compatibility
 RACE_MIN_COUNT = CATEGORY_MIN_COUNT
@@ -153,9 +249,13 @@ def _visible_categories(df, key_col, order,
     """
     if df is None or df.empty or "count" not in df.columns:
         return list(order)
-    years = sorted(df["academic_year"].dropna().unique())
+    years = window_years(df["academic_year"].dropna().unique())
     if len(years) < 2:
-        max_by_cat = df.groupby(key_col)["count"].max()
+        # Judge only the window year(s) actually on screen — the frame
+        # may still carry the reference year, whose larger historical
+        # count must not lift a sub-threshold group past suppression.
+        in_window = df[df["academic_year"].isin(years)]
+        max_by_cat = in_window.groupby(key_col)["count"].max()
         return [c for c in order if max_by_cat.get(c, 0) >= threshold]
     first_yr, last_yr = years[0], years[-1]
     first_counts = (
@@ -353,17 +453,12 @@ def build_pct_change_chart(df_pct: pd.DataFrame):
         textposition="outside",
         textfont=dict(size=12),
     )
-    min_val = df_pct["pct_change"].min()
-    max_val = df_pct["pct_change"].max()
     fig.update_layout(
         height=420,
         showlegend=False,
         title="5-Yr % Change",
         xaxis_title="% Change",
-        xaxis_range=[
-            min_val * 1.8 if min_val < 0 else min_val - 5,
-            max_val * 1.8 if max_val > 0 else max_val + 5,
-        ],
+        xaxis_range=list(pct_change_axis_range(df_pct["pct_change"])),
         yaxis_title=None,
         margin=dict(l=10, t=50),
     )
@@ -493,7 +588,7 @@ def _build_summary_table(
 
 
 def build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_race.pivot_table(
         index="race_description", columns="academic_year",
@@ -501,7 +596,7 @@ def build_race_summary_html(df_race: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         _visible_races(df_race), RACE_SHORT, RACE_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -547,7 +642,7 @@ def build_gender_bar_chart(df_gender: pd.DataFrame, years: list[str]):
 
 
 def build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str:
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_gender.pivot_table(
         index="gender", columns="academic_year",
@@ -555,7 +650,7 @@ def build_gender_summary_html(df_gender: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         _visible_genders(df_gender), GENDER_LABELS, GENDER_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -603,7 +698,7 @@ def build_firstgen_line_chart(df_fg: pd.DataFrame, years: list[str]):
 
 
 def build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_fg.pivot_table(
         index="fg", columns="academic_year",
@@ -611,7 +706,7 @@ def build_firstgen_summary_html(df_fg: pd.DataFrame, years: list[str]) -> str:
     )
     return _build_summary_table(
         FIRSTGEN_ORDER, FIRSTGEN_LABELS, FIRSTGEN_COLORS,
-        piv, years[0], years[-1],
+        piv, *window_bounds(years),
     )
 
 
@@ -657,9 +752,10 @@ def render_bot_charts(
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
     """
     years = sorted(df["academic_year"].dropna().unique())
+    window = window_years(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
-        else years[0] if years else ""
+        f"{window[0]} to {window[-1]}" if len(window) >= 2
+        else window[0] if window else ""
     )
     org = titles["org"]
 
@@ -860,9 +956,13 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
         colors = [COLOR_MAP.get(c, "#888") for c in pct_campuses]
         ys = np.arange(len(pct_campuses))
         ax_pct.barh(ys, vals, color=colors)
+        lo, hi = pct_change_axis_range(vals)
+        # Label gap scales with the axis so it neither vanishes on a wide
+        # axis nor pushes the label off the edge of a tight one.
+        gap = (hi - lo) * 0.02
         for y_, v in zip(ys, vals):
             ha = "left" if v >= 0 else "right"
-            offset = 0.5 if v >= 0 else -0.5
+            offset = gap if v >= 0 else -gap
             ax_pct.text(v + offset, y_, f"{v:.1f}%", va="center",
                         ha=ha, fontsize=6)
         ax_pct.set_yticks(ys)
@@ -872,11 +972,7 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
         ax_pct.spines["top"].set_visible(False)
         ax_pct.spines["right"].set_visible(False)
         ax_pct.axvline(0, color="#888", linewidth=0.5)
-        min_v, max_v = min(vals), max(vals)
-        ax_pct.set_xlim(
-            min_v * 1.8 if min_v < 0 else min_v - 5,
-            max_v * 1.8 if max_v > 0 else max_v + 5,
-        )
+        ax_pct.set_xlim(lo, hi)
     else:
         ax_pct.axis("off")
 
@@ -906,7 +1002,8 @@ def _mpl_race_proportion_table(fig, bbox, df_race, years):
     for i, yr in enumerate(years):
         x = label_col_w + i * data_col_w
         ax.text(x + data_col_w / 2, y_top + row_h / 2, yr,
-                ha="center", va="center", fontsize=7, fontweight="bold")
+                ha="center", va="center",
+                fontsize=year_header_fontsize(years), fontweight="bold")
 
     # Data rows
     for r, race in enumerate(visible):
@@ -981,7 +1078,7 @@ def _mpl_summary_table(fig, bbox, order, label_map, color_map, piv,
 
 
 def _mpl_race_summary(fig, bbox, df_race, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_race.pivot_table(
         index="race_description", columns="academic_year",
@@ -989,7 +1086,7 @@ def _mpl_race_summary(fig, bbox, df_race, years):
     )
     _mpl_summary_table(fig, bbox, _visible_races(df_race),
                        RACE_SHORT, RACE_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_gender_chart(fig, bbox, df_gender, years):
@@ -1032,7 +1129,7 @@ def _mpl_gender_chart(fig, bbox, df_gender, years):
 
 
 def _mpl_gender_summary(fig, bbox, df_gender, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_gender.pivot_table(
         index="gender", columns="academic_year",
@@ -1040,7 +1137,7 @@ def _mpl_gender_summary(fig, bbox, df_gender, years):
     )
     _mpl_summary_table(fig, bbox, _visible_genders(df_gender),
                        GENDER_LABELS, GENDER_COLORS,
-                       piv, years[0], years[-1])
+                       piv, *window_bounds(years))
 
 
 def _mpl_firstgen_chart(fig, bbox, df_fg, years):
@@ -1085,14 +1182,14 @@ def _mpl_firstgen_chart(fig, bbox, df_fg, years):
 
 
 def _mpl_firstgen_summary(fig, bbox, df_fg, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_fg.pivot_table(
         index="fg", columns="academic_year",
         values="count", aggfunc="first",
     )
     _mpl_summary_table(fig, bbox, FIRSTGEN_ORDER, FIRSTGEN_LABELS,
-                       FIRSTGEN_COLORS, piv, years[0], years[-1])
+                       FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
 def generate_bot_pdf(df, titles, base_df=None) -> bytes:
@@ -1119,9 +1216,10 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
 
     PAGE_W, PAGE_H = 8.5, 11.0
     years = sorted(df["academic_year"].dropna().unique())
+    window = window_years(years)
     year_range = (
-        f"{years[0]} to {years[-1]}" if len(years) >= 2
-        else years[0] if years else ""
+        f"{window[0]} to {window[-1]}" if len(window) >= 2
+        else window[0] if window else ""
     )
     headcount_only = titles.get("headcount_only", False)
 

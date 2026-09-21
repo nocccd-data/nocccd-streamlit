@@ -16,13 +16,34 @@
 - NOCCCD unduplicated count: `df.groupby("academic_year")["pidm"].nunique()` (cross-campus dedup, NOT sum of per-campus counts)
 - Credit-only filter for first-gen: `df[df["site"] == "Credit"]` (NOCE excluded due to survey data gaps)
 - Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting
-- 5-yr % change: `(last_year - first_year) / first_year * 100`
+- 5-yr % change: `(last_year - first_year) / first_year * 100`, where first/last are the edges of the **metrics window** (see below), never the reference year
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
 
+## Reference year and the metrics window
+
+Every BOT dataset in `config.py` carries two year lists:
+
+- `acyr_code` — the rolling **5-year metrics window** (`BOT_WINDOW_YEARS = 5`). Roll it forward each year.
+- `ref_acyr_code` — **reference-only** years the executives asked to see alongside the window (`["2018"]`, added 2026-09-18; the wage pair uses `["2017"]` because its tab shifts display labels +1, so acyr 2017 renders as 2018-19). Change the reference in one place here. `ref_acyr_code: []` removes it from every layer — but `tests/test_bot_window_years.py` pins the current reference deliberately, so retiring it means updating that test too, not just the config.
+
+Charts **render** every year present, so 2018-19 draws as an extra left-hand column. But the reference year never feeds a metric. Everything derived from "first year" / "last year" goes through `window_years()` / `window_bounds()` in `bot_helpers.py`:
+
+- summary-table first/last columns and the "5-Yr % Change"
+- the campus/group `pct_change` bars
+- small-sample suppression (below)
+- the "YYYY-YYYY to YYYY-YYYY" title and its single-year fallback
+- the `len(...) < 2` "enough years to compare" guards on every summary table (HTML, PDF, interactive Excel, bulk Excel)
+
+`window_years()` excludes reference years **explicitly**, from `ref_acyr_code` in config — never by position. Both positional rules ("last N present", "N consecutive ending at the latest") let the reference slide into the window whenever a window year is absent: a late SCFF wage file, or a user narrowing the sidebar to 2021-22 alone.
+
+**Fetch rule** (`data_provider._download_and_read`): the reference year is included only when the tab's selection is its **full** configured window. A reference column against a partial window is meaningless, and the frame it produces — reference plus a sliver — is what let 2018-19 leak into metrics and past suppression before this was fixed. Narrowing the sidebar therefore behaves exactly as it did before the reference year existed. The bulk exporters read the extract whole and always see all years.
+
+Invariants pinned by `tests/test_bot_window_years.py`: every BOT dataset has exactly `BOT_WINDOW_YEARS` entries in `acyr_code`, every reference year sorts before the window, and the reference is 2018-19 on every chart after the wage shift.
+
 ## Small-sample category suppression
 
-Race and gender categories are hidden when EITHER the first-year OR last-year count falls below `CATEGORY_MIN_COUNT` (default 10). Both boundary years must have ≥ 10 for the category to be shown (middle years are ignored). The rule targets first/last years specifically because the summary table's 5-yr % change is computed from those two values, so small counts on either side make the change unreliable. Implemented via `_visible_categories(df, key_col, order, threshold)` in `bot_helpers.py` with thin wrappers `_visible_races` and `_visible_genders`. An equivalent helper exists in `bot_goal3_units.py` for the average-metric tab. The filter is applied consistently in the interactive chart, the summary table, and the PDF export.
+Race and gender categories are hidden when EITHER the first-year OR last-year count of the **metrics window** falls below `CATEGORY_MIN_COUNT` (default 10). Both window boundary years must have ≥ 10 for the category to be shown (middle years and the reference year are ignored). When fewer than two window years are present, the category is judged on the maximum count across the window year(s) actually on screen — never on the reference year's count, whose larger historical numbers must not lift a sub-threshold group past suppression. The rule targets first/last years specifically because the summary table's 5-yr % change is computed from those two values, so small counts on either side make the change unreliable. Implemented via `_visible_categories(df, key_col, order, threshold)` in `bot_helpers.py` with thin wrappers `_visible_races` and `_visible_genders`. An equivalent helper exists in `bot_goal3_units.py` for the average-metric tab. The filter is applied consistently in the interactive chart, the summary table, and the PDF export.
 
 ## Rate metrics (Goal 2+ tabs)
 
@@ -95,6 +116,10 @@ The lower-level building blocks in `bot_excel_helpers.py` — `ExcelSection`, `s
 **BOT section layout gotcha**: The gender section's horizontal bar chart has long y-axis labels (e.g. "2024-2025") that extend left of the axes box. When placed at `left=0.06` (the default section margin), matplotlib clips them at the page edge. The gender section uses `left=0.12` with width `0.48` instead to leave room for tick labels. Sections with labels on the x-axis (headcount, first-gen) don't hit this issue.
 
 **PdfPages early-return gotcha**: In `generate_bot_pdf()`, when `headcount_only=True` (Bachelor's tab), it's tempting to `return buf.getvalue()` right after saving page 1 to skip page 2. That produces a **truncated PDF** that Acrobat refuses to open, because `PdfPages.__exit__` writes the PDF trailer/xref table only when the `with` block exits. Instead, wrap the page 2 code in an `if not headcount_only:` branch inside the `with PdfPages(buf) as pdf:` block, and return `buf.getvalue()` only after the block finishes.
+
+**"5-Yr % Change" bar axis**: both the Plotly and matplotlib builders (in `bot_helpers.py` and their copies in `bot_goal3_units.py`) take their x-range from `pct_change_axis_range(values)`. It always spans zero (the bars grow from it) and pads each side proportionally to that side's largest bar **with an absolute floor**, so a near-zero value still gets room for its "outside" label. The previous per-site formula (`min*1.8 | min-5`, `max*1.8 | max+5`) clipped the label at +0.2% (Goal 4) and, for all-large-positive values, started the axis past zero and cut the bars off at the left. The matplotlib label gap scales with the axis (`(hi - lo) * 0.02`) for the same reason.
+
+**Six-column year headers**: the PDF proportion tables split a fixed strip into one column per year. Five 9-character headers fit at 7pt bold; with the reference year there are six, and at 7pt the last digit of each disappears under the next label. `year_header_fontsize(years)` drops them to 6pt — matching the cell values — when there are more than five.
 
 **BOT PDF paper coordinates** (constant across all tabs, including Units):
 - Page 1 Section 1 (Headcount): chart_bbox bottom=0.58, Source at y=0.54 (below the chart's legend).
