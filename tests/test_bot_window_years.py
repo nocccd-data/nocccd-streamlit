@@ -115,6 +115,32 @@ def test_window_handles_wage_tab_two_digit_labels():
     assert window_bounds(present) == ("2020-21", "2024-25")
 
 
+# --- narrowed sidebar selection: the reference year must never join the window ---
+
+def test_window_excludes_reference_when_only_earliest_window_year_selected():
+    # User unchecks everything but 2021-22; the fetch still carries 2018-19.
+    # Anchoring on the latest present year (2021 - 4 = 2017 <= 2018) would
+    # pull the reference in. It must not.
+    assert window_years([REF, "2021-2022"]) == ["2021-2022"]
+    assert window_bounds([REF, "2021-2022"]) == ("2021-2022", "2021-2022")
+
+
+def test_window_excludes_reference_with_two_early_window_years():
+    assert window_years([REF, "2021-2022", "2022-2023"]) == ["2021-2022", "2022-2023"]
+
+
+def test_window_is_empty_when_only_reference_present():
+    assert window_years([REF]) == []
+    assert window_bounds([REF]) == (None, None)
+
+
+def test_wage_reference_2017_is_also_excluded():
+    # The wage pair's ref is acyr 2017; before the +1 display shift its raw
+    # label would be 2017-2018. Both raw and shifted forms must be excluded.
+    assert window_years(["2017-2018", "2020-2021"]) == ["2020-2021"]
+    assert window_years(["2018-19", "2020-21"]) == ["2020-21"]
+
+
 def test_window_ignores_non_year_labels():
     assert window_years([None, "n/a", *SIX]) == WINDOW
 
@@ -135,6 +161,15 @@ def test_suppression_ignores_tiny_reference_year():
     # 2018-19 is below threshold but both window edges are healthy: must show.
     df = _race_frame({REF: 3, **{y: 50 for y in WINDOW}})
     assert "Filipino" in _visible_categories(df, "race_description", RACE_ORDER)
+
+
+def test_single_selected_year_suppression_ignores_reference_count():
+    # Only 2025-26 selected. Filipino: 50 in the reference year, 3 on screen.
+    # The <2-window-years fallback must judge the 3, not the 50.
+    df = _race_frame({REF: 50, WINDOW[-1]: 3})
+    assert "Filipino" not in _visible_categories(df, "race_description", RACE_ORDER)
+    df_ok = _race_frame({REF: 3, WINDOW[-1]: 50})
+    assert "Filipino" in _visible_categories(df_ok, "race_description", RACE_ORDER)
 
 
 def test_suppression_still_hides_when_window_last_year_is_small():
@@ -178,6 +213,24 @@ def test_race_summary_html_headers_use_window_edges():
     assert "2021-2022<br>Student Count" in html
     assert "2025-2026<br>Student Count" in html
     assert REF not in html
+
+
+def test_race_summary_html_is_blank_for_single_window_year_plus_reference():
+    df = _race_frame({REF: 600, WINDOW[-1]: 500}, race="Asian")
+    assert build_race_summary_html(df, [REF, WINDOW[-1]]) == ""
+
+
+def test_excel_count_summary_is_empty_for_single_window_year_plus_reference():
+    df = pd.DataFrame({
+        "academic_year": [REF, WINDOW[-1]],
+        "race_description": ["A", "A"],
+        "count": [1000, 150],
+    })
+    out = _count_summary(
+        df, key_col="race_description", label_col="Race",
+        order=["A"], label_map={"A": "Apple"}, years=[REF, WINDOW[-1]],
+    )
+    assert out.empty
 
 
 def test_excel_count_summary_first_year_is_window_start():

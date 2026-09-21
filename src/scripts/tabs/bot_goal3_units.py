@@ -142,7 +142,11 @@ def _visible_categories(df, key_col, order, threshold=10):
         return list(order)
     years = window_years(df["academic_year"].dropna().unique())
     if len(years) < 2:
-        max_by_cat = df.groupby(key_col)["count"].max()
+        # Judge only the window year(s) actually on screen — the frame
+        # may still carry the reference year, whose larger historical
+        # count must not lift a sub-threshold group past suppression.
+        in_window = df[df["academic_year"].isin(years)]
+        max_by_cat = in_window.groupby(key_col)["count"].max()
         return [c for c in order if max_by_cat.get(c, 0) >= threshold]
     first_yr, last_yr = years[0], years[-1]
     first_counts = (
@@ -412,7 +416,7 @@ def _build_summary_html(
 
 
 def _build_race_summary(df_race, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_race.pivot_table(
         index="race_description", columns="academic_year",
@@ -465,7 +469,7 @@ def _build_gender_chart(df_gender, years):
 
 
 def _build_gender_summary(df_gender, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_gender.pivot_table(
         index="gender", columns="academic_year",
@@ -517,7 +521,7 @@ def _build_firstgen_chart(df_fg, years):
 
 
 def _build_firstgen_summary(df_fg, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return ""
     piv = df_fg.pivot_table(
         index="fg", columns="academic_year",
@@ -739,7 +743,7 @@ def _mpl_summary_table(fig, bbox, order, label_map, color_map, piv,
 
 
 def _mpl_race_summary(fig, bbox, df_race, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_race.pivot_table(
         index="race_description", columns="academic_year",
@@ -785,7 +789,7 @@ def _mpl_gender_chart(fig, bbox, df_gender, years):
 
 
 def _mpl_gender_summary(fig, bbox, df_gender, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_gender.pivot_table(
         index="gender", columns="academic_year",
@@ -833,7 +837,7 @@ def _mpl_firstgen_chart(fig, bbox, df_fg, years):
 
 
 def _mpl_firstgen_summary(fig, bbox, df_fg, years):
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return
     piv = df_fg.pivot_table(
         index="fg", columns="academic_year",
@@ -859,10 +863,10 @@ def _generate_pdf(df) -> bytes:
     })
     PAGE_W, PAGE_H = 8.5, 11.0
     years = sorted(df["academic_year"].dropna().unique())
-    first_yr, last_yr = window_bounds(years)
+    window = window_years(years)
     year_range = (
-        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
-        else years[0] if years else ""
+        f"{window[0]} to {window[-1]}" if len(window) >= 2
+        else window[0] if window else ""
     )
 
     df_campus = _aggregate_campus(df)
@@ -1191,10 +1195,10 @@ def render():
 
     df = st.session_state["bg3u_df"]
     years = sorted(df["academic_year"].dropna().unique())
-    first_yr, last_yr = window_bounds(years)
+    window = window_years(years)
     year_range = (
-        f"{first_yr} to {last_yr}" if len(window_years(years)) >= 2
-        else years[0] if years else ""
+        f"{window[0]} to {window[-1]}" if len(window) >= 2
+        else window[0] if window else ""
     )
 
     # Chart 1: Average units by campus

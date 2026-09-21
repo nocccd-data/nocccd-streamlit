@@ -64,13 +64,20 @@ def _download_and_read(
             f"Available columns: {available}"
         )
     # Reference-only values (the BOT datasets' `ref_acyr_code`, see config.py)
-    # always ride along with whatever the tab selected. extract.py pulls them
-    # with the same `ref_<col>` convention; adding them here rather than in
-    # each tab keeps the in-app charts and the bulk PDF/Excel exporters —
-    # which read the extract whole — showing the same set of years.
+    # ride along ONLY when the tab asked for its full configured window.
+    # extract.py pulls them with the same `ref_<col>` convention; adding them
+    # here rather than in each tab keeps the in-app charts and the bulk
+    # PDF/Excel exporters — which read the extract whole — showing the same
+    # years. A reference column against a *partial* window is meaningless,
+    # and the frame it produces — the reference year plus a sliver — is the
+    # shape that let 2018-19 leak into the "5-Yr" metrics and past small-n
+    # suppression. Narrowed selections therefore behave exactly as before
+    # the reference year existed.
     from src.pipeline.config import DATASETS
-    ref_values = DATASETS.get(dataset_name, {}).get(f"ref_{filter_col}", [])
-    wanted = set(map(str, values)) | set(map(str, ref_values))
+    cfg = DATASETS.get(dataset_name, {})
+    wanted = set(map(str, values))
+    if wanted == set(map(str, cfg.get(filter_col, []))):
+        wanted |= set(map(str, cfg.get(f"ref_{filter_col}", [])))
     return df[df[filter_col].astype(str).isin(wanted)]
 
 

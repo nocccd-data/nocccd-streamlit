@@ -24,6 +24,7 @@ from src.scripts.tabs.bot_helpers import (
     aggregate_race,
     compute_pct_change,
     window_bounds,
+    window_years,
 )
 
 EXCEL_MAX_ROWS = 1_048_576
@@ -82,7 +83,7 @@ def _count_summary(
     label_map: dict[str, str],
     years: list[str],
 ) -> pd.DataFrame:
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return pd.DataFrame()
     first_yr, last_yr = window_bounds(years)
     piv = df.pivot_table(
@@ -116,7 +117,7 @@ def value_summary(
     value_col: str,
     value_name: str,
 ) -> pd.DataFrame:
-    if len(years) < 2:
+    if len(window_years(years)) < 2:
         return pd.DataFrame()
     first_yr, last_yr = window_bounds(years)
     piv = df.pivot_table(

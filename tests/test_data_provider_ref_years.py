@@ -39,9 +39,24 @@ def test_bot_fetch_always_includes_reference_years(stub_hyper):
     assert sorted(out["acyr_code"]) == ["2018", "2021", "2022", "2023", "2024", "2025"]
 
 
-def test_bot_fetch_keeps_reference_even_when_user_deselects_window_years(stub_hyper):
+def test_bot_fetch_drops_reference_when_user_narrows_the_window(stub_hyper):
+    # A reference column only makes sense against the full 5-year window.
+    # With a partial selection the frame would be [ref + sliver], which is
+    # exactly the shape that let 2018-19 leak into the "5-Yr" metrics and
+    # past small-n suppression. Narrowed selections behave as on main.
     out = data_provider._download_and_read("bot_goal1_students", "acyr_code", ("2025",))
-    assert sorted(out["acyr_code"]) == ["2018", "2025"]
+    assert sorted(out["acyr_code"]) == ["2025"]
+    out = data_provider._download_and_read(
+        "bot_goal1_students", "acyr_code", ("2021", "2022", "2023", "2024"),
+    )
+    assert "2018" not in set(out["acyr_code"])
+
+
+def test_bot_fetch_full_window_in_any_order_still_gets_reference(stub_hyper):
+    out = data_provider._download_and_read(
+        "bot_goal1_students", "acyr_code", ("2025", "2023", "2021", "2024", "2022"),
+    )
+    assert "2018" in set(out["acyr_code"])
 
 
 def test_non_bot_fetch_is_unchanged(stub_hyper):
