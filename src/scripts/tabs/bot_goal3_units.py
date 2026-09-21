@@ -45,8 +45,10 @@ from src.scripts.tabs.bot_helpers import (
     RACE_COLORS,
     RACE_ORDER,
     RACE_SHORT,
+    pct_change_axis_range,
     window_bounds,
     window_years,
+    year_header_fontsize,
 )
 
 _CFG = DATASETS["bot_goal3_units"]
@@ -284,17 +286,12 @@ def _build_pct_change_chart(df_pct):
         textposition="outside",
         textfont=dict(size=12),
     )
-    min_val = df_pct["pct_change"].min()
-    max_val = df_pct["pct_change"].max()
     fig.update_layout(
         height=420,
         showlegend=False,
         title="5-Yr % Change",
         xaxis_title="% Change",
-        xaxis_range=[
-            min_val * 1.8 if min_val < 0 else min_val - 5,
-            max_val * 1.8 if max_val > 0 else max_val + 5,
-        ],
+        xaxis_range=list(pct_change_axis_range(df_pct["pct_change"])),
         yaxis_title=None,
         margin=dict(l=10, t=50),
     )
@@ -619,9 +616,13 @@ def _mpl_campus(fig, bbox, df_agg, df_pct):
         colors = [COLOR_MAP.get(c, "#888") for c in pct_campuses]
         ys = np.arange(len(pct_campuses))
         ax_pct.barh(ys, vals, color=colors)
+        lo, hi = pct_change_axis_range(vals)
+        # Label gap scales with the axis so it neither vanishes on a wide
+        # axis nor pushes the label off the edge of a tight one.
+        gap = (hi - lo) * 0.02
         for y_, v in zip(ys, vals):
             ha = "left" if v >= 0 else "right"
-            offset = 0.5 if v >= 0 else -0.5
+            offset = gap if v >= 0 else -gap
             ax_pct.text(v + offset, y_, f"{v:.1f}%", va="center",
                         ha=ha, fontsize=6)
         ax_pct.set_yticks(ys)
@@ -631,11 +632,7 @@ def _mpl_campus(fig, bbox, df_agg, df_pct):
         ax_pct.spines["top"].set_visible(False)
         ax_pct.spines["right"].set_visible(False)
         ax_pct.axvline(0, color="#888", linewidth=0.5)
-        min_v, max_v = min(vals), max(vals)
-        ax_pct.set_xlim(
-            min_v * 1.8 if min_v < 0 else min_v - 5,
-            max_v * 1.8 if max_v > 0 else max_v + 5,
-        )
+        ax_pct.set_xlim(lo, hi)
     else:
         ax_pct.axis("off")
 
@@ -663,7 +660,8 @@ def _mpl_race_table(fig, bbox, df_race, years):
     for i, yr in enumerate(years):
         x = label_col_w + i * data_col_w
         ax.text(x + data_col_w / 2, y_top + row_h / 2, yr,
-                ha="center", va="center", fontsize=7, fontweight="bold")
+                ha="center", va="center",
+                fontsize=year_header_fontsize(years), fontweight="bold")
 
     for r, race in enumerate(visible):
         y = 1.0 - (r + 2) * row_h

@@ -135,6 +135,42 @@ def compute_pct_change(df_agg: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+def pct_change_axis_range(values) -> tuple[float, float]:
+    """x-axis ``(lo, hi)`` for a horizontal "5-Yr % Change" bar chart.
+
+    Two rules, shared by the Plotly and matplotlib builders:
+
+    * The axis always spans zero — the bars grow from it, so an axis that
+      starts at ``min - 5`` cuts every bar off at the left once all values
+      exceed 5.
+    * Each side is padded for the "outside" text label: proportional to the
+      largest bar on that side, with an absolute floor. Multiplicative
+      padding alone collapses for near-zero values — Goal 4's +0.2% bar got
+      ``0.2 * 1.8 - 0.2 = 0.16`` units of room and its label was clipped.
+    """
+    vals = [float(v) for v in values if v is not None and pd.notna(v)]
+    if not vals:
+        return (-5.0, 5.0)
+    lo_v, hi_v = min(vals), max(vals)
+    lo, hi = min(lo_v, 0.0), max(hi_v, 0.0)
+    extent = max(hi - lo, 2.0)
+    floor = extent * 0.25
+    left = max(abs(lo_v) * 0.8, floor) if lo_v < 0 else floor
+    right = max(hi_v * 0.8, floor) if hi_v > 0 else floor
+    return (lo - left, hi + right)
+
+
+def year_header_fontsize(years) -> int:
+    """Font size for the year headers of the PDF proportion tables.
+
+    The data columns split a fixed strip, so they narrow as years are added.
+    Five 9-character labels fit at 7pt bold; the reference year makes six,
+    and at 7pt the last digit of each disappears under the next label.
+    6pt matches the cell values beneath them.
+    """
+    return 7 if len(years) <= 5 else 6
+
+
 def _label_start_year(label) -> int | None:
     """``"2021-2022"`` and the wage tab's shifted ``"2021-22"`` both -> 2021."""
     try:
@@ -396,17 +432,12 @@ def build_pct_change_chart(df_pct: pd.DataFrame):
         textposition="outside",
         textfont=dict(size=12),
     )
-    min_val = df_pct["pct_change"].min()
-    max_val = df_pct["pct_change"].max()
     fig.update_layout(
         height=420,
         showlegend=False,
         title="5-Yr % Change",
         xaxis_title="% Change",
-        xaxis_range=[
-            min_val * 1.8 if min_val < 0 else min_val - 5,
-            max_val * 1.8 if max_val > 0 else max_val + 5,
-        ],
+        xaxis_range=list(pct_change_axis_range(df_pct["pct_change"])),
         yaxis_title=None,
         margin=dict(l=10, t=50),
     )
@@ -904,9 +935,13 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
         colors = [COLOR_MAP.get(c, "#888") for c in pct_campuses]
         ys = np.arange(len(pct_campuses))
         ax_pct.barh(ys, vals, color=colors)
+        lo, hi = pct_change_axis_range(vals)
+        # Label gap scales with the axis so it neither vanishes on a wide
+        # axis nor pushes the label off the edge of a tight one.
+        gap = (hi - lo) * 0.02
         for y_, v in zip(ys, vals):
             ha = "left" if v >= 0 else "right"
-            offset = 0.5 if v >= 0 else -0.5
+            offset = gap if v >= 0 else -gap
             ax_pct.text(v + offset, y_, f"{v:.1f}%", va="center",
                         ha=ha, fontsize=6)
         ax_pct.set_yticks(ys)
@@ -916,11 +951,7 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
         ax_pct.spines["top"].set_visible(False)
         ax_pct.spines["right"].set_visible(False)
         ax_pct.axvline(0, color="#888", linewidth=0.5)
-        min_v, max_v = min(vals), max(vals)
-        ax_pct.set_xlim(
-            min_v * 1.8 if min_v < 0 else min_v - 5,
-            max_v * 1.8 if max_v > 0 else max_v + 5,
-        )
+        ax_pct.set_xlim(lo, hi)
     else:
         ax_pct.axis("off")
 
@@ -950,7 +981,8 @@ def _mpl_race_proportion_table(fig, bbox, df_race, years):
     for i, yr in enumerate(years):
         x = label_col_w + i * data_col_w
         ax.text(x + data_col_w / 2, y_top + row_h / 2, yr,
-                ha="center", va="center", fontsize=7, fontweight="bold")
+                ha="center", va="center",
+                fontsize=year_header_fontsize(years), fontweight="bold")
 
     # Data rows
     for r, race in enumerate(visible):
