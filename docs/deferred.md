@@ -32,7 +32,7 @@ the gap — never renumber.
 | 5 | [The PDF methodology page renders when no page carries a projection](#5-the-pdf-methodology-page-renders-when-no-page-carries-a-projection) | Bug | Low | XS | ready |
 | 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
 | 6 | [The persistence x axis spaces terms evenly regardless of the gaps between them](#6-the-persistence-x-axis-spaces-terms-evenly-regardless-of-the-gaps-between-them) | Bug | Low | M | needs-decision (1) |
-| 7 | [Vision 2030 targets follow-ups](#7-vision-2030-targets-follow-ups) | Bug | Low | M | needs-decision (2) |
+| 7 | [Vision 2030 targets follow-ups](#7-vision-2030-targets-follow-ups) | Bug | Low | M | needs-decision (1) |
 
 ---
 
@@ -167,10 +167,10 @@ labels still fit at uneven spacing — they are the tightest constraint on that 
 
 ## 7. Vision 2030 targets follow-ups
 
-**[Bug · Low · M · needs-decision (2)]**
+**[Bug · Low · M · needs-decision (1)]**
 
 Surfaced by the whole-branch final review of the Vision 2030 targets feature, 2026-09-23.
-Four smaller items from the same feature, grouped here rather than filed as four
+Three smaller items from the same feature, grouped here rather than filed as three
 one-line clusters.
 
 **1. Target columns go blank once the plan window is over, and the extract keeps pulling
@@ -215,11 +215,3 @@ snapshots of the same dataset within one page render. **Fix:** derive both the d
 and the target frame from a single download — e.g. have the tab's fetch download once and
 derive the target rows from it, rather than calling `data_provider.py::fetch_bot_target_frame`
 separately.
-
-**4. The manager's workbook is cited but not committed.** `config.py`, `bot_targets.py`,
-`docs/bot-tabs.md`, and `docs/superpowers/specs/2026-09-23-bot-2030-targets-design.md` all cite
-the source workbook at `docs/specification_docs_2/2022-23 to 2029-30 Target Charts as of 25-26
-Actuals.xlsx`, but `docs/specification_docs_2/` is untracked (`git status` shows it as `??`).
-**Decision:** commit the workbook so the citations resolve for anyone else who clones the repo,
-or reword the citations to point at wherever it's meant to live instead (e.g. OneDrive).
-Pending the user's call.
