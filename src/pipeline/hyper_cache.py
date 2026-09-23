@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pantab
 
-from src.pipeline.config import HYPER_DIR
+from src.pipeline.config import DATASETS, HYPER_DIR, display_acyrs, target_acyrs
 
 
 class HyperCache:
@@ -27,7 +27,7 @@ class HyperCache:
     def __init__(self) -> None:
         self._frames: dict[str, pd.DataFrame] = {}
 
-    def get(self, name: str) -> pd.DataFrame:
+    def _read(self, name: str) -> pd.DataFrame:
         if name not in self._frames:
             path = HYPER_DIR / f"{name}.hyper"
             if not path.exists():
@@ -37,3 +37,22 @@ class HyperCache:
                 )
             self._frames[name] = pantab.frame_from_hyper(path, table="Extract")
         return self._frames[name]
+
+    def get(self, name: str) -> pd.DataFrame:
+        """The frame the existing charts render.
+
+        A target dataset's extract also carries the Vision 2030 plan years
+        (config.extract_values); from the 2028 run that includes a baseline
+        year outside the window, which must not show up as an extra column.
+        """
+        frame = self._read(name)
+        if "target" not in DATASETS.get(name, {}):
+            return frame
+        keep = set(display_acyrs(name))
+        return frame[frame["acyr_code"].astype(str).isin(keep)]
+
+    def get_targets_frame(self, name: str) -> pd.DataFrame:
+        """Plan-year rows (baseline -> latest) for the target chart/columns."""
+        frame = self._read(name)
+        keep = set(target_acyrs(name))
+        return frame[frame["acyr_code"].astype(str).isin(keep)]

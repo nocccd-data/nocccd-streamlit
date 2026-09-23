@@ -35,6 +35,10 @@ On-demand Excel export of the table data behind every BOT Streamlit/PDF chart. E
 - **Reused code**: chart-table sheets use the same `bot_helpers` aggregation functions and the same per-tab preparation rules as `bot_export.py` (`bot_goal1_students` credit-only denominator filters, `bot_goal2_cert_nc_denom`, `bot_goal2_wage_denom` shifted forward, and `bot_goal2_xfer._normalize`). `bot_goal3_units` uses its own average-units aggregators.
 - **Dependency**: uses `xlsxwriter` through `pandas.ExcelWriter`; keep `xlsxwriter` in `requirements.txt`.
 
+## Vision 2030 target data
+
+For the 7 target datasets, both bulk exporters add the Actual vs Target output: PDF page 1, and a first Excel table `Academic Year | Actual | Target` covering 2022-23 → 2029-30. The Excel export also adds target columns to the count tables: `{last year} Target` on campus headcount and Summary Counts, and `Target Count` on Rate Detail, per year. The % matrices are unchanged. `HyperCache.get()` returns only reference + window years for target datasets, so the extra plan years never show up as columns on the existing charts. The bulk Excel exporter builds its sheets with the same `standard_bot_excel_sections` / `units_excel_sections` / `write_sections_sheet` as the tab downloads. `src/pipeline/equity_export.py` also reads target datasets through `HyperCache.get`, so it too sees only reference + window years.
+
 ## Equity Analysis Excel export — PPG-1 (`src/pipeline/equity_export.py`)
 
 On-demand Excel export of the NOCCCD Equity Gap workbook applying the CCCCO Percentage Point Gap Minus One (PPG-1) methodology to 9 BOT metrics (Maximize Financial Aid is excluded per the May 2026 program review). Replicates the layout of `NOCCCD_Equity_Gap_Template_PPG1_ALL_METRICS.xlsx`. Each run writes one `.xlsx` workbook to a local OneDrive folder. Run `python -m src.pipeline.equity_export` whenever a refresh is wanted; there is no scheduler. The same `generate_equity_excel(cache)` function backs the **Equity Analysis (PPG-1)** Streamlit tab's download button — CLI and tab produce byte-identical output for the same data snapshot.

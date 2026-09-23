@@ -1,23 +1,28 @@
-"""Tests for the pure DataFrame helpers in src.pipeline.bot_excel_export.
+"""Tests for the pure DataFrame helpers in src.scripts.tabs.bot_excel_helpers (shared by the tab downloads and the bulk exporter).
 
 These helpers (_count_summary, _value_summary, _matrix_table, _rate_detail)
 do all the numeric aggregation behind the BOT Excel export. They are pure:
 they take DataFrames in and return DataFrames out. Streamlit, Hyper, and
 Oracle are not involved, so they are unit-testable with synthetic frames.
 
-The exporter installs the streamlit `No runtime found` log filter at module
-import time, so just importing it here is enough — no manual filter setup.
+This file does not import the exporter (src.pipeline.bot_excel_export), so
+its streamlit `No runtime found` log filter is never installed here.
+Importing bot_excel_helpers still pulls in src.scripts.tabs (via that
+package's __init__) and its @st.cache_data-decorated fetchers in
+data_provider.py, so the warning does fire at import time — pytest's
+default log capture just keeps it out of the passing-test output (verified
+2026-09-23: the warning appears under `pytest -s` but not under `pytest -q`).
 """
 
 import pandas as pd
 import pytest
 
-from src.pipeline.bot_excel_export import (
+from src.scripts.tabs.bot_excel_helpers import (
     _count_summary,
-    _matrix_table,
     _rate_detail,
-    _value_summary,
 )
+from src.scripts.tabs.bot_excel_helpers import matrix_table as _matrix_table
+from src.scripts.tabs.bot_excel_helpers import value_summary as _value_summary
 
 
 # ---------------------------------------------------------------------------

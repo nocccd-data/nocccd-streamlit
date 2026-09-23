@@ -132,6 +132,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30},
     },
     "bot_goal2_cert_nc": {
         "sql_file": "bot_goal2_cert_nc.sql",
@@ -139,6 +140,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30},
     },
     "bot_goal2_cert_nc_denom": {
         "sql_file": "bot_goal2_cert_nc_denom.sql",
@@ -153,6 +155,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30},
     },
     "bot_goal2_adt": {
         "sql_file": "bot_goal2_adt.sql",
@@ -160,6 +163,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30},
     },
     "bot_goal2_bac": {
         "sql_file": "bot_goal2_bac.sql",
@@ -167,6 +171,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30, "round_up": True},
     },
     "bot_goal2_xfer": {
         "sql_file": "bot_goal2_xfer.sql",
@@ -202,6 +207,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.20, "reduce_over": 60, "value_col": "sum_hours_earned"},
     },
     "bot_goal4_xfer_ready": {
         "sql_file": "bot_goal4_xfer_ready.sql",
@@ -209,6 +215,7 @@ DATASETS = {
         "ref_acyr_code": ["2018"],
         "param_name": "acyr_code",
         "db_section": "rept",
+        "target": {"growth": 0.30},
     }
 }
 
@@ -221,6 +228,44 @@ DATASETS = {
 # tests/test_bot_window_years.py pins len(acyr_code) == this for every BOT
 # dataset and every ref year < the window, so the two rules cannot disagree.
 BOT_WINDOW_YEARS = 5
+
+# Vision 2030 target plan — FIXED. Unlike the rolling `acyr_code` window it
+# never moves: 2022-23 is the baseline and 2029-30 the end year for every
+# dataset that carries a `target` rule (the manager's workbook,
+# docs/specification_docs_2/). Re-basing the plan means changing these two.
+BOT_TARGET_BASELINE_ACYR = "2022"
+BOT_TARGET_END_ACYR = "2029"
+
+
+def target_acyrs(name: str) -> list[str]:
+    """Years a target dataset needs for its plan: baseline through the
+    latest window year (capped at the plan end). ``[]`` without a target.
+
+    The window drops acyr 2022 on the 2028 run; these years keep the
+    baseline in the extract regardless.
+    """
+    cfg = DATASETS[name]
+    if "target" not in cfg:
+        return []
+    last = min(int(BOT_TARGET_END_ACYR), max(int(a) for a in cfg["acyr_code"]))
+    return [str(y) for y in range(int(BOT_TARGET_BASELINE_ACYR), last + 1)]
+
+
+def display_acyrs(name: str) -> list[str]:
+    """Reference + window years — what the existing charts render."""
+    cfg = DATASETS[name]
+    param = cfg["param_name"]
+    return sorted(set(cfg.get(f"ref_{param}", [])) | set(cfg[param]))
+
+
+def extract_values(name: str) -> list[str]:
+    """Every value the extract pulls: reference, window, then any target
+    years not already present (order kept stable for existing datasets)."""
+    cfg = DATASETS[name]
+    param = cfg["param_name"]
+    values = list(cfg.get(f"ref_{param}", [])) + list(cfg[param])
+    return values + [a for a in target_acyrs(name) if a not in values]
+
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 HYPER_DIR = Path(__file__).resolve().parent / "hyper"

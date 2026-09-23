@@ -37,9 +37,28 @@ Charts **render** every year present, so 2018-19 draws as an extra left-hand col
 
 `window_years()` excludes reference years **explicitly**, from `ref_acyr_code` in config — never by position. Both positional rules ("last N present", "N consecutive ending at the latest") let the reference slide into the window whenever a window year is absent: a late SCFF wage file, or a user narrowing the sidebar to 2021-22 alone.
 
-**Fetch rule** (`data_provider._download_and_read`): the reference year is included only when the tab's selection is its **full** configured window. A reference column against a partial window is meaningless, and the frame it produces — reference plus a sliver — is what let 2018-19 leak into metrics and past suppression before this was fixed. Narrowing the sidebar therefore behaves exactly as it did before the reference year existed. The bulk exporters read the extract whole and always see all years.
+**Fetch rule** (`data_provider._download_and_read`): the reference year is included only when the tab's selection is its **full** configured window. A reference column against a partial window is meaningless, and the frame it produces — reference plus a sliver — is what let 2018-19 leak into metrics and past suppression before this was fixed. Narrowing the sidebar therefore behaves exactly as it did before the reference year existed. The bulk exporters read the extract whole (via `HyperCache.get()`) and always see all years — except for the 7 target datasets, where `HyperCache.get()` filters back down to reference + window years; the plan years come from `HyperCache.get_targets_frame()` instead (see "Vision 2030 targets" below).
 
 Invariants pinned by `tests/test_bot_window_years.py`: every BOT dataset has exactly `BOT_WINDOW_YEARS` entries in `acyr_code`, every reference year sorts before the window, and the reference is 2018-19 on every chart after the wage shift.
+
+## Vision 2030 targets (Actual vs Target)
+
+Seven tabs carry the district's Vision 2030 plan: Associate Degrees, ADT, Credit Certificates, Noncredit Certificates, Bachelor's, Average Units, and Transfer Ready. It comes from the manager's workbook in `docs/specification_docs_2/`. Transfers is **not** included, because the workbook's "Xfer 4-Year" sheet came from other data.
+
+Three year concepts, kept separate on purpose:
+
+| Concept | Config | Moves? |
+|---|---|---|
+| Metrics window | `acyr_code` (5 years) | rolls every year |
+| Reference year | `ref_acyr_code` (2018-19) | only if management says so |
+| Target plan | `BOT_TARGET_BASELINE_ACYR = "2022"` → `BOT_TARGET_END_ACYR = "2029"` | **fixed**; re-basing the plan = changing these two |
+
+- **Rule** (`DATASETS[name]["target"]`): `growth` 0.30 → `B × (1 + 0.30 × k/7)`. Units: `reduce_over: 60`, `growth: 0.20` → `B − (B − 60) × 0.20 × k/7` when `B > 60`, where lower is better; a baseline at or below 60 has nothing over 60 to cut, so its target is held at `B`. Bach: `round_up` (ceil for k ≥ 1). The chart caption is generated from the rule (`target_caption`), so the two can't drift apart.
+- **Baselines are live.** Each group's own 2022-23 value comes from the extract, district-wide or per campus/race/gender/first-gen. A group with no 2022-23 value gets a blank target, never 0.
+- **Extract**: `config.extract_values()` adds `target_acyrs()` (baseline → latest window year, capped at `BOT_TARGET_END_ACYR` = 2029-30) to reference + window, so the 2022-23 baseline is still pulled after the window rolls past it (from the 2028 run). The app's sidebar fetch is unaffected. `fetch_bot_target_frame()` reads the plan rows separately, and the bulk exporters split them via `HyperCache.get()` (display years) and `get_targets_frame()` (plan years).
+- **Chart**: first on the tab, via `render_target_section()`; it always shows the full plan and ignores the sidebar. **PDF**: `add_target_page()` puts it on a leading page (see "BOT PDF generator" below), and the existing pages and their coordinates are unchanged.
+- **Targets are counts, never drawn on the rate charts.** Converting a count target into a rate target reverses Met/Not Met whenever enrollment moves (AA Hispanic 2025-26: count 1,117 vs target 1,047 is met, but rate 4.01% vs 4.68% is not). Target columns therefore sit next to the counts in Excel only.
+- Code: `src/scripts/tabs/bot_targets.py` (no Streamlit or `bot_helpers` imports, so there's no import cycle).
 
 ## Small-sample category suppression
 
@@ -98,6 +117,7 @@ When adding a new tab, align the titles dict (`org`, captions) with the SQL's ac
 - `headcount_only` (default `False`): set `True` to skip charts 2-4 (race, gender, first-gen). Used by Bachelor's tab where the population is too small for meaningful demographic breakdowns.
 - `headcount_note`, `race_note`, `gender_note`, `firstgen_note` (default `None`): per-section grey footer note rendered just below that section's "Source: …" line. Used for the small-sample confidentiality disclaimer (most often on race) and the NOCE survey-data caveat (first-gen on Goal 1). When a note is present, that section's chart and Source line shift up by `0.01` (paper coords) in the PDF to make room.
 - `source` (default `"Banner"`): suffix after `Source: ` in every section footer (Streamlit and PDF). Override for tabs whose data comes from somewhere besides Banner — e.g., the Transfers and Living Wage tabs use `"CCCCO Supplemental & Success Data for the SCFF files; Banner"` because their headcount comes from `scff_xfer`/`scff_living_wage`.
+- `target_title`: title of the Actual vs Target chart / PDF page 1 / first Excel table. Required on the 7 target tabs.
 
 **Plotly horizontal grouped bar gotcha**: Bars render in reverse legend order. To get the desired top-to-bottom order, pass `category_orders` with the reversed label list.
 
@@ -105,9 +125,9 @@ Widget prefix: `"bg1_"` (Goal 1), use `"bg2_"`, `"bg3_"`, etc. for subsequent go
 
 ## BOT PDF generator (`bot_helpers.py`)
 
-**BOT tabs share a single PDF generator**: `generate_bot_pdf(df, titles, base_df=None)` in `bot_helpers.py` produces a portrait 8.5×11 PDF with 2 sections per page. Page 1 has Headcount + Race, Page 2 has Gender + First-Gen. Sections use paper-coordinate positioning via `fig.add_axes([left, bottom, width, height])`. Each tab sets `tab_title` in its `_TITLES` dict for the PDF header. Titles-dict flags (`include_nocccd`, `credit_only_firstgen`, `headcount_only`, per-section `*_note` keys, `source`) apply to PDF the same way as to the interactive charts. HTML data-bar tables are rendered using matplotlib `Rectangle` patches; HTML summary tables become `ax.table()` with colored cell facecolors.
+**BOT tabs share a single PDF generator**: `generate_bot_pdf(df, titles, base_df=None, targets=None)` in `bot_helpers.py` produces a portrait 8.5×11 PDF with 2 sections per page — a Headcount + Race page followed by a Gender + First-Gen page. When `targets` is passed (the 7 target tabs), `add_target_page()` inserts a leading Actual vs Target page first, so those two pages become pages 2-3 on target tabs (pages 1-2 on every other tab); `headcount_only` tabs (e.g. Bachelor's, which is also a target tab) still skip the Gender + First-Gen page. Sections use paper-coordinate positioning via `fig.add_axes([left, bottom, width, height])`. Each tab sets `tab_title` in its `_TITLES` dict for the PDF header. Titles-dict flags (`include_nocccd`, `credit_only_firstgen`, `headcount_only`, per-section `*_note` keys, `source`) apply to PDF the same way as to the interactive charts. HTML data-bar tables are rendered using matplotlib `Rectangle` patches; HTML summary tables become `ax.table()` with colored cell facecolors.
 
-**BOT tabs share Excel helpers**: `generate_bot_excel(df, titles, base_df=None)` in `bot_excel_helpers.py` writes the table data behind the Streamlit charts, using the same aggregation and denominator rules as the interactive view and PDF. Goal 3 Average Units uses `bot_goal3_units._generate_excel(df)` because that tab computes average values rather than counts/rates.
+**BOT tabs share Excel helpers**: `generate_bot_excel(df, titles, base_df=None, targets=None)` in `bot_excel_helpers.py` writes the table data behind the Streamlit charts, using the same aggregation and denominator rules as the interactive view and PDF. Goal 3 Average Units uses `bot_goal3_units._generate_excel(df, targets=None)` because that tab computes average values rather than counts/rates. On both, passing `targets` adds an Actual vs Target table as the first sheet section (`standard_bot_excel_sections()` / `units_excel_sections()`) plus a `"{year} Target"` column alongside the headcount/units table's counts.
 
 The lower-level building blocks in `bot_excel_helpers.py` — `ExcelSection`, `sections_to_excel_bytes()`, and `EXCEL_MIME` — are **generic, not BOT-specific** (only `generate_bot_excel` and `standard_bot_excel_sections` encode BOT aggregation rules). The three KPI tabs (`kpi_persistence.py`, `kpi_applied_to_enrolled.py`, `kpi_dual_enrollment.py`) reuse them directly to export their own chart data. See `docs/tabs.md` → "Sidebar download exports".
 
@@ -115,17 +135,18 @@ The lower-level building blocks in `bot_excel_helpers.py` — `ExcelSection`, `s
 
 **BOT section layout gotcha**: The gender section's horizontal bar chart has long y-axis labels (e.g. "2024-2025") that extend left of the axes box. When placed at `left=0.06` (the default section margin), matplotlib clips them at the page edge. The gender section uses `left=0.12` with width `0.48` instead to leave room for tick labels. Sections with labels on the x-axis (headcount, first-gen) don't hit this issue.
 
-**PdfPages early-return gotcha**: In `generate_bot_pdf()`, when `headcount_only=True` (Bachelor's tab), it's tempting to `return buf.getvalue()` right after saving page 1 to skip page 2. That produces a **truncated PDF** that Acrobat refuses to open, because `PdfPages.__exit__` writes the PDF trailer/xref table only when the `with` block exits. Instead, wrap the page 2 code in an `if not headcount_only:` branch inside the `with PdfPages(buf) as pdf:` block, and return `buf.getvalue()` only after the block finishes.
+**PdfPages early-return gotcha**: In `generate_bot_pdf()`, when `headcount_only=True` (Bachelor's tab), it's tempting to `return buf.getvalue()` right after saving the Headcount(+Race) page to skip the Gender + First-Gen page. That produces a **truncated PDF** that Acrobat refuses to open, because `PdfPages.__exit__` writes the PDF trailer/xref table only when the `with` block exits. Instead, wrap the Gender + First-Gen page's code in an `if not headcount_only:` branch inside the `with PdfPages(buf) as pdf:` block, and return `buf.getvalue()` only after the block finishes. (Bachelor's is also a target tab, so its PDF still gets the leading Actual vs Target page — that page is added unconditionally on `targets is not None`, before this branch.)
 
 **"5-Yr % Change" bar axis**: both the Plotly and matplotlib builders (in `bot_helpers.py` and their copies in `bot_goal3_units.py`) take their x-range from `pct_change_axis_range(values)`. It always spans zero (the bars grow from it) and pads each side proportionally to that side's largest bar **with an absolute floor**, so a near-zero value still gets room for its "outside" label. The previous per-site formula (`min*1.8 | min-5`, `max*1.8 | max+5`) clipped the label at +0.2% (Goal 4) and, for all-large-positive values, started the axis past zero and cut the bars off at the left. The matplotlib label gap scales with the axis (`(hi - lo) * 0.02`) for the same reason.
 
 **Six-column year headers**: the PDF proportion tables split a fixed strip into one column per year. Five 9-character headers fit at 7pt bold; with the reference year there are six, and at 7pt the last digit of each disappears under the next label. `year_header_fontsize(years)` drops them to 6pt — matching the cell values — when there are more than five.
 
-**BOT PDF paper coordinates** (constant across all tabs, including Units):
-- Page 1 Section 1 (Headcount): chart_bbox bottom=0.58, Source at y=0.54 (below the chart's legend).
-- Page 1 Section 2 (Race): header top=0.50 with tight caption padding (`pad=0.005` on `_draw_section_header`, since the race data-bar table renders on an `axis("off")` axes and doesn't need the 0.025 gap Section 1 needs for its "5-Yr % Change" axis title). Chart+table bbox bottom=0.06. Source at y=0.04.
-- Page 2 Section 3 (Gender): chart_bbox left=0.12, width=0.48, bottom=0.56. Source at y=0.52.
-- Page 2 Section 4 (First-Gen): chart_bbox bottom=0.13 (raised so the legend has room above the Source footer). Source at y=0.085.
+**BOT PDF paper coordinates** (constant across all tabs, including Units; page numbers below are relative to content — on the 7 target tabs the Actual vs Target page precedes both, making them pages 2-3 instead of 1-2):
+- Headcount + Race page, Section 1 (Headcount): chart_bbox bottom=0.58, Source at y=0.54 (below the chart's legend).
+- Headcount + Race page, Section 2 (Race): header top=0.50 with tight caption padding (`pad=0.005` on `_draw_section_header`, since the race data-bar table renders on an `axis("off")` axes and doesn't need the 0.025 gap Section 1 needs for its "5-Yr % Change" axis title). Chart+table bbox bottom=0.06. Source at y=0.04.
+- Gender + First-Gen page, Section 3 (Gender): chart_bbox left=0.12, width=0.48, bottom=0.56. Source at y=0.52.
+- Gender + First-Gen page, Section 4 (First-Gen): chart_bbox bottom=0.13 (raised so the legend has room above the Source footer). Source at y=0.085.
+- **Actual vs Target page** (`add_target_page()`, target tabs only, always the first page when present): header top=0.935, chart_bbox left=0.08, width=0.86, bottom=0.58. Source at y=0.54.
 
 **Per-section optional note**: Each of the 4 sections accepts an optional `_note` titles key (`headcount_note`, `race_note`, `gender_note`, `firstgen_note`). When present, the section's chart bottom and Source line shift up by `NOTE_OFFSET` (currently `0.01` paper coords — uniform across every section) so the wrapped note can be drawn just below the new Source position. When absent, the section keeps its baseline coordinates (above). The note is written via `_draw_section_note(fig, y, text)`, which uses `textwrap.fill(width=140)` and `fontsize=6, color="grey"` (upright — italic is reserved for the section header caption). The first-gen section is the exception: it doesn't apply the offset (chart bottom and Source y are already fixed); when `firstgen_note` is present it renders at y=0.075, exactly 0.01 below Source y=0.085 so the gap matches the other sections. The Goal 3 Average Units tab has its own self-contained PDF generator that mirrors this offset logic for `race_note` only (the only section in that tab that currently has a note).
 

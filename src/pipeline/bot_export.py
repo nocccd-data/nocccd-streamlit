@@ -45,6 +45,7 @@ from src.scripts.tabs import (  # noqa: E402
     bot_goal4_xfer_ready,
 )
 from src.scripts.tabs.bot_helpers import generate_bot_pdf  # noqa: E402
+from src.scripts.tabs.bot_targets import targets_from_cache
 
 
 # Destination root on OneDrive. Each run creates/uses a max-academic-year
@@ -75,28 +76,43 @@ def _pdf_goal1_students(cache: HyperCache) -> bytes:
 
 def _pdf_goal2_adt(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal2_adt")
-    return generate_bot_pdf(df, bot_goal2_adt._TITLES, base_df=_credit_goal1_base(cache))
+    return generate_bot_pdf(
+        df, bot_goal2_adt._TITLES, base_df=_credit_goal1_base(cache),
+        targets=targets_from_cache(cache, "bot_goal2_adt"),
+    )
 
 
 def _pdf_goal2_assoc(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal2_assoc")
-    return generate_bot_pdf(df, bot_goal2_assoc._TITLES, base_df=_credit_goal1_base(cache))
+    return generate_bot_pdf(
+        df, bot_goal2_assoc._TITLES, base_df=_credit_goal1_base(cache),
+        targets=targets_from_cache(cache, "bot_goal2_assoc"),
+    )
 
 
 def _pdf_goal2_bac(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal2_bac")
-    return generate_bot_pdf(df, bot_goal2_bac._TITLES)
+    return generate_bot_pdf(
+        df, bot_goal2_bac._TITLES,
+        targets=targets_from_cache(cache, "bot_goal2_bac"),
+    )
 
 
 def _pdf_goal2_cert(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal2_cert")
-    return generate_bot_pdf(df, bot_goal2_cert._TITLES, base_df=_credit_goal1_base(cache))
+    return generate_bot_pdf(
+        df, bot_goal2_cert._TITLES, base_df=_credit_goal1_base(cache),
+        targets=targets_from_cache(cache, "bot_goal2_cert"),
+    )
 
 
 def _pdf_goal2_cert_nc(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal2_cert_nc")
     base = cache.get("bot_goal2_cert_nc_denom")
-    return generate_bot_pdf(df, bot_goal2_cert_nc._TITLES, base_df=base)
+    return generate_bot_pdf(
+        df, bot_goal2_cert_nc._TITLES, base_df=base,
+        targets=targets_from_cache(cache, "bot_goal2_cert_nc"),
+    )
 
 
 def _pdf_goal2_wage(cache: HyperCache) -> bytes:
@@ -122,13 +138,16 @@ def _pdf_goal3_finaid(cache: HyperCache) -> bytes:
 
 def _pdf_goal3_units(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal3_units")
-    return bot_goal3_units.generate_pdf(df)
+    return bot_goal3_units.generate_pdf(
+        df, targets=targets_from_cache(cache, "bot_goal3_units"),
+    )
 
 
 def _pdf_goal4_xfer_ready(cache: HyperCache) -> bytes:
     df = cache.get("bot_goal4_xfer_ready")
     return generate_bot_pdf(
         df, bot_goal4_xfer_ready._TITLES, base_df=_credit_goal1_base(cache),
+        targets=targets_from_cache(cache, "bot_goal4_xfer_ready"),
     )
 
 

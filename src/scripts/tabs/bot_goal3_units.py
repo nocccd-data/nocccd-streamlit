@@ -18,7 +18,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal3_units
+from src.scripts.data_provider import fetch_bot_goal3_units, fetch_bot_target_frame
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -28,6 +28,9 @@ from src.scripts.pdf_cache import (
 from src.scripts.tabs.bot_excel_helpers import (
     EXCEL_MIME,
     ExcelSection,
+    _insert_after,
+    _target_fn,
+    actual_vs_target_section,
     avg_unit_cols,
     matrix_table,
     sections_to_excel_bytes,
@@ -45,17 +48,28 @@ from src.scripts.tabs.bot_helpers import (
     RACE_COLORS,
     RACE_ORDER,
     RACE_SHORT,
+    add_target_page,
     pct_change_axis_range,
+    render_target_section,
     window_bounds,
     window_years,
     year_header_fontsize,
 )
+from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal3_units"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
+_DATASET = "bot_goal3_units"
+
+
+def _targets() -> Targets | None:
+    frame = st.session_state.get("bg3u_targets")
+    return None if frame is None else Targets.for_dataset(_DATASET, frame)
+
 
 _TITLES = {
     "tab_title": "BOT Goal 3 - Average Units",
+    "target_title": "Average Units Accumulated by ADT Earners: Progress Toward 2029-30 Target",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners",
     "headcount_caption": (
@@ -221,11 +235,14 @@ def _pct_change(df_agg, group_col="camp_desc", order=None):
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-# Public aliases — used by src.pipeline.bot_export and bot_excel_export.
-# Promoted from underscore-prefixed implementations so internal renames of
-# the ``_aggregate_*`` / ``_pct_change`` / ``_visible_*`` / ``_generate_pdf``
-# helpers do not silently break the exporters. Defined after their
-# implementations are declared (Python evaluates these at module load).
+# Retained public aliases — no current in-repo caller. src.pipeline.bot_export
+# and bot_excel_export call this module's own generate_pdf/_TITLES/
+# units_excel_sections directly, not these names. Promoted from
+# underscore-prefixed implementations in case an external/future consumer
+# wants the non-underscore name; kept so a rename of the ``_aggregate_*`` /
+# ``_pct_change`` / ``_visible_*`` implementations would not silently break
+# such a caller. Defined after their implementations are declared (Python
+# evaluates these at module load).
 aggregate_campus = _aggregate_campus
 aggregate_race = _aggregate_race
 aggregate_gender = _aggregate_gender
@@ -847,7 +864,7 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
                        FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
-def _generate_pdf(df) -> bytes:
+def _generate_pdf(df, targets: Targets | None = None) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
         "figure.edgecolor": "white",
@@ -878,6 +895,9 @@ def _generate_pdf(df) -> bytes:
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
+        if targets is not None:
+            add_target_page(pdf, _TITLES, targets)
+
         # Page 1
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
         fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
@@ -955,7 +975,7 @@ def _generate_pdf(df) -> bytes:
 generate_pdf = _generate_pdf
 
 
-def _excel_campus_table(df):
+def _excel_campus_table(df, targets: Targets | None = None):
     df_agg = _aggregate_campus(df)
     years = sorted(df_agg["academic_year"].dropna().unique())
     campuses = [c for c in CAMPUS_ORDER if c in df_agg["camp_desc"].values]
@@ -968,6 +988,18 @@ def _excel_campus_table(df):
     )
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
+
+    if targets is not None and years:
+        last = years[-1]
+        target_of = _target_fn(
+            targets, _aggregate_campus(targets.frame),
+            key_col="camp_desc", value_col="avg_units",
+        )
+        assert target_of is not None
+        out = _insert_after(
+            out, last, f"{last} Target",
+            [target_of(camp, last) for camp in out["Campus"]],
+        )
 
     df_pct = _pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
     if not df_pct.empty:
@@ -982,16 +1014,38 @@ def _excel_campus_table(df):
     return out
 
 
-def _generate_excel(df) -> bytes:
+def units_excel_sections(
+    df, targets: Targets | None = None,
+) -> list[ExcelSection]:
     years = sorted(df["academic_year"].dropna().unique())
-    sections = [
+    sections: list[ExcelSection] = []
+    if targets is not None:
+        sections.append(actual_vs_target_section(_TITLES, targets))
+    sections.append(
         ExcelSection(
             _TITLES["headcount_title"],
-            _excel_campus_table(df),
+            _excel_campus_table(df, targets),
             percent_cols=("5-Yr Percent Change",),
-            decimal_cols=tuple(years),
+            decimal_cols=tuple(years) + (
+                (f"{years[-1]} Target",) if targets is not None and years else ()
+            ),
         ),
-    ]
+    )
+
+    # Per-group target lookups from the plan frame.
+    frame = targets.frame if targets is not None else None
+    race_target = _target_fn(
+        targets, _aggregate_race(frame) if frame is not None else None,
+        key_col="race_description", value_col="avg_units",
+    )
+    gender_target = _target_fn(
+        targets, _aggregate_gender(frame) if frame is not None else None,
+        key_col="gender", value_col="avg_units",
+    )
+    fg_target = _target_fn(
+        targets, _aggregate_firstgen(frame) if frame is not None else None,
+        key_col="fg", value_col="avg_units",
+    )
 
     df_race = _aggregate_race(df)
     visible_races = _visible_races(df_race)
@@ -1004,6 +1058,7 @@ def _generate_excel(df) -> bytes:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=race_target,
     )
     sections.extend([
         ExcelSection(
@@ -1050,6 +1105,7 @@ def _generate_excel(df) -> bytes:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=gender_target,
     )
     sections.extend([
         ExcelSection(
@@ -1095,6 +1151,7 @@ def _generate_excel(df) -> bytes:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=fg_target,
     )
     sections.extend([
         ExcelSection(
@@ -1127,8 +1184,12 @@ def _generate_excel(df) -> bytes:
         ),
     ])
 
+    return sections
+
+
+def _generate_excel(df, targets: Targets | None = None) -> bytes:
     return sections_to_excel_bytes(
-        sections,
+        units_excel_sections(df, targets),
         title=f"{_TITLES['tab_title']} - Chart Table Data",
     )
 
@@ -1158,20 +1219,25 @@ def render():
             st.warning("Select at least one academic year.")
             return
         fetch_bot_goal3_units.clear()
+        fetch_bot_target_frame.clear()
         df = fetch_bot_goal3_units(tuple(sorted(selected_acyrs)))
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg3u_df"] = df
+        st.session_state["bg3u_targets"] = fetch_bot_target_frame(_DATASET)
         clear_excel_cache("bg3u")
         clear_pdf_cache("bg3u")
 
     if "bg3u_df" in st.session_state:
-        cache_key = id(st.session_state["bg3u_df"])
+        cache_key = (
+            id(st.session_state["bg3u_df"]),
+            id(st.session_state.get("bg3u_targets")),
+        )
         pdf_bytes = cached_pdf_bytes(
             "bg3u",
             cache_key,
-            lambda: _generate_pdf(st.session_state["bg3u_df"]),
+            lambda: _generate_pdf(st.session_state["bg3u_df"], targets=_targets()),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
@@ -1181,7 +1247,7 @@ def render():
         excel_bytes = cached_excel_bytes(
             "bg3u",
             cache_key,
-            lambda: _generate_excel(st.session_state["bg3u_df"]),
+            lambda: _generate_excel(st.session_state["bg3u_df"], targets=_targets()),
         )
         st.sidebar.download_button(
             "Download Excel", data=excel_bytes,
@@ -1200,6 +1266,10 @@ def render():
         f"{window[0]} to {window[-1]}" if len(window) >= 2
         else window[0] if window else ""
     )
+
+    targets = _targets()
+    if targets is not None:
+        render_target_section(_TITLES, targets)
 
     # Chart 1: Average units by campus
     st.subheader(_TITLES["org"])

@@ -81,6 +81,21 @@ def _download_and_read(
     return df[df[filter_col].astype(str).isin(wanted)]
 
 
+def _read_target_frame(dataset_name: str) -> pd.DataFrame:
+    """Vision 2030 plan rows (baseline -> latest) for a target dataset.
+
+    Independent of the sidebar selection: the Actual vs Target chart always
+    shows the whole plan. Filtered to >= baseline afterwards because
+    _download_and_read adds the reference year whenever the requested years
+    equal the configured window (the 2027 run).
+    """
+    from src.pipeline.config import BOT_TARGET_BASELINE_ACYR, target_acyrs
+
+    years = tuple(target_acyrs(dataset_name))
+    df = _download_and_read(dataset_name, "acyr_code", years)
+    return df[df["acyr_code"].astype(int) >= int(BOT_TARGET_BASELINE_ACYR)]
+
+
 # ---------------------------------------------------------------------------
 # Public fetch functions — Streamlit-cached, one per dataset
 # ---------------------------------------------------------------------------
@@ -229,3 +244,8 @@ def fetch_bot_goal3_units(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
 @st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_bot_goal4_xfer_ready(acyr_codes: tuple[str, ...]) -> pd.DataFrame:
     return _download_and_read("bot_goal4_xfer_ready", "acyr_code", acyr_codes)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_bot_target_frame(dataset_name: str) -> pd.DataFrame:
+    return _read_target_frame(dataset_name)

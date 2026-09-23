@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pantab
 
-from .config import DATASETS, SQL_DIR, HYPER_DIR
+from .config import DATASETS, SQL_DIR, HYPER_DIR, extract_values
 from .libs.sql import get_engine
 
 
@@ -112,10 +112,11 @@ def extract_dataset(name: str) -> Path:
 
     # Guaranteed by the guards above; restated so the type checker narrows it.
     assert param_name is not None
-    # A dataset may carry reference-only values under `ref_<param_name>` (the
-    # BOT datasets' `ref_acyr_code`, see config.py). They are extracted exactly
-    # like the main values — the distinction only matters to the consumers.
-    values = list(cfg.get(f"ref_{param_name}", [])) + list(cfg[param_name])
+    # Reference-only values (`ref_<param_name>`) and, for BOT target
+    # datasets, the Vision 2030 plan years are extracted exactly like the
+    # main values — the distinction only matters to the consumers
+    # (config.display_acyrs / config.target_acyrs).
+    values = extract_values(name)
 
     # Multi-acyr templates have an `IN (:t1)` placeholder we expand to one
     # placeholder per supplied value. `\s*` on both sides of `(` AND before

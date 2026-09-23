@@ -17,6 +17,14 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
 from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
+from src.scripts.tabs.bot_targets import (
+    Targets,
+    build_target_chart,
+    district_actual_vs_target,
+    mpl_target_chart,
+    plan_range_label,
+    target_caption,
+)
 
 # ---------------------------------------------------------------------------
 # Constants — NOCCCD brand colors & category orders
@@ -286,9 +294,9 @@ def _visible_genders(df_gender: pd.DataFrame,
     return _visible_categories(df_gender, "gender", GENDER_ORDER, threshold)
 
 
-# Public aliases — used by src.pipeline.bot_excel_export and bot_excel_helpers.
-# Promoted from underscore-prefixed implementations so internal renames do not
-# silently break those consumers.
+# Retained public aliases — no current in-repo caller (bot_excel_helpers.py
+# imports the underscore-prefixed _visible_races/_visible_genders directly).
+# Kept in case an external/future consumer wants the non-underscore name.
 visible_races = _visible_races
 visible_genders = _visible_genders
 
@@ -728,9 +736,29 @@ def _source_html(titles: dict) -> str:
     return f"<div style='text-align:left'><small>Source: {src}</small></div>"
 
 
+def render_target_section(titles: dict, targets: Targets) -> None:
+    """Chart 0: district Actual vs Target, 2022-23 -> 2029-30.
+
+    Always the full plan — it does not follow the Academic Years selection.
+    """
+    st.subheader(titles["org"])
+    st.markdown(f"**{titles['target_title']}**  \n{plan_range_label()}")
+    st.caption(
+        f"{target_caption(targets.rule)} This chart always shows the full "
+        "plan and does not follow the Academic Years selection."
+    )
+    st.plotly_chart(
+        build_target_chart(district_actual_vs_target(targets), targets.rule),
+        width="stretch",
+    )
+    st.markdown(_source_html(titles), unsafe_allow_html=True)
+    st.divider()
+
+
 def render_bot_charts(
     df: pd.DataFrame, titles: dict,
     base_df: pd.DataFrame | None = None,
+    targets: Targets | None = None,
 ):
     """Render the standard 4-chart BOT layout.
 
@@ -750,6 +778,7 @@ def render_bot_charts(
         include_nocccd (optional, default True) — show NOCCCD unduplicated bar
         credit_only_firstgen (optional, default True) — filter first-gen to credit
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
+    targets (optional) — Vision 2030 plan rows + rule; renders the Actual vs Target chart first
     """
     years = sorted(df["academic_year"].dropna().unique())
     window = window_years(years)
@@ -758,6 +787,8 @@ def render_bot_charts(
         else window[0] if window else ""
     )
     org = titles["org"]
+    if targets is not None:
+        render_target_section(titles, targets)
 
     # --- Chart 1: Headcount by Campus ---
     st.subheader(org)
@@ -901,6 +932,29 @@ def _draw_section_note(fig, y, note):
     note_wrapped = textwrap.fill(note, width=140)
     fig.text(0.06, y, note_wrapped,
              fontsize=6, color="grey", va="top")
+
+
+def add_target_page(pdf, titles: dict, targets: Targets) -> None:
+    """PDF page 1 for target tabs. The existing pages follow unchanged.
+
+    The caller has already forced the light-theme rcParams.
+    """
+    fig = plt.figure(figsize=(8.5, 11.0))
+    fig.text(0.5, 0.97, titles.get("tab_title", "BOT Goal"), fontsize=14,
+             fontweight="bold", ha="center", va="top")
+    y_after_header = _draw_section_header(
+        fig, 0.935, titles["org"], titles["target_title"],
+        plan_range_label(), target_caption(targets.rule),
+    )
+    bottom = 0.58
+    mpl_target_chart(
+        fig, (0.08, bottom, 0.86, y_after_header - bottom),
+        district_actual_vs_target(targets), targets.rule,
+    )
+    _draw_section_source(fig, 0.54, titles.get("source", "Banner"))
+    _add_pdf_footer(fig)
+    pdf.savefig(fig)
+    plt.close(fig)
 
 
 def _mpl_headcount(fig, bbox, df_agg, df_pct):
@@ -1192,9 +1246,11 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
                        FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
-def generate_bot_pdf(df, titles, base_df=None) -> bytes:
+def generate_bot_pdf(df, titles, base_df=None,
+                     targets: Targets | None = None) -> bytes:
     """Generate a portrait PDF with 2 BOT sections per page.
 
+    Page 0 (only with targets): Actual vs Target
     Page 1: Headcount + Race
     Page 2: Gender + First-Gen
     If titles['headcount_only'] is True, only page 1 with just Headcount.
@@ -1252,6 +1308,9 @@ def generate_bot_pdf(df, titles, base_df=None) -> bytes:
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
+        if targets is not None:
+            add_target_page(pdf, titles, targets)
+
         # --- Page 1 ---
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
         tab_title = titles.get("tab_title", "BOT Goal")
