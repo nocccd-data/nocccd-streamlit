@@ -1,7 +1,11 @@
 import streamlit as st
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal1_students, fetch_bot_goal2_assoc
+from src.scripts.data_provider import (
+    fetch_bot_goal1_students,
+    fetch_bot_goal2_assoc,
+    fetch_bot_target_frame,
+)
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -10,9 +14,17 @@ from src.scripts.pdf_cache import (
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
+from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal2_assoc"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
+_DATASET = "bot_goal2_assoc"
+
+
+def _targets() -> Targets | None:
+    frame = st.session_state.get("bg2a_targets")
+    return None if frame is None else Targets.for_dataset(_DATASET, frame)
+
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Associate Degrees",
@@ -65,6 +77,7 @@ def render():
         sorted_acyrs = tuple(sorted(selected_acyrs))
         fetch_bot_goal2_assoc.clear()
         fetch_bot_goal1_students.clear()
+        fetch_bot_target_frame.clear()
         df = fetch_bot_goal2_assoc(sorted_acyrs)
         base = fetch_bot_goal1_students(sorted_acyrs)
         # Credit-only scope: denominator should match (Cypress + Fullerton)
@@ -74,6 +87,7 @@ def render():
             return
         st.session_state["bg2a_df"] = df
         st.session_state["bg2a_base"] = base
+        st.session_state["bg2a_targets"] = fetch_bot_target_frame(_DATASET)
         clear_excel_cache("bg2a")
         clear_pdf_cache("bg2a")
 
@@ -81,6 +95,7 @@ def render():
         cache_key = (
             id(st.session_state["bg2a_df"]),
             id(st.session_state.get("bg2a_base")),
+            id(st.session_state.get("bg2a_targets")),
         )
         pdf_bytes = cached_pdf_bytes(
             "bg2a",
@@ -89,6 +104,7 @@ def render():
                 st.session_state["bg2a_df"],
                 _TITLES,
                 base_df=st.session_state.get("bg2a_base"),
+                targets=_targets(),
             ),
         )
         st.sidebar.download_button(
@@ -103,6 +119,7 @@ def render():
                 st.session_state["bg2a_df"],
                 _TITLES,
                 base_df=st.session_state.get("bg2a_base"),
+                targets=_targets(),
             ),
         )
         st.sidebar.download_button(
@@ -118,4 +135,5 @@ def render():
     render_bot_charts(
         st.session_state["bg2a_df"], _TITLES,
         base_df=st.session_state.get("bg2a_base"),
+        targets=_targets(),
     )

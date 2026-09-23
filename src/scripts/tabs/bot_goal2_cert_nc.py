@@ -4,6 +4,7 @@ from src.pipeline.config import DATASETS
 from src.scripts.data_provider import (
     fetch_bot_goal2_cert_nc,
     fetch_bot_goal2_cert_nc_denom,
+    fetch_bot_target_frame,
 )
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
@@ -13,9 +14,17 @@ from src.scripts.pdf_cache import (
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
+from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal2_cert_nc"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
+_DATASET = "bot_goal2_cert_nc"
+
+
+def _targets() -> Targets | None:
+    frame = st.session_state.get("bg2nc_targets")
+    return None if frame is None else Targets.for_dataset(_DATASET, frame)
+
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Noncredit Certificates",
@@ -76,6 +85,7 @@ def render():
         sorted_acyrs = tuple(sorted(selected_acyrs))
         fetch_bot_goal2_cert_nc.clear()
         fetch_bot_goal2_cert_nc_denom.clear()
+        fetch_bot_target_frame.clear()
         df = fetch_bot_goal2_cert_nc(sorted_acyrs)
         base = fetch_bot_goal2_cert_nc_denom(sorted_acyrs)
         if df.empty:
@@ -83,6 +93,7 @@ def render():
             return
         st.session_state["bg2nc_df"] = df
         st.session_state["bg2nc_base"] = base
+        st.session_state["bg2nc_targets"] = fetch_bot_target_frame(_DATASET)
         clear_excel_cache("bg2nc")
         clear_pdf_cache("bg2nc")
 
@@ -90,6 +101,7 @@ def render():
         cache_key = (
             id(st.session_state["bg2nc_df"]),
             id(st.session_state.get("bg2nc_base")),
+            id(st.session_state.get("bg2nc_targets")),
         )
         pdf_bytes = cached_pdf_bytes(
             "bg2nc",
@@ -98,6 +110,7 @@ def render():
                 st.session_state["bg2nc_df"],
                 _TITLES,
                 base_df=st.session_state.get("bg2nc_base"),
+                targets=_targets(),
             ),
         )
         st.sidebar.download_button(
@@ -112,6 +125,7 @@ def render():
                 st.session_state["bg2nc_df"],
                 _TITLES,
                 base_df=st.session_state.get("bg2nc_base"),
+                targets=_targets(),
             ),
         )
         st.sidebar.download_button(
@@ -127,4 +141,5 @@ def render():
     render_bot_charts(
         st.session_state["bg2nc_df"], _TITLES,
         base_df=st.session_state.get("bg2nc_base"),
+        targets=_targets(),
     )

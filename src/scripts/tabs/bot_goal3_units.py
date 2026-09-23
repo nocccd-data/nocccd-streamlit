@@ -18,7 +18,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal3_units
+from src.scripts.data_provider import fetch_bot_goal3_units, fetch_bot_target_frame
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -50,6 +50,7 @@ from src.scripts.tabs.bot_helpers import (
     RACE_SHORT,
     add_target_page,
     pct_change_axis_range,
+    render_target_section,
     window_bounds,
     window_years,
     year_header_fontsize,
@@ -58,6 +59,13 @@ from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal3_units"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
+_DATASET = "bot_goal3_units"
+
+
+def _targets() -> Targets | None:
+    frame = st.session_state.get("bg3u_targets")
+    return None if frame is None else Targets.for_dataset(_DATASET, frame)
+
 
 _TITLES = {
     "tab_title": "BOT Goal 3 - Average Units",
@@ -1208,20 +1216,25 @@ def render():
             st.warning("Select at least one academic year.")
             return
         fetch_bot_goal3_units.clear()
+        fetch_bot_target_frame.clear()
         df = fetch_bot_goal3_units(tuple(sorted(selected_acyrs)))
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg3u_df"] = df
+        st.session_state["bg3u_targets"] = fetch_bot_target_frame(_DATASET)
         clear_excel_cache("bg3u")
         clear_pdf_cache("bg3u")
 
     if "bg3u_df" in st.session_state:
-        cache_key = id(st.session_state["bg3u_df"])
+        cache_key = (
+            id(st.session_state["bg3u_df"]),
+            id(st.session_state.get("bg3u_targets")),
+        )
         pdf_bytes = cached_pdf_bytes(
             "bg3u",
             cache_key,
-            lambda: _generate_pdf(st.session_state["bg3u_df"]),
+            lambda: _generate_pdf(st.session_state["bg3u_df"], targets=_targets()),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
@@ -1231,7 +1244,7 @@ def render():
         excel_bytes = cached_excel_bytes(
             "bg3u",
             cache_key,
-            lambda: _generate_excel(st.session_state["bg3u_df"]),
+            lambda: _generate_excel(st.session_state["bg3u_df"], targets=_targets()),
         )
         st.sidebar.download_button(
             "Download Excel", data=excel_bytes,
@@ -1250,6 +1263,10 @@ def render():
         f"{window[0]} to {window[-1]}" if len(window) >= 2
         else window[0] if window else ""
     )
+
+    targets = _targets()
+    if targets is not None:
+        render_target_section(_TITLES, targets)
 
     # Chart 1: Average units by campus
     st.subheader(_TITLES["org"])

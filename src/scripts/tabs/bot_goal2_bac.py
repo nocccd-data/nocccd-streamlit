@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_bot_goal2_bac
+from src.scripts.data_provider import fetch_bot_goal2_bac, fetch_bot_target_frame
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -10,9 +10,17 @@ from src.scripts.pdf_cache import (
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
+from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal2_bac"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
+_DATASET = "bot_goal2_bac"
+
+
+def _targets() -> Targets | None:
+    frame = st.session_state.get("bg2b_targets")
+    return None if frame is None else Targets.for_dataset(_DATASET, frame)
+
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Bachelor's Degrees",
@@ -61,20 +69,27 @@ def render():
             st.warning("Select at least one academic year.")
             return
         fetch_bot_goal2_bac.clear()
+        fetch_bot_target_frame.clear()
         df = fetch_bot_goal2_bac(tuple(sorted(selected_acyrs)))
         if df.empty:
             st.warning("No data returned for the selected academic years.")
             return
         st.session_state["bg2b_df"] = df
+        st.session_state["bg2b_targets"] = fetch_bot_target_frame(_DATASET)
         clear_excel_cache("bg2b")
         clear_pdf_cache("bg2b")
 
     if "bg2b_df" in st.session_state:
-        cache_key = id(st.session_state["bg2b_df"])
+        cache_key = (
+            id(st.session_state["bg2b_df"]),
+            id(st.session_state.get("bg2b_targets")),
+        )
         pdf_bytes = cached_pdf_bytes(
             "bg2b",
             cache_key,
-            lambda: generate_bot_pdf(st.session_state["bg2b_df"], _TITLES),
+            lambda: generate_bot_pdf(
+                st.session_state["bg2b_df"], _TITLES, targets=_targets()
+            ),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
@@ -84,7 +99,9 @@ def render():
         excel_bytes = cached_excel_bytes(
             "bg2b",
             cache_key,
-            lambda: generate_bot_excel(st.session_state["bg2b_df"], _TITLES),
+            lambda: generate_bot_excel(
+                st.session_state["bg2b_df"], _TITLES, targets=_targets()
+            ),
         )
         st.sidebar.download_button(
             "Download Excel", data=excel_bytes,
@@ -96,4 +113,4 @@ def render():
         st.info("Select Academic Years and press **Query** to load data.")
         return
 
-    render_bot_charts(st.session_state["bg2b_df"], _TITLES)
+    render_bot_charts(st.session_state["bg2b_df"], _TITLES, targets=_targets())

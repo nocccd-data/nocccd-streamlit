@@ -68,3 +68,20 @@ def test_non_bot_fetch_is_unchanged(stub_hyper):
 def test_unknown_dataset_name_does_not_raise_on_ref_lookup(stub_hyper):
     out = data_provider._download_and_read("not_a_dataset", "acyr_code", ("2021",))
     assert list(out["acyr_code"]) == ["2021"]
+
+
+def test_target_frame_is_baseline_onward_ignoring_the_sidebar(stub_hyper):
+    out = data_provider._read_target_frame("bot_goal2_assoc")
+    assert sorted(out["acyr_code"]) == ["2022", "2023", "2024", "2025"]
+
+
+def test_target_frame_never_carries_the_reference_year(stub_hyper, monkeypatch):
+    # 2027 run: window 2022..2026 == target years, which makes
+    # _download_and_read add the 2018 reference (Review Focus 5).
+    from src.pipeline.config import DATASETS
+
+    cfg = dict(DATASETS["bot_goal2_assoc"])
+    cfg["acyr_code"] = ["2022", "2023", "2024", "2025", "2026"]
+    monkeypatch.setitem(DATASETS, "bot_goal2_assoc", cfg)
+    out = data_provider._read_target_frame("bot_goal2_assoc")
+    assert "2018" not in set(out["acyr_code"])
