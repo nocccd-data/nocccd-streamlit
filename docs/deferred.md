@@ -32,6 +32,7 @@ the gap — never renumber.
 | 5 | [The PDF methodology page renders when no page carries a projection](#5-the-pdf-methodology-page-renders-when-no-page-carries-a-projection) | Bug | Low | XS | ready |
 | 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
 | 6 | [The persistence x axis spaces terms evenly regardless of the gaps between them](#6-the-persistence-x-axis-spaces-terms-evenly-regardless-of-the-gaps-between-them) | Bug | Low | M | needs-decision (1) |
+| 7 | [Vision 2030 targets follow-ups](#7-vision-2030-targets-follow-ups) | Bug | Low | M | needs-decision (2) |
 
 ---
 
@@ -161,3 +162,57 @@ explicit tickvals, in both `_build_campus_fig` and `_mpl_line_chart` so the scre
 cannot diverge. The projected point already carries a real `term_sort`
 (`_compute_next_term`), so it needs no special case. Verify the PDF's rotated two-line tick
 labels still fit at uneven spacing — they are the tightest constraint on that page.
+
+---
+
+## 7. Vision 2030 targets follow-ups
+
+**[Bug · Low · M · needs-decision (2)]**
+
+Surfaced by the whole-branch final review of the Vision 2030 targets feature, 2026-09-23.
+Four smaller items from the same feature, grouped here rather than filed as four
+one-line clusters.
+
+**1. Target columns go blank once the plan window is over, and the extract keeps pulling
+baseline years forever.** `bot_targets.py::target_value` returns NaN whenever the years-since-
+baseline offset exceeds `PLAN_LENGTH` (`BOT_TARGET_END_ACYR` − `BOT_TARGET_BASELINE_ACYR` = 7).
+`bot_excel_helpers.py::_headcount_table` and `bot_excel_helpers.py::_target_cols` add a
+`"{year} Target"` column whenever `targets is not None`, with no check against the plan's end —
+so from the first run whose display year is past 2029-30 (the 2031 run), the headcount table,
+Summary Counts sections, and Rate Detail sections all carry a Target column of blank cells.
+Separately, `config.py::extract_values` (via `config.py::target_acyrs`) keeps pulling
+acyr 2022-2029 indefinitely — harmless on its own (the baseline never changes), but it means
+nothing in the extract step signals that the plan has ended either.
+**Decision:** drop the `"{year} Target"` column once the display year passes
+`BOT_TARGET_END_ACYR`, or keep it and document the blank cells as "plan ended" in the column
+header/caption. Waits on a 2030 plan revision (a new baseline/end year) before it's worth
+picking either way.
+
+**2. A missing district baseline fails silently.** `bot_targets.py::district_actual_vs_target`
+looks up the 2022-23 baseline via `actual.get(years[0])`; if that year is absent from the
+target frame, `bot_targets.py::target_value` returns NaN for every plan year, so the Actual vs
+Target chart draws Actual only — with no Target line and no explanation — while
+`bot_targets.py::target_caption` still prints the growth rule as if a target were plotted.
+**Fix:** when the baseline actual is missing, surface it — an `st.warning` on the Streamlit
+section and a note on `bot_helpers.py::add_target_page`'s PDF page. Low likelihood in practice:
+`config.py::target_acyrs` always includes the baseline year in the extract, so this needs the
+extract itself to have dropped 2022-23 data for a group.
+
+**3. Each target tab downloads its own Hyper file twice per Streamlit session.**
+`data_provider.py::fetch_bot_target_frame` and the tab's own fetch function (e.g.
+`data_provider.py::fetch_bot_goal2_cert`) are separate `st.cache_data`-wrapped functions over
+the same dataset name, so each independently calls `data_provider.py::_download_and_read`,
+which downloads the `.hyper` from Tableau Cloud again. If a scheduled publish lands between the
+two downloads, the Actual vs Target chart and the tab's own tables could read different
+snapshots of the same dataset within one page render. **Fix:** derive both the display frame
+and the target frame from a single download — e.g. have the tab's fetch download once and
+derive the target rows from it, rather than calling `data_provider.py::fetch_bot_target_frame`
+separately.
+
+**4. The manager's workbook is cited but not committed.** `config.py`, `bot_targets.py`,
+`docs/bot-tabs.md`, and `docs/superpowers/specs/2026-09-23-bot-2030-targets-design.md` all cite
+the source workbook at `docs/specification_docs_2/2022-23 to 2029-30 Target Charts as of 25-26
+Actuals.xlsx`, but `docs/specification_docs_2/` is untracked (`git status` shows it as `??`).
+**Decision:** commit the workbook so the citations resolve for anyone else who clones the repo,
+or reword the citations to point at wherever it's meant to live instead (e.g. OneDrive).
+Pending the user's call.

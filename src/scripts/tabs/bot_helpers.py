@@ -294,9 +294,9 @@ def _visible_genders(df_gender: pd.DataFrame,
     return _visible_categories(df_gender, "gender", GENDER_ORDER, threshold)
 
 
-# Public aliases — used by src.pipeline.bot_excel_export and bot_excel_helpers.
-# Promoted from underscore-prefixed implementations so internal renames do not
-# silently break those consumers.
+# Retained public aliases — no current in-repo caller (bot_excel_helpers.py
+# imports the underscore-prefixed _visible_races/_visible_genders directly).
+# Kept in case an external/future consumer wants the non-underscore name.
 visible_races = _visible_races
 visible_genders = _visible_genders
 

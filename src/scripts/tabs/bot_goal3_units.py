@@ -235,11 +235,14 @@ def _pct_change(df_agg, group_col="camp_desc", order=None):
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-# Public aliases — used by src.pipeline.bot_export and bot_excel_export.
-# Promoted from underscore-prefixed implementations so internal renames of
-# the ``_aggregate_*`` / ``_pct_change`` / ``_visible_*`` / ``_generate_pdf``
-# helpers do not silently break the exporters. Defined after their
-# implementations are declared (Python evaluates these at module load).
+# Retained public aliases — no current in-repo caller. src.pipeline.bot_export
+# and bot_excel_export call this module's own generate_pdf/_TITLES/
+# units_excel_sections directly, not these names. Promoted from
+# underscore-prefixed implementations in case an external/future consumer
+# wants the non-underscore name; kept so a rename of the ``_aggregate_*`` /
+# ``_pct_change`` / ``_visible_*`` implementations would not silently break
+# such a caller. Defined after their implementations are declared (Python
+# evaluates these at module load).
 aggregate_campus = _aggregate_campus
 aggregate_race = _aggregate_race
 aggregate_gender = _aggregate_gender
