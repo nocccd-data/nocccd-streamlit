@@ -5,7 +5,7 @@ ETL flow that extracts Oracle data, writes local `.hyper` files, and publishes t
 ## Pipeline flow
 
 1. **`config.py`** — defines datasets: name → SQL file + value list + `param_name` + `db_section`. Each dataset stores its values under a semantic key (e.g. `mis_acyr_id`, `acyr_code`, `fisc_year`) and `param_name` tells extract.py which key to read. A dataset may also carry reference-only values under `ref_<param_name>` (the BOT datasets' `ref_acyr_code`, see `docs/bot-tabs.md`); they are extracted exactly like the main values — the distinction only matters to the consumers. BOT target datasets also extract the Vision 2030 plan years (`config.target_acyrs`: 2022 → latest window year). The full value list is `config.extract_values(name)`.
-2. **`extract.py`** — reads SQL, resolves values via `cfg.get(f"ref_{param_name}", []) + cfg[param_name]`, expands `IN (:t1...)` or loops single-param SQL, queries Oracle, writes `.hyper` via `pantab.frame_to_hyper()`
+2. **`extract.py`** — reads SQL, resolves values via `config.extract_values(name)`, expands `IN (:t1...)` or loops single-param SQL, queries Oracle, writes `.hyper` via `pantab.frame_to_hyper()`
 3. **`publish.py`** — uploads `.hyper` to "Streamlit Data" project on Tableau Cloud; also has `download_hyper()` which downloads `.tdsx`, extracts `.hyper` from the ZIP
 4. **`run.py`** — CLI orchestrator, reads Tableau credentials from `.streamlit/secrets.toml`
 
