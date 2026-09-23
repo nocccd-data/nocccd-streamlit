@@ -41,6 +41,25 @@ Charts **render** every year present, so 2018-19 draws as an extra left-hand col
 
 Invariants pinned by `tests/test_bot_window_years.py`: every BOT dataset has exactly `BOT_WINDOW_YEARS` entries in `acyr_code`, every reference year sorts before the window, and the reference is 2018-19 on every chart after the wage shift.
 
+## Vision 2030 targets (Actual vs Target)
+
+Seven tabs carry the district's Vision 2030 plan: Associate Degrees, ADT, Credit Certificates, Noncredit Certificates, Bachelor's, Average Units, and Transfer Ready. It comes from the manager's workbook in `docs/specification_docs_2/`. Transfers is **not** included, because the workbook's "Xfer 4-Year" sheet came from other data.
+
+Three year concepts, kept separate on purpose:
+
+| Concept | Config | Moves? |
+|---|---|---|
+| Metrics window | `acyr_code` (5 years) | rolls every year |
+| Reference year | `ref_acyr_code` (2018-19) | only if management says so |
+| Target plan | `BOT_TARGET_BASELINE_ACYR = "2022"` → `BOT_TARGET_END_ACYR = "2029"` | **fixed**; re-basing the plan = changing these two |
+
+- **Rule** (`DATASETS[name]["target"]`): `growth` 0.30 → `B × (1 + 0.30 × k/7)`. Units: `reduce_over: 60`, `growth: 0.20` → `B − (B − 60) × 0.20 × k/7`, where lower is better. Bach: `round_up` (ceil for k ≥ 1). The chart caption is generated from the rule (`target_caption`), so the two can't drift apart.
+- **Baselines are live.** Each group's own 2022-23 value comes from the extract, district-wide or per campus/race/gender/first-gen. A group with no 2022-23 value gets a blank target, never 0.
+- **Extract**: `config.extract_values()` adds `target_acyrs()` (baseline → latest window year) to reference + window, so the 2022-23 baseline is still pulled after the window rolls past it (from the 2028 run). The app's sidebar fetch is unaffected. `fetch_bot_target_frame()` reads the plan rows separately, and the bulk exporters split them via `HyperCache.get()` (display years) and `get_targets_frame()` (plan years).
+- **Chart**: first on the tab, via `render_target_section()`; it always shows the full plan and ignores the sidebar. **PDF**: `add_target_page()` puts it on page 1, and the existing pages and their coordinates are unchanged.
+- **Targets are counts, never drawn on the rate charts.** Converting a count target into a rate target reverses Met/Not Met whenever enrollment moves (AA Hispanic 2025-26: count 1,117 vs target 1,047 is met, but rate 4.01% vs 4.68% is not). Target columns therefore sit next to the counts in Excel only.
+- Code: `src/scripts/tabs/bot_targets.py` (no Streamlit or `bot_helpers` imports, so there's no import cycle).
+
 ## Small-sample category suppression
 
 Race and gender categories are hidden when EITHER the first-year OR last-year count of the **metrics window** falls below `CATEGORY_MIN_COUNT` (default 10). Both window boundary years must have ≥ 10 for the category to be shown (middle years and the reference year are ignored). When fewer than two window years are present, the category is judged on the maximum count across the window year(s) actually on screen — never on the reference year's count, whose larger historical numbers must not lift a sub-threshold group past suppression. The rule targets first/last years specifically because the summary table's 5-yr % change is computed from those two values, so small counts on either side make the change unreliable. Implemented via `_visible_categories(df, key_col, order, threshold)` in `bot_helpers.py` with thin wrappers `_visible_races` and `_visible_genders`. An equivalent helper exists in `bot_goal3_units.py` for the average-metric tab. The filter is applied consistently in the interactive chart, the summary table, and the PDF export.
@@ -98,6 +117,7 @@ When adding a new tab, align the titles dict (`org`, captions) with the SQL's ac
 - `headcount_only` (default `False`): set `True` to skip charts 2-4 (race, gender, first-gen). Used by Bachelor's tab where the population is too small for meaningful demographic breakdowns.
 - `headcount_note`, `race_note`, `gender_note`, `firstgen_note` (default `None`): per-section grey footer note rendered just below that section's "Source: …" line. Used for the small-sample confidentiality disclaimer (most often on race) and the NOCE survey-data caveat (first-gen on Goal 1). When a note is present, that section's chart and Source line shift up by `0.01` (paper coords) in the PDF to make room.
 - `source` (default `"Banner"`): suffix after `Source: ` in every section footer (Streamlit and PDF). Override for tabs whose data comes from somewhere besides Banner — e.g., the Transfers and Living Wage tabs use `"CCCCO Supplemental & Success Data for the SCFF files; Banner"` because their headcount comes from `scff_xfer`/`scff_living_wage`.
+- `target_title`: title of the Actual vs Target chart / PDF page 1 / first Excel table. Required on the 7 target tabs.
 
 **Plotly horizontal grouped bar gotcha**: Bars render in reverse legend order. To get the desired top-to-bottom order, pass `category_orders` with the reversed label list.
 
