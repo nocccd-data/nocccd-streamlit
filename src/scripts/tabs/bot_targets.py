@@ -21,6 +21,7 @@ import math
 from dataclasses import dataclass
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from src.pipeline.config import (
     BOT_TARGET_BASELINE_ACYR,
@@ -174,3 +175,105 @@ def targets_from_cache(cache, name: str) -> Targets | None:
     if "target" not in DATASETS[name]:
         return None
     return Targets.for_dataset(name, cache.get_targets_frame(name))
+
+
+# ---------------------------------------------------------------------------
+# Charts — styled after the manager's workbook chart: grey solid Actual with
+# square markers, gold dashed Target with diamonds (NOCCCD brand Grey and
+# Golden Yellow, docs/theme.md).
+# ---------------------------------------------------------------------------
+
+ACTUAL_COLOR = "#575a5d"
+TARGET_COLOR = "#ffdd00"
+
+
+def _x_labels(avt: pd.DataFrame) -> list[str]:
+    labels = [short_year(y) for y in avt["academic_year"]]
+    labels[0] = f"{labels[0]} (Baseline)"
+    return labels
+
+
+def _fmt(rule: dict) -> str:
+    return ",.1f" if rule.get("value_col") else ",.0f"
+
+
+def build_target_chart(avt: pd.DataFrame, rule: dict) -> go.Figure:
+    fmt = _fmt(rule)
+    x = _x_labels(avt)
+    actual = avt["actual"]
+    target = avt["target"]
+    # Label the target only at the baseline and the 2029-30 endpoint, as in
+    # the workbook chart; hover shows every value.
+    target_text = [
+        format(v, fmt) if i in (0, len(target) - 1) and pd.notna(v) else ""
+        for i, v in enumerate(target)
+    ]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=actual, name="Actual", mode="lines+markers+text",
+        line={"color": ACTUAL_COLOR, "width": 3},
+        marker={"symbol": "square", "size": 9, "color": ACTUAL_COLOR},
+        text=["" if pd.isna(v) else format(v, fmt) for v in actual],
+        textposition="bottom center", textfont={"size": 12},
+        hovertemplate=f"%{{x}}<br>Actual: %{{y:{fmt}}}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=target, name="Target", mode="lines+markers+text",
+        line={"color": TARGET_COLOR, "width": 3, "dash": "dash"},
+        marker={"symbol": "diamond", "size": 10, "color": TARGET_COLOR,
+                "line": {"color": ACTUAL_COLOR, "width": 1}},
+        text=target_text, textposition="top center", textfont={"size": 12},
+        hovertemplate=f"%{{x}}<br>Target: %{{y:{fmt}}}<extra></extra>",
+    ))
+    values = pd.concat([actual, target]).dropna()
+    lo, hi = (values.min(), values.max()) if not values.empty else (0.0, 1.0)
+    pad = max((hi - lo) * 0.15, abs(hi) * 0.02, 1.0)
+    fig.update_layout(
+        height=420,
+        xaxis_title=None,
+        yaxis_title=None,
+        yaxis={"range": [lo - pad, hi + pad], "tickformat": fmt},
+        legend_title=None,
+        legend={"orientation": "h", "yanchor": "top", "y": -0.15,
+                "xanchor": "center", "x": 0.5},
+        margin={"t": 30},
+    )
+    return fig
+
+
+def mpl_target_chart(fig, bbox, avt: pd.DataFrame, rule: dict) -> None:
+    """matplotlib twin of build_target_chart for the PDF (light theme is
+    set by the caller)."""
+    fmt = _fmt(rule)
+    left, bottom, width, height = bbox
+    ax = fig.add_axes([left, bottom, width, height])
+    xs = list(range(len(avt)))
+    actual = avt["actual"].tolist()
+    target = avt["target"].tolist()
+    ax.plot(xs, actual, color=ACTUAL_COLOR, linewidth=2, marker="s",
+            markersize=5, label="Actual")
+    ax.plot(xs, target, color=TARGET_COLOR, linewidth=2, linestyle="--",
+            marker="D", markersize=5, markeredgecolor=ACTUAL_COLOR,
+            markeredgewidth=0.6, label="Target")
+    for x, v in zip(xs, actual):
+        if pd.notna(v):
+            ax.annotate(format(v, fmt), (x, v), textcoords="offset points",
+                        xytext=(0, -11), ha="center", fontsize=6)
+    for x in (xs[0], xs[-1]):
+        v = target[x]
+        if pd.notna(v):
+            ax.annotate(format(v, fmt), (x, v), textcoords="offset points",
+                        xytext=(0, 6), ha="center", fontsize=6)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(_x_labels(avt), fontsize=7)
+    ax.tick_params(axis="y", labelsize=6)
+    values = [v for v in actual + target if pd.notna(v)]
+    if values:
+        lo, hi = min(values), max(values)
+        pad = max((hi - lo) * 0.15, abs(hi) * 0.02, 1.0)
+        ax.set_ylim(lo - pad, hi + pad)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.08),
+              ncol=2, frameon=False)

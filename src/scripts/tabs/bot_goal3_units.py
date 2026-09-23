@@ -48,6 +48,7 @@ from src.scripts.tabs.bot_helpers import (
     RACE_COLORS,
     RACE_ORDER,
     RACE_SHORT,
+    add_target_page,
     pct_change_axis_range,
     window_bounds,
     window_years,
@@ -852,7 +853,7 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
                        FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
-def _generate_pdf(df) -> bytes:
+def _generate_pdf(df, targets: Targets | None = None) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
         "figure.edgecolor": "white",
@@ -883,6 +884,9 @@ def _generate_pdf(df) -> bytes:
 
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
+        if targets is not None:
+            add_target_page(pdf, _TITLES, targets)
+
         # Page 1
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
         fig.text(0.5, 0.97, tab_title, fontsize=14, fontweight="bold",
