@@ -10,8 +10,8 @@ a metric fails loudly.
 
 import pandas as pd
 
-from src.pipeline.bot_excel_export import _count_summary
 from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
+from src.scripts.tabs.bot_excel_helpers import _count_summary
 from src.scripts.tabs.bot_goal3_units import _pct_change as units_pct_change
 from src.scripts.tabs.bot_helpers import (
     CATEGORY_MIN_COUNT,

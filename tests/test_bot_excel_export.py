@@ -1,4 +1,4 @@
-"""Tests for the pure DataFrame helpers in src.pipeline.bot_excel_export.
+"""Tests for the pure DataFrame helpers in src.scripts.tabs.bot_excel_helpers (shared by the tab downloads and the bulk exporter).
 
 These helpers (_count_summary, _value_summary, _matrix_table, _rate_detail)
 do all the numeric aggregation behind the BOT Excel export. They are pure:
@@ -12,12 +12,12 @@ import time, so just importing it here is enough — no manual filter setup.
 import pandas as pd
 import pytest
 
-from src.pipeline.bot_excel_export import (
+from src.scripts.tabs.bot_excel_helpers import (
     _count_summary,
-    _matrix_table,
     _rate_detail,
-    _value_summary,
 )
+from src.scripts.tabs.bot_excel_helpers import matrix_table as _matrix_table
+from src.scripts.tabs.bot_excel_helpers import value_summary as _value_summary
 
 
 # ---------------------------------------------------------------------------

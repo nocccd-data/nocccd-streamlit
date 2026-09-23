@@ -133,7 +133,7 @@ def value_summary(
         last_val = _get_numeric(piv, key, last_yr)
         change = (
             (last_val - first_val) / first_val
-            if first_val and last_val is not None
+            if first_val is not None and first_val != 0 and last_val is not None
             else float("nan")
         )
         rows.append({
@@ -184,13 +184,19 @@ def _rate_detail(
         "total": "Denominator Count",
         "pct": "Percent",
     })
-    return detail[[
-        "Academic Year",
-        label_col,
-        "Numerator Count",
-        "Denominator Count",
-        "Percent",
-    ]].sort_values(["Academic Year", label_col])
+    # Fail loudly if an upstream Hyper drops a required metric (count/total/
+    # pct → Numerator/Denominator/Percent). The export must surface schema
+    # regressions, not silently ship blank columns (CLAUDE.md: "fail loudly").
+    required_cols = ["Academic Year", label_col,
+                     "Numerator Count", "Denominator Count", "Percent"]
+    missing = [c for c in required_cols if c not in detail.columns]
+    if missing:
+        raise KeyError(
+            f"_rate_detail: missing required column(s) {missing} in upstream "
+            f"frame (have: {sorted(detail.columns.tolist())}). Check the "
+            f"source Hyper's count/total/pct schema."
+        )
+    return detail[required_cols].sort_values(["Academic Year", label_col])
 
 
 def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
@@ -509,60 +515,75 @@ def _format_dataframe(
     )
 
 
+def write_sections_sheet(
+    writer: pd.ExcelWriter,
+    sections: list[ExcelSection],
+    *,
+    title: str,
+    sheet_name: str = "chart_data",
+) -> None:
+    """Write one chart-data sheet (title row + stacked section tables).
+
+    Shared by the tab downloads (one sheet per workbook) and the bulk
+    exporter (one sheet per BOT tab in a single workbook).
+    """
+    sheet_name = _safe_sheet_name(sheet_name)
+    workbook = writer.book
+    worksheet = workbook.add_worksheet(sheet_name)
+    writer.sheets[sheet_name] = worksheet
+
+    title_fmt = workbook.add_format({
+        "bold": True,
+        "font_size": 14,
+        "font_color": "#FFFFFF",
+        "bg_color": "#004062",
+    })
+    section_fmt = workbook.add_format({
+        "bold": True,
+        "font_size": 11,
+        "bg_color": "#E2F0D9",
+    })
+
+    worksheet.write(0, 0, title, title_fmt)
+    row = 2
+    for idx, section in enumerate(sections, start=1):
+        df = section.df.copy()
+        df.columns = [str(col) for col in df.columns]
+        _validate_sheet_shape(df, sheet_name)
+
+        worksheet.write(row, 0, section.title, section_fmt)
+        row += 1
+        if df.empty:
+            worksheet.write(row, 0, "No data")
+            row += 3
+            continue
+
+        df.to_excel(writer, sheet_name=sheet_name, startrow=row, index=False)
+        _format_dataframe(
+            workbook,
+            worksheet,
+            df,
+            sheet_name=sheet_name,
+            section_idx=idx,
+            header_row=row,
+            percent_cols=section.percent_cols,
+            integer_cols=section.integer_cols,
+            decimal_cols=section.decimal_cols,
+        )
+        row += len(df) + 3
+
+    worksheet.freeze_panes(1, 0)
+
+
 def sections_to_excel_bytes(
     sections: list[ExcelSection],
     *,
     title: str,
     sheet_name: str = "chart_data",
 ) -> bytes:
-    sheet_name = _safe_sheet_name(sheet_name)
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet(sheet_name)
-        writer.sheets[sheet_name] = worksheet
-
-        title_fmt = workbook.add_format({
-            "bold": True,
-            "font_size": 14,
-            "font_color": "#FFFFFF",
-            "bg_color": "#004062",
-        })
-        section_fmt = workbook.add_format({
-            "bold": True,
-            "font_size": 11,
-            "bg_color": "#E2F0D9",
-        })
-
-        worksheet.write(0, 0, title, title_fmt)
-        row = 2
-        for idx, section in enumerate(sections, start=1):
-            df = section.df.copy()
-            df.columns = [str(col) for col in df.columns]
-            _validate_sheet_shape(df, sheet_name)
-
-            worksheet.write(row, 0, section.title, section_fmt)
-            row += 1
-            if df.empty:
-                worksheet.write(row, 0, "No data")
-                row += 3
-                continue
-
-            df.to_excel(writer, sheet_name=sheet_name, startrow=row, index=False)
-            _format_dataframe(
-                workbook,
-                worksheet,
-                df,
-                sheet_name=sheet_name,
-                section_idx=idx,
-                header_row=row,
-                percent_cols=section.percent_cols,
-                integer_cols=section.integer_cols,
-                decimal_cols=section.decimal_cols,
-            )
-            row += len(df) + 3
-
-        worksheet.freeze_panes(1, 0)
+        write_sections_sheet(writer, sections, title=title, sheet_name=sheet_name)
     return buf.getvalue()
 
 

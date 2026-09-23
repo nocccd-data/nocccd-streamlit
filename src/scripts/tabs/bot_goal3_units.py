@@ -982,7 +982,7 @@ def _excel_campus_table(df):
     return out
 
 
-def _generate_excel(df) -> bytes:
+def units_excel_sections(df) -> list[ExcelSection]:
     years = sorted(df["academic_year"].dropna().unique())
     sections = [
         ExcelSection(
@@ -1127,8 +1127,12 @@ def _generate_excel(df) -> bytes:
         ),
     ])
 
+    return sections
+
+
+def _generate_excel(df) -> bytes:
     return sections_to_excel_bytes(
-        sections,
+        units_excel_sections(df),
         title=f"{_TITLES['tab_title']} - Chart Table Data",
     )
 
