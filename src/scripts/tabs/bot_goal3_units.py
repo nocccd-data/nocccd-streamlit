@@ -28,6 +28,9 @@ from src.scripts.pdf_cache import (
 from src.scripts.tabs.bot_excel_helpers import (
     EXCEL_MIME,
     ExcelSection,
+    _insert_after,
+    _target_fn,
+    actual_vs_target_section,
     avg_unit_cols,
     matrix_table,
     sections_to_excel_bytes,
@@ -50,12 +53,14 @@ from src.scripts.tabs.bot_helpers import (
     window_years,
     year_header_fontsize,
 )
+from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal3_units"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 
 _TITLES = {
     "tab_title": "BOT Goal 3 - Average Units",
+    "target_title": "Average Units Accumulated by ADT Earners: Progress Toward 2029-30 Target",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners",
     "headcount_caption": (
@@ -955,7 +960,7 @@ def _generate_pdf(df) -> bytes:
 generate_pdf = _generate_pdf
 
 
-def _excel_campus_table(df):
+def _excel_campus_table(df, targets: Targets | None = None):
     df_agg = _aggregate_campus(df)
     years = sorted(df_agg["academic_year"].dropna().unique())
     campuses = [c for c in CAMPUS_ORDER if c in df_agg["camp_desc"].values]
@@ -968,6 +973,18 @@ def _excel_campus_table(df):
     )
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
+
+    if targets is not None and years:
+        last = years[-1]
+        target_of = _target_fn(
+            targets, _aggregate_campus(targets.frame),
+            key_col="camp_desc", value_col="avg_units",
+        )
+        assert target_of is not None
+        out = _insert_after(
+            out, last, f"{last} Target",
+            [target_of(camp, last) for camp in out["Campus"]],
+        )
 
     df_pct = _pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
     if not df_pct.empty:
@@ -982,16 +999,38 @@ def _excel_campus_table(df):
     return out
 
 
-def units_excel_sections(df) -> list[ExcelSection]:
+def units_excel_sections(
+    df, targets: Targets | None = None,
+) -> list[ExcelSection]:
     years = sorted(df["academic_year"].dropna().unique())
-    sections = [
+    sections: list[ExcelSection] = []
+    if targets is not None:
+        sections.append(actual_vs_target_section(_TITLES, targets))
+    sections.append(
         ExcelSection(
             _TITLES["headcount_title"],
-            _excel_campus_table(df),
+            _excel_campus_table(df, targets),
             percent_cols=("5-Yr Percent Change",),
-            decimal_cols=tuple(years),
+            decimal_cols=tuple(years) + (
+                (f"{years[-1]} Target",) if targets is not None and years else ()
+            ),
         ),
-    ]
+    )
+
+    # Per-group target lookups from the plan frame.
+    frame = targets.frame if targets is not None else None
+    race_target = _target_fn(
+        targets, _aggregate_race(frame) if frame is not None else None,
+        key_col="race_description", value_col="avg_units",
+    )
+    gender_target = _target_fn(
+        targets, _aggregate_gender(frame) if frame is not None else None,
+        key_col="gender", value_col="avg_units",
+    )
+    fg_target = _target_fn(
+        targets, _aggregate_firstgen(frame) if frame is not None else None,
+        key_col="fg", value_col="avg_units",
+    )
 
     df_race = _aggregate_race(df)
     visible_races = _visible_races(df_race)
@@ -1004,6 +1043,7 @@ def units_excel_sections(df) -> list[ExcelSection]:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=race_target,
     )
     sections.extend([
         ExcelSection(
@@ -1050,6 +1090,7 @@ def units_excel_sections(df) -> list[ExcelSection]:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=gender_target,
     )
     sections.extend([
         ExcelSection(
@@ -1095,6 +1136,7 @@ def units_excel_sections(df) -> list[ExcelSection]:
         years=years,
         value_col="avg_units",
         value_name="Avg Units",
+        target_of=fg_target,
     )
     sections.extend([
         ExcelSection(
@@ -1130,9 +1172,9 @@ def units_excel_sections(df) -> list[ExcelSection]:
     return sections
 
 
-def _generate_excel(df) -> bytes:
+def _generate_excel(df, targets: Targets | None = None) -> bytes:
     return sections_to_excel_bytes(
-        units_excel_sections(df),
+        units_excel_sections(df, targets),
         title=f"{_TITLES['tab_title']} - Chart Table Data",
     )
 

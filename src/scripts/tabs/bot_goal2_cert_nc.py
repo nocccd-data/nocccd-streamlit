@@ -19,6 +19,7 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Noncredit Certificates",
+    "target_title": "Noncredit Certificates: Progress Toward 2029-30 Target",
     "org": "North Orange Continuing Education",
     "headcount_title": "Headcount of Students who Earned a Noncredit Certificate",
     "headcount_caption": (

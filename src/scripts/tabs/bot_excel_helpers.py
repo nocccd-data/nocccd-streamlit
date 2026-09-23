@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,6 +27,12 @@ from src.scripts.tabs.bot_helpers import (
     window_bounds,
     window_years,
 )
+from src.scripts.tabs.bot_targets import (
+    Targets,
+    district_actual_vs_target,
+    group_baselines,
+    group_target,
+)
 
 EXCEL_MAX_ROWS = 1_048_576
 EXCEL_MAX_COLS = 16_384
@@ -40,6 +47,42 @@ class ExcelSection:
     percent_cols: tuple[str, ...] = ()
     integer_cols: tuple[str, ...] = ()
     decimal_cols: tuple[str, ...] = ()
+
+
+# (group key, academic-year label) -> target; NaN where none is defined.
+TargetFn = Callable[[object, str], float]
+
+
+def _target_fn(
+    targets: Targets | None, agg: pd.DataFrame | None, *, key_col: str, value_col: str,
+) -> TargetFn | None:
+    """Per-group target lookup built from the plan-year aggregate *agg*."""
+    if targets is None or agg is None:
+        return None
+    baselines = group_baselines(agg, key_col=key_col, value_col=value_col)
+    rule = targets.rule
+    return lambda key, year: group_target(baselines, key, year, rule)
+
+
+def _insert_after(df: pd.DataFrame, after: str, name: str, values) -> pd.DataFrame:
+    out = df.copy()
+    loc = out.columns.get_loc(after)
+    if not isinstance(loc, int):
+        # get_loc returns a slice/mask for a duplicated label.
+        raise KeyError(f"_insert_after: column {after!r} is not unique")
+    out.insert(loc + 1, name, values)
+    return out
+
+
+def actual_vs_target_section(titles: dict, targets: Targets) -> ExcelSection:
+    """The data behind the Actual vs Target chart — all 8 plan years."""
+    avt = district_actual_vs_target(targets).rename(columns={
+        "academic_year": "Academic Year", "actual": "Actual", "target": "Target",
+    })
+    cols = ("Actual", "Target")
+    if targets.is_average:
+        return ExcelSection(titles["target_title"], avt, decimal_cols=cols)
+    return ExcelSection(titles["target_title"], avt, integer_cols=cols)
 
 
 def _safe_sheet_name(name: str) -> str:
@@ -82,6 +125,7 @@ def _count_summary(
     order: list[str],
     label_map: dict[str, str],
     years: list[str],
+    target_of: TargetFn | None = None,
 ) -> pd.DataFrame:
     if len(window_years(years)) < 2:
         return pd.DataFrame()
@@ -97,12 +141,15 @@ def _count_summary(
     for key in order:
         fc = _get_numeric(piv, key, first_yr) or 0
         lc = _get_numeric(piv, key, last_yr) or 0
-        rows.append({
+        row = {
             label_col: label_map.get(key, key),
             f"{first_yr} Count": int(fc),
             f"{last_yr} Count": int(lc),
-            "5-Yr Percent Change": ((lc - fc) / fc) if fc > 0 else float("nan"),
-        })
+        }
+        if target_of is not None:
+            row[f"{last_yr} Target"] = target_of(key, last_yr)
+        row["5-Yr Percent Change"] = ((lc - fc) / fc) if fc > 0 else float("nan")
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -116,6 +163,7 @@ def value_summary(
     years: list[str],
     value_col: str,
     value_name: str,
+    target_of: TargetFn | None = None,
 ) -> pd.DataFrame:
     if len(window_years(years)) < 2:
         return pd.DataFrame()
@@ -136,12 +184,15 @@ def value_summary(
             if first_val is not None and first_val != 0 and last_val is not None
             else float("nan")
         )
-        rows.append({
+        row = {
             label_col: label_map.get(key, key),
             f"{first_yr} {value_name}": first_val,
             f"{last_yr} {value_name}": last_val,
-            "5-Yr Percent Change": change,
-        })
+        }
+        if target_of is not None:
+            row[f"{last_yr} Target"] = target_of(key, last_yr)
+        row["5-Yr Percent Change"] = change
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -175,9 +226,15 @@ def _rate_detail(
     label_col: str,
     order: list[str],
     label_map: dict[str, str],
+    target_of: TargetFn | None = None,
 ) -> pd.DataFrame:
     detail = df[df[key_col].astype(str).isin(order)].copy()
     detail[label_col] = detail[key_col].map(label_map).fillna(detail[key_col])
+    if target_of is not None:
+        detail["Target Count"] = [
+            target_of(key, year)
+            for key, year in zip(detail[key_col], detail["academic_year"])
+        ]
     detail = detail.rename(columns={
         "academic_year": "Academic Year",
         "count": "Numerator Count",
@@ -187,8 +244,10 @@ def _rate_detail(
     # Fail loudly if an upstream Hyper drops a required metric (count/total/
     # pct → Numerator/Denominator/Percent). The export must surface schema
     # regressions, not silently ship blank columns (CLAUDE.md: "fail loudly").
-    required_cols = ["Academic Year", label_col,
-                     "Numerator Count", "Denominator Count", "Percent"]
+    required_cols = ["Academic Year", label_col, "Numerator Count"]
+    if target_of is not None:
+        required_cols.append("Target Count")
+    required_cols += ["Denominator Count", "Percent"]
     missing = [c for c in required_cols if c not in detail.columns]
     if missing:
         raise KeyError(
@@ -199,7 +258,9 @@ def _rate_detail(
     return detail[required_cols].sort_values(["Academic Year", label_col])
 
 
-def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
+def _headcount_table(
+    df: pd.DataFrame, titles: dict, targets: Targets | None = None,
+) -> pd.DataFrame:
     df_agg = aggregate_headcount(
         df,
         include_nocccd=titles.get("include_nocccd", True),
@@ -216,6 +277,22 @@ def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
 
+    if targets is not None and years:
+        last = years[-1]
+        target_of = _target_fn(
+            targets,
+            aggregate_headcount(
+                targets.frame, include_nocccd=titles.get("include_nocccd", True),
+            ),
+            key_col="camp_desc",
+            value_col="headcount",
+        )
+        assert target_of is not None
+        out = _insert_after(
+            out, last, f"{last} Target",
+            [target_of(camp, last) for camp in out["Campus"]],
+        )
+
     df_pct = compute_pct_change(df_agg)
     if not df_pct.empty:
         df_pct = df_pct.copy()
@@ -229,23 +306,56 @@ def _headcount_table(df: pd.DataFrame, titles: dict) -> pd.DataFrame:
     return out
 
 
+def _target_cols(years: list[str], targets: Targets | None) -> tuple[str, ...]:
+    if targets is None or not window_years(years):
+        return ()
+    return (f"{window_bounds(years)[1]} Target",)
+
+
 def standard_bot_excel_sections(
     df: pd.DataFrame,
     titles: dict,
     base_df: pd.DataFrame | None = None,
+    targets: Targets | None = None,
 ) -> list[ExcelSection]:
     years = _academic_years(df)
-    sections = [
+    sections: list[ExcelSection] = []
+    if targets is not None:
+        sections.append(actual_vs_target_section(titles, targets))
+    sections.append(
         ExcelSection(
             titles["headcount_title"],
-            _headcount_table(df, titles),
+            _headcount_table(df, titles, targets),
             percent_cols=("5-Yr Percent Change",),
-            integer_cols=tuple(years),
+            integer_cols=tuple(years) + (
+                (f"{years[-1]} Target",) if targets is not None and years else ()
+            ),
         ),
-    ]
+    )
 
     if titles.get("headcount_only"):
         return sections
+
+    # Per-group target lookups from the plan frame (counts only, so no base_df).
+    frame = targets.frame if targets is not None else None
+    race_target = _target_fn(
+        targets, aggregate_race(frame) if frame is not None else None,
+        key_col="race_description", value_col="count",
+    )
+    gender_target = _target_fn(
+        targets, aggregate_gender(frame) if frame is not None else None,
+        key_col="gender", value_col="count",
+    )
+    fg_target = _target_fn(
+        targets,
+        aggregate_firstgen(frame, credit_only=titles.get("credit_only_firstgen", True))
+        if frame is not None else None,
+        key_col="fg", value_col="count",
+    )
+    target_cols = _target_cols(years, targets)
+    detail_int_cols = ("Numerator Count", "Denominator Count") + (
+        ("Target Count",) if targets is not None else ()
+    )
 
     df_race = aggregate_race(df, base_df=base_df)
     visible_races = _visible_races(df_race)
@@ -272,8 +382,10 @@ def standard_bot_excel_sections(
                 order=visible_races,
                 label_map=RACE_SHORT,
                 years=years,
+                target_of=race_target,
             ),
             percent_cols=("5-Yr Percent Change",),
+            integer_cols=target_cols,
         ),
         ExcelSection(
             f"{titles['race_title']} - Rate Detail",
@@ -283,9 +395,10 @@ def standard_bot_excel_sections(
                 label_col="Race/Ethnicity",
                 order=visible_races,
                 label_map=RACE_SHORT,
+                target_of=race_target,
             ),
             percent_cols=("Percent",),
-            integer_cols=("Numerator Count", "Denominator Count"),
+            integer_cols=detail_int_cols,
         ),
     ])
 
@@ -315,8 +428,10 @@ def standard_bot_excel_sections(
                 order=visible_genders,
                 label_map=gender_label_map,
                 years=years,
+                target_of=gender_target,
             ),
             percent_cols=("5-Yr Percent Change",),
+            integer_cols=target_cols,
         ),
         ExcelSection(
             f"{titles['gender_title']} - Rate Detail",
@@ -326,9 +441,10 @@ def standard_bot_excel_sections(
                 label_col="Gender",
                 order=visible_genders,
                 label_map=gender_label_map,
+                target_of=gender_target,
             ),
             percent_cols=("Percent",),
-            integer_cols=("Numerator Count", "Denominator Count"),
+            integer_cols=detail_int_cols,
         ),
     ])
 
@@ -361,8 +477,10 @@ def standard_bot_excel_sections(
                 order=FIRSTGEN_ORDER,
                 label_map=fg_label_map,
                 years=years,
+                target_of=fg_target,
             ),
             percent_cols=("5-Yr Percent Change",),
+            integer_cols=target_cols,
         ),
         ExcelSection(
             f"{titles['firstgen_title']} - Rate Detail",
@@ -372,9 +490,10 @@ def standard_bot_excel_sections(
                 label_col="First-Generation Status",
                 order=FIRSTGEN_ORDER,
                 label_map=fg_label_map,
+                target_of=fg_target,
             ),
             percent_cols=("Percent",),
-            integer_cols=("Numerator Count", "Denominator Count"),
+            integer_cols=detail_int_cols,
         ),
     ])
 
@@ -382,7 +501,10 @@ def standard_bot_excel_sections(
 
 
 def avg_unit_cols(df: pd.DataFrame) -> tuple[str, ...]:
-    return tuple(col for col in df.columns if str(col).endswith("Avg Units"))
+    return tuple(
+        col for col in df.columns
+        if str(col).endswith("Avg Units") or str(col).endswith(" Target")
+    )
 
 
 def _validate_sheet_shape(df: pd.DataFrame, sheet_name: str) -> None:
@@ -591,8 +713,9 @@ def generate_bot_excel(
     df: pd.DataFrame,
     titles: dict,
     base_df: pd.DataFrame | None = None,
+    targets: Targets | None = None,
 ) -> bytes:
     return sections_to_excel_bytes(
-        standard_bot_excel_sections(df, titles, base_df=base_df),
+        standard_bot_excel_sections(df, titles, base_df=base_df, targets=targets),
         title=f"{titles['tab_title']} - Chart Table Data",
     )

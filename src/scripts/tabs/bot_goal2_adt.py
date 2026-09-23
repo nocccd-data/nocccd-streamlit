@@ -16,6 +16,7 @@ _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - ADT",
+    "target_title": "Associate Degrees for Transfer: Progress Toward 2029-30 Target",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Headcount of Students who Earned an Associate Degree for Transfer",
     "headcount_caption": (

@@ -60,6 +60,7 @@ from src.scripts.tabs.bot_excel_helpers import (  # noqa: E402
     standard_bot_excel_sections,
     write_sections_sheet,
 )
+from src.scripts.tabs.bot_targets import targets_from_cache
 
 
 # Destination root on OneDrive. Each run creates/uses a max-academic-year
@@ -231,10 +232,11 @@ def main() -> int:
             for spec in _CHART_SPECS:
                 print(f"  writing chart-data sheet {spec.sheet_name} ...")
                 df, titles, base_df = spec.build(cache)
+                targets = targets_from_cache(cache, spec.dataset_name)
                 sections = (
-                    bot_goal3_units.units_excel_sections(df)
+                    bot_goal3_units.units_excel_sections(df, targets=targets)
                     if spec.units_metric
-                    else standard_bot_excel_sections(df, titles, base_df)
+                    else standard_bot_excel_sections(df, titles, base_df, targets=targets)
                 )
                 title = f"{titles['tab_title']} - Chart Table Data"
                 write_sections_sheet(
