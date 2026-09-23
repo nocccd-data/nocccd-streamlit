@@ -120,13 +120,16 @@ The 5-year window (`acyr_code`) drops acyr 2022 on the **2028** run; the chart n
 ## 6. Components
 
 New module **`src/scripts/tabs/bot_targets.py`** (keeps `bot_helpers.py`, already 1.3k
-lines, from growing):
+lines, from growing). *As built, the interface was refined in the implementation plan:* the
+dataset rule travels in a `Targets(frame, rule)` object (`Targets.for_dataset`), and group
+targets come from `group_baselines` + `group_target` rather than `target_cfg` /
+`add_group_targets`; see the plan and `bot_targets.py` for the final names.
 
 | Function | Purpose |
 |---|---|
 | `target_cfg(dataset)` | the dataset's `target` dict, or `None` |
 | `plan_years()` | labels `2022-2023 … 2029-2030` (matches extract `academic_year` format) |
-| `target_value(baseline, k, cfg)` | §3 math, one value |
+| `target_value(baseline, k, rule)` | §3 math, one value |
 | `district_actual_vs_target(df_target, dataset)` | frame `academic_year, actual, target` over all plan years (actual NaN for years not yet in the data) |
 | `add_group_targets(df_agg, *, key_col, value_col, df_target_agg, cfg)` | adds a `target` column to an aggregated long frame, keyed by group + year, from the group's baseline in the target frame |
 | `build_target_chart(df_avt, titles)` | Plotly line chart (§7) |
