@@ -12,7 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+from matplotlib import patheffects
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
@@ -21,8 +23,11 @@ from src.scripts.tabs.bot_targets import (
     Targets,
     build_target_chart,
     district_actual_vs_target,
+    group_baselines,
+    group_target,
     mpl_target_chart,
     plan_range_label,
+    plan_years,
     target_caption,
 )
 
@@ -408,7 +413,140 @@ def aggregate_firstgen(
 # Chart builders
 # ---------------------------------------------------------------------------
 
-def build_headcount_chart(df_agg: pd.DataFrame):
+# ---------------------------------------------------------------------------
+# Campus target ticks (optional overlay on the campus bar chart)
+# ---------------------------------------------------------------------------
+# A thin dark bar exactly as wide as its campus bar, drawn at that campus's
+# target for each plan year after the baseline (the baseline tick would just
+# repeat the actual). The target number sits centred under the tick with a
+# white halo so it reads on any bar colour (NOCE navy included) or on the page.
+# When the target is above the bar, the actual's label is lifted above the
+# tick so the two never overlap. Counts only — never drawn on the rate charts.
+
+TICK_COLOR = "#111111"
+_TICK_HALO = "0px 0px 2px white, 0px 0px 3px white, 0px 0px 4px white"
+
+
+def campus_target_rows(agg_plan: pd.DataFrame, *, value_col: str,
+                       rule: dict) -> pd.DataFrame:
+    """Per-campus targets for the chart ticks: ``camp_desc, academic_year,
+    target`` for every plan year after the baseline.
+
+    *agg_plan* is the campus aggregate of the plan-year frame (the same
+    aggregation the chart uses, e.g. ``aggregate_headcount(targets.frame)``),
+    so each campus's baseline is its own 2022-23 value.
+    """
+    baselines = group_baselines(agg_plan, key_col="camp_desc", value_col=value_col)
+    rows = [
+        {"camp_desc": camp, "academic_year": year,
+         "target": group_target(baselines, camp, year, rule)}
+        for camp in baselines
+        for year in plan_years()[1:]
+    ]
+    out = pd.DataFrame(rows, columns=["camp_desc", "academic_year", "target"])
+    return out.dropna(subset=["target"])
+
+
+def campus_tick_geometry(df_agg: pd.DataFrame, df_tgt: pd.DataFrame, value_col: str):
+    """Shared by the Plotly and matplotlib builders: lookups plus the scale
+    numbers (tick thickness, label lift) derived from the tallest element."""
+    actual = {
+        (str(c), y): float(v)
+        for c, y, v in zip(df_agg["camp_desc"].astype(str),
+                           df_agg["academic_year"], df_agg[value_col])
+        if pd.notna(v)
+    }
+    years = set(df_agg["academic_year"])
+    target = {
+        (str(c), y): float(t)
+        for c, y, t in zip(df_tgt["camp_desc"].astype(str),
+                           df_tgt["academic_year"], df_tgt["target"])
+        if y in years and pd.notna(t)
+    }
+    peak = max([*actual.values(), *target.values()], default=0.0)
+    return actual, target, peak
+
+
+def _label_y(actual: float, target: float | None, lift: float) -> float:
+    """Where the actual's label sits: on the bar, or above a higher tick."""
+    if target is None or target <= actual:
+        return actual
+    return target + lift
+
+
+def add_campus_target_ticks(fig, df_agg: pd.DataFrame, df_tgt: pd.DataFrame,
+                            *, value_col: str, fmt: str):
+    """Overlay target ticks on a ``px.bar`` campus chart built with
+    ``color="camp_desc", barmode="group"`` (px sets each trace's
+    ``offsetgroup`` to the campus, which the overlay reuses to align)."""
+    actual, target, peak = campus_tick_geometry(df_agg, df_tgt, value_col)
+    if not target:
+        return fig
+    years = sorted(df_agg["academic_year"].unique())
+    thick = peak * 0.008
+    lift = peak * 0.035
+    campuses = [c for c in CAMPUS_ORDER if any(k[0] == c for k in actual)]
+
+    # The bars' own labels are replaced by text traces positioned per bar.
+    fig.update_traces(textposition="none", selector={"type": "bar"})
+    for i, camp in enumerate(campuses):
+        acts = [actual.get((camp, y)) for y in years]
+        tgts = [target.get((camp, y)) for y in years]
+        fig.add_trace(go.Bar(
+            x=years,
+            y=[thick if t is not None else None for t in tgts],
+            base=[t - thick / 2 if t is not None else None for t in tgts],
+            offsetgroup=camp, name="Target", legendgroup="target",
+            showlegend=i == 0,
+            marker={"color": TICK_COLOR, "line": {"color": "white", "width": 1}},
+            customdata=tgts,
+            hovertemplate=f"{camp} %{{x}}<br>Target: %{{customdata:{fmt}}}<extra></extra>",
+        ))
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=[None if a is None else _label_y(a, t, lift) for a, t in zip(acts, tgts)],
+            mode="text", offsetgroup=camp, showlegend=False, hoverinfo="skip",
+            text=["" if a is None else format(a, fmt) for a in acts],
+            textposition="top center", textfont={"size": 12},
+        ))
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=[t - thick / 2 if t is not None else None for t in tgts],
+            mode="text", offsetgroup=camp, showlegend=False, hoverinfo="skip",
+            text=["" if t is None else format(t, fmt) for t in tgts],
+            textposition="bottom center",
+            textfont={"size": 10, "color": TICK_COLOR, "shadow": _TICK_HALO},
+        ))
+    fig.update_layout(scattermode="group")
+    fig.update_yaxes(range=[0, peak * 1.15])
+    return fig
+
+
+def mpl_campus_bar_labels(ax, xs, vals, tgts, *, bar_w: float, peak: float,
+                          fmt: str) -> None:
+    """matplotlib twin of the Plotly overlay for one campus's bars: draws the
+    actual labels (lifted above a higher tick) and, where *tgts* has a value,
+    the tick and its haloed number. With no targets it draws exactly the
+    labels the PDF drew before ticks existed."""
+    thick = peak * 0.006
+    lift = peak * 0.035
+    halo = [patheffects.withStroke(linewidth=2, foreground="white")]
+    for x, v, t in zip(xs, vals, tgts):
+        if v > 0:
+            ax.text(x, _label_y(v, t, lift), format(v, fmt), ha="center",
+                    va="bottom", fontsize=6)
+        if t is None:
+            continue
+        ax.add_patch(Rectangle(
+            (x - bar_w / 2, t - thick / 2), bar_w, thick,
+            facecolor=TICK_COLOR, edgecolor="white", linewidth=0.4, zorder=3,
+        ))
+        ax.text(x, t - thick, format(t, fmt), ha="center", va="top",
+                fontsize=5, color=TICK_COLOR, zorder=4, path_effects=halo)
+
+
+def build_headcount_chart(df_agg: pd.DataFrame,
+                          df_tgt: pd.DataFrame | None = None):
     years = sorted(df_agg["academic_year"].unique())
     fig = px.bar(
         df_agg,
@@ -439,6 +577,9 @@ def build_headcount_chart(df_agg: pd.DataFrame):
         uniformtext_mode="hide",
         margin=dict(l=10, t=30),
     )
+    if df_tgt is not None and not df_tgt.empty:
+        add_campus_target_ticks(fig, df_agg, df_tgt,
+                                value_col="headcount", fmt=",.0f")
     return fig
 
 
@@ -755,10 +896,30 @@ def render_target_section(titles: dict, targets: Targets) -> None:
     st.divider()
 
 
+def headcount_campus_targets(targets: Targets | None, titles: dict,
+                             show: bool) -> pd.DataFrame | None:
+    """Tick rows for the headcount chart, or None when ticks are off or there
+    is no plan frame (e.g. a stale session)."""
+    if not show or targets is None:
+        return None
+    agg_plan = aggregate_headcount(
+        targets.frame, include_nocccd=titles.get("include_nocccd", True),
+    )
+    return campus_target_rows(agg_plan, value_col="headcount", rule=targets.rule)
+
+
+def render_campus_target_toggle(prefix: str) -> bool:
+    """The "Show campus targets" switch at the top of a target tab. Off by
+    default so the campus chart looks exactly as it always has."""
+    return st.toggle("Show campus targets", value=False,
+                     key=f"{prefix}_campus_targets")
+
+
 def render_bot_charts(
     df: pd.DataFrame, titles: dict,
     base_df: pd.DataFrame | None = None,
     targets: Targets | None = None,
+    show_campus_targets: bool = False,
 ):
     """Render the standard 4-chart BOT layout.
 
@@ -779,6 +940,8 @@ def render_bot_charts(
         credit_only_firstgen (optional, default True) — filter first-gen to credit
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
     targets (optional) — Vision 2030 plan rows + rule; renders the Actual vs Target chart first
+    show_campus_targets (optional, default False) — draw per-campus target ticks on the
+        campus headcount chart (needs *targets*)
     """
     years = sorted(df["academic_year"].dropna().unique())
     window = window_years(years)
@@ -798,10 +961,12 @@ def render_bot_charts(
         df, include_nocccd=titles.get("include_nocccd", True),
     )
     df_pct = compute_pct_change(df_agg)
+    df_tgt = headcount_campus_targets(targets, titles, show_campus_targets)
 
     col_main, col_pct = st.columns([3, 1])
     with col_main:
-        st.plotly_chart(build_headcount_chart(df_agg), width="stretch")
+        st.plotly_chart(build_headcount_chart(df_agg, df_tgt=df_tgt),
+                        width="stretch")
     with col_pct:
         if not df_pct.empty:
             st.plotly_chart(
@@ -957,10 +1122,11 @@ def add_target_page(pdf, titles: dict, targets: Targets) -> None:
     plt.close(fig)
 
 
-def _mpl_headcount(fig, bbox, df_agg, df_pct):
+def _mpl_headcount(fig, bbox, df_agg, df_pct, df_tgt=None):
     """Draw grouped bar (counts) + horizontal bar (5-yr % change) side by side.
 
-    bbox = (left, bottom, width, height) in paper coords.
+    bbox = (left, bottom, width, height) in paper coords. *df_tgt* (from
+    ``campus_target_rows``) adds per-campus target ticks.
     """
     left, bottom, width, height = bbox
     # Left: grouped bar, Right: horizontal bar; keep ~63:30 ratio but
@@ -974,6 +1140,9 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
     n_groups = len(years)
     n_bars = len(campuses)
     bar_w = 0.8 / max(n_bars, 1)
+    tgt_rows = df_tgt if df_tgt is not None else pd.DataFrame(
+        columns=["camp_desc", "academic_year", "target"])
+    _, target, peak = campus_tick_geometry(df_agg, tgt_rows, "headcount")
 
     for i, camp in enumerate(campuses):
         vals = []
@@ -984,20 +1153,26 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct):
         xs = np.arange(n_groups) + (i - (n_bars - 1) / 2) * bar_w
         ax_bar.bar(xs, vals, width=bar_w,
                    color=COLOR_MAP.get(camp, "#888"), label=camp)
-        for x, v in zip(xs, vals):
-            if v > 0:
-                ax_bar.text(x, v, f"{int(v):,}", ha="center",
-                            va="bottom", fontsize=6)
+        mpl_campus_bar_labels(
+            ax_bar, xs, vals, [target.get((camp, yr)) for yr in years],
+            bar_w=bar_w, peak=peak, fmt=",.0f",
+        )
+    if target:
+        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label="Target")
 
     ax_bar.set_xticks(range(n_groups))
     ax_bar.set_xticklabels(years, fontsize=7)
     ax_bar.tick_params(axis="y", labelsize=7)
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
-    ax_bar.legend(fontsize=6, loc="upper center",
-                  bbox_to_anchor=(0.5, -0.08), ncol=n_bars, frameon=False)
-    ymax = df_agg["headcount"].max() if not df_agg.empty else 0
-    ax_bar.set_ylim(0, ymax * 1.15 if ymax else 1)
+    # Target (a line handle) sorts ahead of the bars by default; keep it last.
+    handles, labels = ax_bar.get_legend_handles_labels()
+    order = sorted(range(len(labels)), key=lambda i: labels[i] == "Target")
+    ax_bar.legend([handles[i] for i in order], [labels[i] for i in order],
+                  fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.08),
+                  ncol=n_bars + (1 if target else 0), frameon=False)
+    # peak covers both bars and ticks, so a tick above every bar still fits.
+    ax_bar.set_ylim(0, peak * 1.15 if peak else 1)
 
     # 5-yr % change chart
     if not df_pct.empty:
@@ -1247,13 +1422,16 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
 
 
 def generate_bot_pdf(df, titles, base_df=None,
-                     targets: Targets | None = None) -> bytes:
+                     targets: Targets | None = None,
+                     show_campus_targets: bool = False) -> bytes:
     """Generate a portrait PDF with 2 BOT sections per page.
 
     Page 0 (only with targets): Actual vs Target
     Page 1: Headcount + Race
     Page 2: Gender + First-Gen
     If titles['headcount_only'] is True, only page 1 with just Headcount.
+    *show_campus_targets* adds per-campus target ticks to the headcount chart
+    (needs *targets*); the bulk exporter never sets it.
     """
     # Force light theme for PDF output regardless of user's Streamlit theme
     matplotlib.rcParams.update({
@@ -1283,6 +1461,7 @@ def generate_bot_pdf(df, titles, base_df=None,
     df_agg = aggregate_headcount(
         df, include_nocccd=titles.get("include_nocccd", True))
     df_pct = compute_pct_change(df_agg)
+    df_tgt = headcount_campus_targets(targets, titles, show_campus_targets)
     if not headcount_only:
         df_race = aggregate_race(df, base_df=base_df)
         df_gender = aggregate_gender(df, base_df=base_df)
@@ -1327,7 +1506,7 @@ def generate_bot_pdf(df, titles, base_df=None,
         _mpl_headcount(
             fig,
             (0.06, hc_bottom, 0.88, y_after_header - hc_bottom),
-            df_agg, df_pct,
+            df_agg, df_pct, df_tgt,
         )
         _draw_section_source(fig, 0.54 + hc_off, source)
         if headcount_note:

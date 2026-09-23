@@ -28,10 +28,11 @@ from src.scripts.pdf_cache import (
 from src.scripts.tabs.bot_excel_helpers import (
     EXCEL_MIME,
     ExcelSection,
-    _insert_after,
     _target_fn,
     actual_vs_target_section,
     avg_unit_cols,
+    campus_target_cols,
+    interleave_campus_targets,
     matrix_table,
     sections_to_excel_bytes,
     value_summary,
@@ -48,8 +49,14 @@ from src.scripts.tabs.bot_helpers import (
     RACE_COLORS,
     RACE_ORDER,
     RACE_SHORT,
+    TICK_COLOR,
+    add_campus_target_ticks,
     add_target_page,
+    campus_target_rows,
+    campus_tick_geometry,
+    mpl_campus_bar_labels,
     pct_change_axis_range,
+    render_campus_target_toggle,
     render_target_section,
     window_bounds,
     window_years,
@@ -256,7 +263,15 @@ visible_genders = _visible_genders
 # Plotly charts
 # ---------------------------------------------------------------------------
 
-def _build_campus_chart(df_avg):
+def _campus_targets(targets: Targets | None, show: bool) -> pd.DataFrame | None:
+    """Tick rows for the Units campus chart (reduction targets), or None."""
+    if not show or targets is None:
+        return None
+    return campus_target_rows(_aggregate_campus(targets.frame),
+                              value_col="avg_units", rule=targets.rule)
+
+
+def _build_campus_chart(df_avg, df_tgt=None):
     years = sorted(df_avg["academic_year"].unique())
     fig = px.bar(
         df_avg,
@@ -285,6 +300,9 @@ def _build_campus_chart(df_avg):
         uniformtext_mode="hide",
         margin=dict(l=10, t=30),
     )
+    if df_tgt is not None and not df_tgt.empty:
+        add_campus_target_ticks(fig, df_avg, df_tgt,
+                                value_col="avg_units", fmt=".1f")
     return fig
 
 
@@ -591,7 +609,7 @@ def _draw_section_note(fig, y, note):
              fontsize=6, color="grey", va="top")
 
 
-def _mpl_campus(fig, bbox, df_agg, df_pct):
+def _mpl_campus(fig, bbox, df_agg, df_pct, df_tgt=None):
     left, bottom, width, height = bbox
     ax_bar = fig.add_axes([left, bottom, width * 0.55, height])
     ax_pct = fig.add_axes([left + width * 0.72, bottom, width * 0.26, height])
@@ -602,6 +620,9 @@ def _mpl_campus(fig, bbox, df_agg, df_pct):
     n_groups = len(years)
     n_bars = len(campuses)
     bar_w = 0.8 / max(n_bars, 1)
+    tgt_rows = df_tgt if df_tgt is not None else pd.DataFrame(
+        columns=["camp_desc", "academic_year", "target"])
+    _, target, peak = campus_tick_geometry(df_agg, tgt_rows, "avg_units")
 
     for i, camp in enumerate(campuses):
         vals = []
@@ -612,20 +633,25 @@ def _mpl_campus(fig, bbox, df_agg, df_pct):
         xs = np.arange(n_groups) + (i - (n_bars - 1) / 2) * bar_w
         ax_bar.bar(xs, vals, width=bar_w,
                    color=COLOR_MAP.get(camp, "#888"), label=camp)
-        for x, v in zip(xs, vals):
-            if v > 0:
-                ax_bar.text(x, v, f"{v:.1f}", ha="center",
-                            va="bottom", fontsize=6)
+        mpl_campus_bar_labels(
+            ax_bar, xs, vals, [target.get((camp, yr)) for yr in years],
+            bar_w=bar_w, peak=peak, fmt=".1f",
+        )
+    if target:
+        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label="Target")
 
     ax_bar.set_xticks(range(n_groups))
     ax_bar.set_xticklabels(years, fontsize=7)
     ax_bar.tick_params(axis="y", labelsize=7)
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
-    ax_bar.legend(fontsize=6, loc="upper center",
-                  bbox_to_anchor=(0.5, -0.08), ncol=n_bars, frameon=False)
-    ymax = df_agg["avg_units"].max() if not df_agg.empty else 0
-    ax_bar.set_ylim(0, ymax * 1.15 if ymax else 1)
+    # Target (a line handle) sorts ahead of the bars by default; keep it last.
+    handles, labels = ax_bar.get_legend_handles_labels()
+    order = sorted(range(len(labels)), key=lambda i: labels[i] == "Target")
+    ax_bar.legend([handles[i] for i in order], [labels[i] for i in order],
+                  fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.08),
+                  ncol=n_bars + (1 if target else 0), frameon=False)
+    ax_bar.set_ylim(0, peak * 1.15 if peak else 1)
 
     if not df_pct.empty:
         pct_campuses = [c for c in reversed(campuses)
@@ -864,7 +890,8 @@ def _mpl_firstgen_summary(fig, bbox, df_fg, years):
                        FIRSTGEN_COLORS, piv, *window_bounds(years))
 
 
-def _generate_pdf(df, targets: Targets | None = None) -> bytes:
+def _generate_pdf(df, targets: Targets | None = None,
+                  show_campus_targets: bool = False) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
         "figure.edgecolor": "white",
@@ -910,7 +937,8 @@ def _generate_pdf(df, targets: Targets | None = None) -> bytes:
             year_range, _TITLES["headcount_caption"],
         )
         _mpl_campus(fig, (0.06, 0.58, 0.88, y_after - 0.58),
-                    df_campus, df_pct)
+                    df_campus, df_pct,
+                    _campus_targets(targets, show_campus_targets))
         _draw_section_source(fig, 0.54)
 
         # Section 2: raised to 0.50 with tight caption-to-chart padding
@@ -989,17 +1017,11 @@ def _excel_campus_table(df, targets: Targets | None = None):
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
 
-    if targets is not None and years:
-        last = years[-1]
-        target_of = _target_fn(
-            targets, _aggregate_campus(targets.frame),
-            key_col="camp_desc", value_col="avg_units",
-        )
-        assert target_of is not None
-        out = _insert_after(
-            out, last, f"{last} Target",
-            [target_of(camp, last) for camp in out["Campus"]],
-        )
+    out = interleave_campus_targets(
+        out, years, targets,
+        _aggregate_campus(targets.frame) if targets is not None else None,
+        value_col="avg_units",
+    )
 
     df_pct = _pct_change(df_agg, "camp_desc", CAMPUS_ORDER)
     if not df_pct.empty:
@@ -1026,9 +1048,7 @@ def units_excel_sections(
             _TITLES["headcount_title"],
             _excel_campus_table(df, targets),
             percent_cols=("5-Yr Percent Change",),
-            decimal_cols=tuple(years) + (
-                (f"{years[-1]} Target",) if targets is not None and years else ()
-            ),
+            decimal_cols=tuple(years) + campus_target_cols(years, targets),
         ),
     )
 
@@ -1229,15 +1249,20 @@ def render():
         clear_excel_cache("bg3u")
         clear_pdf_cache("bg3u")
 
+    show_ct = False
     if "bg3u_df" in st.session_state:
+        # Campus target ticks: a switch at the top of the tab, only when the
+        # plan frame is loaded. Off by default; the tab PDF follows it.
+        show_ct = _targets() is not None and render_campus_target_toggle("bg3u")
         cache_key = (
             id(st.session_state["bg3u_df"]),
             id(st.session_state.get("bg3u_targets")),
         )
         pdf_bytes = cached_pdf_bytes(
             "bg3u",
-            cache_key,
-            lambda: _generate_pdf(st.session_state["bg3u_df"], targets=_targets()),
+            (*cache_key, show_ct),
+            lambda: _generate_pdf(st.session_state["bg3u_df"], targets=_targets(),
+                                  show_campus_targets=show_ct),
         )
         st.sidebar.download_button(
             "Download PDF", data=pdf_bytes,
@@ -1281,8 +1306,11 @@ def render():
 
     col_main, col_pct = st.columns([3, 1])
     with col_main:
-        st.plotly_chart(_build_campus_chart(df_campus),
-                        width="stretch")
+        st.plotly_chart(
+            _build_campus_chart(df_campus,
+                                df_tgt=_campus_targets(targets, show_ct)),
+            width="stretch",
+        )
     with col_pct:
         if not df_pct.empty:
             st.plotly_chart(_build_pct_change_chart(df_pct),

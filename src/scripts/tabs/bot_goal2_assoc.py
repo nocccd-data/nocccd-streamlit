@@ -13,7 +13,11 @@ from src.scripts.pdf_cache import (
     clear_pdf_cache,
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
-from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
+from src.scripts.tabs.bot_helpers import (
+    generate_bot_pdf,
+    render_bot_charts,
+    render_campus_target_toggle,
+)
 from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal2_assoc"]
@@ -91,7 +95,11 @@ def render():
         clear_excel_cache("bg2a")
         clear_pdf_cache("bg2a")
 
+    show_ct = False
     if "bg2a_df" in st.session_state:
+        # Campus target ticks: a switch at the top of the tab, only when the
+        # plan frame is loaded. Off by default; the tab PDF follows it.
+        show_ct = _targets() is not None and render_campus_target_toggle("bg2a")
         cache_key = (
             id(st.session_state["bg2a_df"]),
             id(st.session_state.get("bg2a_base")),
@@ -99,12 +107,13 @@ def render():
         )
         pdf_bytes = cached_pdf_bytes(
             "bg2a",
-            cache_key,
+            (*cache_key, show_ct),
             lambda: generate_bot_pdf(
                 st.session_state["bg2a_df"],
                 _TITLES,
                 base_df=st.session_state.get("bg2a_base"),
                 targets=_targets(),
+                show_campus_targets=show_ct,
             ),
         )
         st.sidebar.download_button(
@@ -136,4 +145,5 @@ def render():
         st.session_state["bg2a_df"], _TITLES,
         base_df=st.session_state.get("bg2a_base"),
         targets=_targets(),
+        show_campus_targets=show_ct,
     )
