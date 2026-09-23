@@ -629,9 +629,9 @@ def _mpl_campus(fig, bbox, df_agg, df_pct, df_tgt=None):
         for yr in years:
             row = df_agg[(df_agg["camp_desc"] == camp)
                          & (df_agg["academic_year"] == yr)]
-            vals.append(row["avg_units"].iloc[0] if not row.empty else 0)
+            vals.append(row["avg_units"].iloc[0] if not row.empty else None)
         xs = np.arange(n_groups) + (i - (n_bars - 1) / 2) * bar_w
-        ax_bar.bar(xs, vals, width=bar_w,
+        ax_bar.bar(xs, [0 if v is None else v for v in vals], width=bar_w,
                    color=COLOR_MAP.get(camp, "#888"), label=camp)
         mpl_campus_bar_labels(
             ax_bar, xs, vals, [target.get((camp, yr)) for yr in years],

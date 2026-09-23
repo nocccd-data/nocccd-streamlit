@@ -198,3 +198,36 @@ def test_campus_ticks_need_targets():
     df = _df()
     assert _pages(generate_bot_pdf(df, TITLES, base_df=df,
                                    show_campus_targets=True)) == 2
+
+
+# ---------------------------------------------------------------------------
+# Review fixes: a tick only where its campus has a bar; a real 0 is labelled
+# the same way on screen and in the PDF
+# ---------------------------------------------------------------------------
+
+def test_no_tick_where_the_campus_has_no_bar():
+    df = _df()
+    plan = _targets(df)                      # Fullerton has a 2022-23 baseline
+    shown = df[~((df["camp_desc"] == "Fullerton")
+                 & (df["academic_year"] == "2024-2025"))]
+    tgt = campus_target_rows(aggregate_headcount(plan.frame),
+                             value_col="headcount", rule=GROWTH)
+    ticks = [t for t in _traces(build_headcount_chart(aggregate_headcount(shown),
+                                                      df_tgt=tgt))
+             if t.get("name") == "Target" and t["offsetgroup"] == "Fullerton"]
+    assert len(ticks) == 1
+    years, heights = list(ticks[0]["x"]), list(ticks[0]["y"])
+    assert heights[years.index("2024-2025")] is None        # no bar -> no tick
+    assert heights[years.index("2025-2026")] is not None    # bar -> tick
+
+
+def test_pdf_labels_a_real_zero_but_not_missing_data():
+    import matplotlib.pyplot as plt
+
+    from src.scripts.tabs.bot_helpers import mpl_campus_bar_labels
+
+    fig, ax = plt.subplots()
+    mpl_campus_bar_labels(ax, [0, 1], [0.0, None], [None, None],
+                          bar_w=0.8, peak=10.0, fmt=".1f")
+    assert [t.get_text() for t in ax.texts] == ["0.0"]
+    plt.close(fig)

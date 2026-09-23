@@ -456,12 +456,13 @@ def campus_tick_geometry(df_agg: pd.DataFrame, df_tgt: pd.DataFrame, value_col: 
                            df_agg["academic_year"], df_agg[value_col])
         if pd.notna(v)
     }
-    years = set(df_agg["academic_year"])
+    # A tick only where its campus has a bar that year: a target with no bar
+    # behind it would read as data for a campus that reported nothing.
     target = {
         (str(c), y): float(t)
         for c, y, t in zip(df_tgt["camp_desc"].astype(str),
                            df_tgt["academic_year"], df_tgt["target"])
-        if y in years and pd.notna(t)
+        if (str(c), y) in actual and pd.notna(t)
     }
     peak = max([*actual.values(), *target.values()], default=0.0)
     return actual, target, peak
@@ -532,7 +533,9 @@ def mpl_campus_bar_labels(ax, xs, vals, tgts, *, bar_w: float, peak: float,
     lift = peak * 0.035
     halo = [patheffects.withStroke(linewidth=2, foreground="white")]
     for x, v, t in zip(xs, vals, tgts):
-        if v > 0:
+        # None = no data for this campus/year (no label); a real 0 is
+        # labelled, exactly as the on-screen Plotly chart does.
+        if v is not None:
             ax.text(x, _label_y(v, t, lift), format(v, fmt), ha="center",
                     va="bottom", fontsize=6)
         if t is None:
@@ -1149,9 +1152,9 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct, df_tgt=None):
         for yr in years:
             row = df_agg[(df_agg["camp_desc"] == camp)
                          & (df_agg["academic_year"] == yr)]
-            vals.append(row["headcount"].iloc[0] if not row.empty else 0)
+            vals.append(row["headcount"].iloc[0] if not row.empty else None)
         xs = np.arange(n_groups) + (i - (n_bars - 1) / 2) * bar_w
-        ax_bar.bar(xs, vals, width=bar_w,
+        ax_bar.bar(xs, [0 if v is None else v for v in vals], width=bar_w,
                    color=COLOR_MAP.get(camp, "#888"), label=camp)
         mpl_campus_bar_labels(
             ax_bar, xs, vals, [target.get((camp, yr)) for yr in years],
