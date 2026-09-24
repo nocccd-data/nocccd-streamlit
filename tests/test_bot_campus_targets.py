@@ -231,3 +231,23 @@ def test_pdf_labels_a_real_zero_but_not_missing_data():
                           bar_w=0.8, peak=10.0, fmt=".1f")
     assert [t.get_text() for t in ax.texts] == ["0.0"]
     plt.close(fig)
+
+
+def test_overlay_labels_follow_their_legend_entry():
+    # Clicking a legend entry hides every trace in its legendgroup. The actual
+    # labels must hide with their campus's bars, and the target numbers with
+    # the Target ticks — otherwise hiding a series leaves its numbers floating.
+    df = _df()
+    tgt = campus_target_rows(aggregate_headcount(_targets(df).frame),
+                             value_col="headcount", rule=GROWTH)
+    traces = _traces(build_headcount_chart(aggregate_headcount(df), df_tgt=tgt))
+    for t in traces:
+        if t["type"] != "scatter":
+            continue
+        is_target_label = t["textfont"].get("color") is not None
+        expected = "target" if is_target_label else t["offsetgroup"]
+        assert t.get("legendgroup") == expected, t["offsetgroup"]
+    bars = {t["name"]: t["legendgroup"] for t in traces
+            if t["type"] == "bar" and t["name"] != "Target"}
+    assert bars == {"Cypress": "Cypress", "Fullerton": "Fullerton",
+                    "NOCCCD (Unduplicated)": "NOCCCD (Unduplicated)"}

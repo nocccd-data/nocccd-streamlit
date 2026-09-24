@@ -506,14 +506,19 @@ def add_campus_target_ticks(fig, df_agg: pd.DataFrame, df_tgt: pd.DataFrame,
         fig.add_trace(go.Scatter(
             x=years,
             y=[None if a is None else _label_y(a, t, lift) for a, t in zip(acts, tgts)],
-            mode="text", offsetgroup=camp, showlegend=False, hoverinfo="skip",
+            # Same legendgroup as px's bar for this campus, so clicking the
+            # campus in the legend hides its labels along with its bars.
+            mode="text", offsetgroup=camp, legendgroup=camp,
+            showlegend=False, hoverinfo="skip",
             text=["" if a is None else format(a, fmt) for a in acts],
             textposition="top center", textfont={"size": 12},
         ))
         fig.add_trace(go.Scatter(
             x=years,
             y=[t - thick / 2 if t is not None else None for t in tgts],
-            mode="text", offsetgroup=camp, showlegend=False, hoverinfo="skip",
+            # Hides with the Target ticks when "Target" is clicked.
+            mode="text", offsetgroup=camp, legendgroup="target",
+            showlegend=False, hoverinfo="skip",
             text=["" if t is None else format(t, fmt) for t in tgts],
             textposition="bottom center",
             textfont={"size": 10, "color": TICK_COLOR, "shadow": _TICK_HALO},
