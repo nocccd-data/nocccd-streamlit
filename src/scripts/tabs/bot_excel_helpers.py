@@ -28,10 +28,12 @@ from src.scripts.tabs.bot_helpers import (
     window_years,
 )
 from src.scripts.tabs.bot_targets import (
+    PLAN_LENGTH,
     Targets,
     district_actual_vs_target,
     group_baselines,
     group_target,
+    years_from_baseline,
 )
 
 EXCEL_MAX_ROWS = 1_048_576
@@ -71,6 +73,36 @@ def _insert_after(df: pd.DataFrame, after: str, name: str, values) -> pd.DataFra
         # get_loc returns a slice/mask for a duplicated label.
         raise KeyError(f"_insert_after: column {after!r} is not unique")
     out.insert(loc + 1, name, values)
+    return out
+
+
+def campus_target_cols(years: list[str], targets: Targets | None) -> tuple[str, ...]:
+    """The campus table's Target columns: one per displayed plan year (the
+    2022-23 baseline through 2029-30). Years before the baseline or after the
+    plan end have no target, so they get no column."""
+    if targets is None:
+        return ()
+    return tuple(
+        f"{y} Target" for y in years
+        if (k := years_from_baseline(y)) is not None and 0 <= k <= PLAN_LENGTH
+    )
+
+
+def interleave_campus_targets(
+    out: pd.DataFrame, years: list[str], targets: Targets | None,
+    agg_plan: pd.DataFrame | None, *, value_col: str,
+) -> pd.DataFrame:
+    """Insert ``"{year} Target"`` right after each plan year's column of a
+    campus table (``Campus`` + one column per year), from each campus's own
+    baseline in *agg_plan* (the campus aggregate of the plan-year frame)."""
+    target_of = _target_fn(targets, agg_plan, key_col="camp_desc",
+                           value_col=value_col)
+    if target_of is None:
+        return out
+    for col in campus_target_cols(years, targets):
+        year = col.removesuffix(" Target")
+        out = _insert_after(out, year, col,
+                            [target_of(camp, year) for camp in out["Campus"]])
     return out
 
 
@@ -277,21 +309,13 @@ def _headcount_table(
     out = piv.reindex(campuses).reindex(columns=years).reset_index()
     out = out.rename(columns={"camp_desc": "Campus"})
 
-    if targets is not None and years:
-        last = years[-1]
-        target_of = _target_fn(
-            targets,
-            aggregate_headcount(
-                targets.frame, include_nocccd=titles.get("include_nocccd", True),
-            ),
-            key_col="camp_desc",
-            value_col="headcount",
-        )
-        assert target_of is not None
-        out = _insert_after(
-            out, last, f"{last} Target",
-            [target_of(camp, last) for camp in out["Campus"]],
-        )
+    out = interleave_campus_targets(
+        out, years, targets,
+        aggregate_headcount(
+            targets.frame, include_nocccd=titles.get("include_nocccd", True),
+        ) if targets is not None else None,
+        value_col="headcount",
+    )
 
     df_pct = compute_pct_change(df_agg)
     if not df_pct.empty:
@@ -327,9 +351,7 @@ def standard_bot_excel_sections(
             titles["headcount_title"],
             _headcount_table(df, titles, targets),
             percent_cols=("5-Yr Percent Change",),
-            integer_cols=tuple(years) + (
-                (f"{years[-1]} Target",) if targets is not None and years else ()
-            ),
+            integer_cols=tuple(years) + campus_target_cols(years, targets),
         ),
     )
 

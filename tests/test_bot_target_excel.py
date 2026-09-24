@@ -125,13 +125,15 @@ def test_without_targets_nothing_changes():
         assert not any("Target" in str(c) for c in s.df.columns), s.title
 
 
-def test_narrowed_to_pre_baseline_year_gives_blank_target():
+def test_narrowed_to_pre_baseline_year_has_no_campus_target_column():
+    # Campus targets are per plan year; a year before the 2022-23 baseline
+    # has no target, so it gets no Target column at all.
     df = _df()
     shown = df[df["academic_year"] == "2021-2022"]
     hc = _section(
         standard_bot_excel_sections(shown, TITLES, base_df=shown, targets=_targets(df)), "HC",
     )
-    assert hc["2021-2022 Target"].isna().all()
+    assert not any("Target" in str(c) for c in hc.columns)
 
 
 def test_units_sections_carry_targets():

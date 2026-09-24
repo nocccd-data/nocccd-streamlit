@@ -176,14 +176,14 @@ one-line clusters.
 **1. Target columns go blank once the plan window is over, and the extract keeps pulling
 baseline years forever.** `bot_targets.py::target_value` returns NaN whenever the years-since-
 baseline offset exceeds `PLAN_LENGTH` (`BOT_TARGET_END_ACYR` − `BOT_TARGET_BASELINE_ACYR` = 7).
-Every path that builds a Target column adds it whenever `targets is not None`, with no check
-against the plan's end: `bot_excel_helpers.py::_headcount_table`, `bot_excel_helpers.py::_target_cols`,
+The campus tables already stop at the plan end (`bot_excel_helpers.py::campus_target_cols` only
+emits years 2022-23 through 2029-30). The other paths still add a Target column whenever
+`targets is not None`, with no check against the plan's end: `bot_excel_helpers.py::_target_cols`,
 `bot_excel_helpers.py::_count_summary` / `bot_excel_helpers.py::value_summary` (via `target_of`),
-`bot_excel_helpers.py::_rate_detail`, and on the Average Units tab
-`bot_goal3_units.py::_excel_campus_table` plus the race/gender/first-gen `value_summary` calls in
+`bot_excel_helpers.py::_rate_detail`, and the race/gender/first-gen `value_summary` calls in
 `bot_goal3_units.py::units_excel_sections`. So from the first run whose display year is past
-2029-30 (the 2031 run), every one of those tables carries a Target column of blank cells — a fix
-must cover all of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`).
+2029-30 (the 2031 run), those tables carry a Target column of blank cells — a fix must cover all
+of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`).
 Separately, `config.py::extract_values` (via `config.py::target_acyrs`) keeps pulling
 acyr 2022-2029 indefinitely — harmless on its own (the baseline never changes), but it means
 nothing in the extract step signals that the plan has ended either.

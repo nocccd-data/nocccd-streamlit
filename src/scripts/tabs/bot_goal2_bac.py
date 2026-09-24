@@ -9,7 +9,11 @@ from src.scripts.pdf_cache import (
     clear_pdf_cache,
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
-from src.scripts.tabs.bot_helpers import generate_bot_pdf, render_bot_charts
+from src.scripts.tabs.bot_helpers import (
+    campus_targets_on,
+    generate_bot_pdf,
+    render_bot_charts,
+)
 from src.scripts.tabs.bot_targets import Targets
 
 _CFG = DATASETS["bot_goal2_bac"]
@@ -79,16 +83,21 @@ def render():
         clear_excel_cache("bg2b")
         clear_pdf_cache("bg2b")
 
+    show_ct = False
     if "bg2b_df" in st.session_state:
+        # Campus target ticks: the switch sits right above the campus chart
+        # (drawn by render_bot_charts); the tab PDF follows its saved state.
+        show_ct = _targets() is not None and campus_targets_on("bg2b")
         cache_key = (
             id(st.session_state["bg2b_df"]),
             id(st.session_state.get("bg2b_targets")),
         )
         pdf_bytes = cached_pdf_bytes(
             "bg2b",
-            cache_key,
+            (*cache_key, show_ct),
             lambda: generate_bot_pdf(
-                st.session_state["bg2b_df"], _TITLES, targets=_targets()
+                st.session_state["bg2b_df"], _TITLES, targets=_targets(),
+                show_campus_targets=show_ct,
             ),
         )
         st.sidebar.download_button(
@@ -113,4 +122,5 @@ def render():
         st.info("Select Academic Years and press **Query** to load data.")
         return
 
-    render_bot_charts(st.session_state["bg2b_df"], _TITLES, targets=_targets())
+    render_bot_charts(st.session_state["bg2b_df"], _TITLES, targets=_targets(),
+                      campus_toggle_prefix="bg2b")
