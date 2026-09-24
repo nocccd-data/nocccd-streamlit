@@ -14,9 +14,9 @@ from src.scripts.pdf_cache import (
 )
 from src.scripts.tabs.bot_excel_helpers import EXCEL_MIME, generate_bot_excel
 from src.scripts.tabs.bot_helpers import (
+    campus_targets_on,
     generate_bot_pdf,
     render_bot_charts,
-    render_campus_target_toggle,
 )
 from src.scripts.tabs.bot_targets import Targets
 
@@ -99,9 +99,9 @@ def render():
 
     show_ct = False
     if "bg2t_df" in st.session_state:
-        # Campus target ticks: a switch at the top of the tab, only when the
-        # plan frame is loaded. Off by default; the tab PDF follows it.
-        show_ct = _targets() is not None and render_campus_target_toggle("bg2t")
+        # Campus target ticks: the switch sits right above the campus chart
+        # (drawn by render_bot_charts); the tab PDF follows its saved state.
+        show_ct = _targets() is not None and campus_targets_on("bg2t")
         cache_key = (
             id(st.session_state["bg2t_df"]),
             id(st.session_state.get("bg2t_base")),
@@ -147,5 +147,5 @@ def render():
         st.session_state["bg2t_df"], _TITLES,
         base_df=st.session_state.get("bg2t_base"),
         targets=_targets(),
-        show_campus_targets=show_ct,
+        campus_toggle_prefix="bg2t",
     )

@@ -911,18 +911,32 @@ def headcount_campus_targets(targets: Targets | None, titles: dict,
     return campus_target_rows(agg_plan, value_col="headcount", rule=targets.rule)
 
 
+def _campus_toggle_key(prefix: str) -> str:
+    return f"{prefix}_campus_targets"
+
+
+def campus_targets_on(prefix: str) -> bool:
+    """Current state of a tab's "Show campus targets" switch.
+
+    The switch is drawn right above the campus chart, but the tab builds its
+    Download PDF earlier in the script; Streamlit keeps the widget's state in
+    session_state across reruns, so the PDF reads it from there.
+    """
+    return bool(st.session_state.get(_campus_toggle_key(prefix), False))
+
+
 def render_campus_target_toggle(prefix: str) -> bool:
-    """The "Show campus targets" switch at the top of a target tab. Off by
-    default so the campus chart looks exactly as it always has."""
+    """The "Show campus targets" switch, placed right above the campus chart
+    it controls. Off by default so the chart looks exactly as it always has."""
     return st.toggle("Show campus targets", value=False,
-                     key=f"{prefix}_campus_targets")
+                     key=_campus_toggle_key(prefix))
 
 
 def render_bot_charts(
     df: pd.DataFrame, titles: dict,
     base_df: pd.DataFrame | None = None,
     targets: Targets | None = None,
-    show_campus_targets: bool = False,
+    campus_toggle_prefix: str | None = None,
 ):
     """Render the standard 4-chart BOT layout.
 
@@ -943,8 +957,9 @@ def render_bot_charts(
         credit_only_firstgen (optional, default True) — filter first-gen to credit
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
     targets (optional) — Vision 2030 plan rows + rule; renders the Actual vs Target chart first
-    show_campus_targets (optional, default False) — draw per-campus target ticks on the
-        campus headcount chart (needs *targets*)
+    campus_toggle_prefix (optional) — the tab's widget prefix; with *targets*, draws the
+        "Show campus targets" switch right above the campus chart and, when on, per-campus
+        target ticks on it
     """
     years = sorted(df["academic_year"].dropna().unique())
     window = window_years(years)
@@ -957,6 +972,10 @@ def render_bot_charts(
         render_target_section(titles, targets)
 
     # --- Chart 1: Headcount by Campus ---
+    show_campus_targets = (
+        targets is not None and campus_toggle_prefix is not None
+        and render_campus_target_toggle(campus_toggle_prefix)
+    )
     st.subheader(org)
     st.markdown(f"**{titles['headcount_title']}**  \n{year_range}")
     st.caption(titles["headcount_caption"])

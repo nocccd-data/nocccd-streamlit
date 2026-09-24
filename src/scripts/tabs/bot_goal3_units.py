@@ -53,6 +53,7 @@ from src.scripts.tabs.bot_helpers import (
     add_campus_target_ticks,
     add_target_page,
     campus_target_rows,
+    campus_targets_on,
     campus_tick_geometry,
     mpl_campus_bar_labels,
     pct_change_axis_range,
@@ -1251,9 +1252,9 @@ def render():
 
     show_ct = False
     if "bg3u_df" in st.session_state:
-        # Campus target ticks: a switch at the top of the tab, only when the
-        # plan frame is loaded. Off by default; the tab PDF follows it.
-        show_ct = _targets() is not None and render_campus_target_toggle("bg3u")
+        # Campus target ticks: the switch sits right above the campus chart
+        # (below); the tab PDF follows its saved state.
+        show_ct = _targets() is not None and campus_targets_on("bg3u")
         cache_key = (
             id(st.session_state["bg3u_df"]),
             id(st.session_state.get("bg3u_targets")),
@@ -1297,6 +1298,8 @@ def render():
         render_target_section(_TITLES, targets)
 
     # Chart 1: Average units by campus
+    if targets is not None:
+        show_ct = render_campus_target_toggle("bg3u")
     st.subheader(_TITLES["org"])
     st.markdown(f"**{_TITLES['headcount_title']}**  \n{year_range}")
     st.caption(_TITLES["headcount_caption"])
