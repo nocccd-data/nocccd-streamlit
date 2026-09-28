@@ -96,9 +96,10 @@ in two visible ways, both deliberate:
 - **Display:** counts as whole numbers, Units to 1 decimal, Variance signed (`+70`, `−49`,
   `−0.1`). A Variance that rounds to 0 shows `0` with the status of its true sign (e.g. actual
   3 vs benchmark 3.39 → `0`, Progressing — AA American Indian, which the floor hides today).
-  (Amended 2026-09-28 after the final review: on count tabs the printed Variance is the printed
-  Actual minus the printed Benchmark, whole numbers rounded half up like Excel, so a .5
-  benchmark cannot make a row not add up; Units unchanged.)
+  (Amended 2026-09-28 after review: every printed Variance — tab, PDF and Excel, count tabs
+  and Units — is the printed Actual minus the printed Benchmark, with printed numbers rounded
+  half up like Excel, so every row adds up; Status still comes from the unrounded Variance.
+  The Units example above therefore prints −0.2 (80.3 − 80.5), still On Track.)
 - **Note under the table**, generated from the rule like the chart caption:
   "Benchmark: 30% increase over the 2022-23 baseline by 2029-30, in equal annual steps.
   Variance = Actual − Benchmark." Units adds "On Track = at or below the benchmark."
@@ -158,8 +159,9 @@ table:
 
 `Category | Student Population | 2022-23 Baseline | 2025-26 Benchmark | 2025-26 Actual | Variance | Status`
 
-Values are unrounded, with whole-number (Units: 1-decimal) formats, like the existing Benchmark
-columns. The layout matches her "Equity Analysis" sheet (`Metric | Category | Demographic Group
+Baseline, Benchmark and Actual are unrounded, with whole-number (Units: 1-decimal) formats, like
+the existing Benchmark columns; Variance holds the printed difference (§3.3), so each row adds
+up in Excel too. The layout matches her "Equity Analysis" sheet (`Metric | Category | Demographic Group
 | … | Status`), minus the Metric column.
 
 ## 6. Workbook discrepancies to report to the manager

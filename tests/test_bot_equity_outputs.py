@@ -12,14 +12,19 @@ from pypdf import PdfReader
 
 from src.scripts.tabs import bot_goal3_units
 from src.scripts.tabs.bot_equity import (
+    COLUMNS,
     FIRSTGEN_CATEGORY,
     GENDER_CATEGORY,
     ON_TRACK,
     PROGRESSING,
     RACE_CATEGORY,
+    EquityTable,
     equity_html,
 )
-from src.scripts.tabs.bot_excel_helpers import standard_bot_excel_sections
+from src.scripts.tabs.bot_excel_helpers import (
+    equity_excel_section,
+    standard_bot_excel_sections,
+)
 from src.scripts.tabs.bot_helpers import equity_table, generate_bot_pdf
 from src.scripts.tabs.bot_targets import Targets
 
@@ -288,3 +293,27 @@ def test_units_without_targets_has_no_equity_table():
     assert bot_goal3_units._equity_table(None) is None
     sections = bot_goal3_units.units_excel_sections(df)
     assert not any(s.title.startswith("Equity Results") for s in sections)
+
+
+def test_excel_variance_matches_the_printed_row():
+    # ADT Black or African American: baseline 35 -> benchmark exactly 39.5.
+    # With an actual of 41 the PDF and tab print 40 | 41 | +1; Excel used to
+    # store 1.5, which its #,##0 format shows as "2".
+    counts_rows = pd.DataFrame([{
+        "category": RACE_CATEGORY, "group": "Black or African American",
+        "baseline": 35.0, "benchmark": 39.5, "actual": 41.0, "variance": 1.5,
+        "status": ON_TRACK,
+    }], columns=COLUMNS)
+    counts = equity_excel_section(
+        EquityTable(year="2025-2026", rows=counts_rows, decimals=False, note="n"))
+    assert counts.df["Variance"].tolist() == [1]
+    assert counts.df["2025-26 Benchmark"].tolist() == [39.5]   # still unrounded
+
+    units_rows = pd.DataFrame([{
+        "category": RACE_CATEGORY, "group": "Latino/Hispanic",
+        "baseline": 82.39, "benchmark": 80.468, "actual": 80.323, "variance": -0.145,
+        "status": ON_TRACK,
+    }], columns=COLUMNS)
+    units = equity_excel_section(
+        EquityTable(year="2025-2026", rows=units_rows, decimals=True, note="n"))
+    assert units.df["Variance"].tolist() == [pytest.approx(-0.2)]

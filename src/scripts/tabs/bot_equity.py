@@ -13,9 +13,9 @@ for the count tabs, ``bot_goal3_units`` for average units). No Streamlit /
 
 from __future__ import annotations
 
-import math
 import textwrap
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 from matplotlib.patches import Rectangle
@@ -161,16 +161,31 @@ def equity_note(rule: dict) -> str:
     return text
 
 
-def _whole(value: float) -> int:
-    """Round a non-negative count/benchmark to the nearest whole number, ties
-    rounding HALF UP — Excel's ``#,##0`` (and the manager's workbook), not
-    Python's round-half-even: ``38.5`` -> ``39``, not ``38``. ``round(value, 9)``
-    first so float noise (e.g. ``219.00000000000003``) cannot move a tie."""
-    return math.floor(round(value, 9) + 0.5)
+def _shown(value: float, *, decimals: bool) -> float:
+    """*value* as printed: to 1 decimal (Units) or whole, ties rounding half
+    away from zero like Excel's ``#,##0`` / ``#,##0.0`` and the manager's
+    workbook — ``38.5`` -> ``39`` and ``82.25`` -> ``82.3``, where Python's
+    round-half-even gives ``38`` / ``82.2``. ``round(value, 9)`` first so float
+    noise (e.g. ``219.00000000000003``) cannot move a tie."""
+    step = Decimal("0.1") if decimals else Decimal(1)
+    exact = Decimal(str(float(round(value, 9))))
+    return float(exact.quantize(step, rounding=ROUND_HALF_UP))
+
+
+def printed_variance(row: dict, *, decimals: bool) -> float:
+    """The Variance a reader sees: printed Actual minus printed Benchmark, so
+    every row adds up — on the tab, in the PDF and in Excel, on count tabs and
+    Units alike (ADT Black 35 -> benchmark 39.5 prints "40"; actual 41 -> "+1").
+    Status is not affected: build_equity_table computes it from the true,
+    unrounded variance."""
+    diff = (_shown(row["actual"], decimals=decimals)
+            - _shown(row["benchmark"], decimals=decimals))
+    return round(diff, 1 if decimals else 0)
 
 
 def format_value(value: float, *, decimals: bool) -> str:
-    return f"{value:,.1f}" if decimals else f"{_whole(value):,}"
+    shown = _shown(value, decimals=decimals)
+    return f"{shown:,.1f}" if decimals else f"{shown:,.0f}"
 
 
 def format_variance(value: float, *, decimals: bool) -> str:
@@ -182,26 +197,14 @@ def format_variance(value: float, *, decimals: bool) -> str:
 
 
 def _cell_texts(row: dict, decimals: bool) -> list[str]:
-    """Cell text for one row, shared by the PDF and HTML renderers.
-
-    On count tabs (``decimals=False``) the printed Variance is the printed
-    Actual minus the printed Benchmark (both whole numbers, rounded half up),
-    so a benchmark landing exactly on ``.5`` can never make Actual, Benchmark
-    and Variance disagree on the page. Status is unaffected — it is computed
-    upstream from the true, unrounded variance. Units (``decimals=True``)
-    keeps the true variance rounded to 1 decimal.
-    """
-    if decimals:
-        variance_text = format_variance(row["variance"], decimals=True)
-    else:
-        printed_variance = int(row["actual"]) - _whole(row["benchmark"])
-        variance_text = format_variance(printed_variance, decimals=False)
+    """Cell text for one row, shared by the PDF and HTML renderers. The
+    Variance is ``printed_variance``, so the row always adds up."""
     return [
         str(row["group"]),
         format_value(row["baseline"], decimals=decimals),
         format_value(row["benchmark"], decimals=decimals),
         format_value(row["actual"], decimals=decimals),
-        variance_text,
+        format_variance(printed_variance(row, decimals=decimals), decimals=decimals),
         str(row["status"]),
     ]
 

@@ -299,3 +299,26 @@ def test_tallest_table_fits_above_the_footer():
         assert note.get_window_extent(renderer).y0 / fig.bbox.height > 0.045
     finally:
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# One display rule everywhere (review of PR #30): the printed Variance is the
+# printed Actual minus the printed Benchmark on Units too, and printed numbers
+# round half up like Excel.
+# ---------------------------------------------------------------------------
+
+def test_units_printed_variance_is_printed_actual_minus_printed_benchmark():
+    # Live 2025-26 Units shapes. Before, White printed 84.8 - 80.8 as "+3.9"
+    # and Latino printed 80.3 - 80.5 as "-0.1".
+    white = {"group": "White", "baseline": 82.8, "benchmark": 80.846, "actual": 84.79,
+             "variance": 84.79 - 80.846, "status": PROGRESSING}
+    latino = {"group": "Latino/Hispanic", "baseline": 82.39, "benchmark": 80.468,
+              "actual": 80.323, "variance": -0.145, "status": ON_TRACK}
+    assert _cell_texts(white, decimals=True)[2:5] == ["80.8", "84.8", "+4.0"]
+    # Still On Track: Status comes from the true variance (-0.145).
+    assert _cell_texts(latino, decimals=True)[2:6] == ["80.5", "80.3", "-0.2", ON_TRACK]
+
+
+def test_one_decimal_ties_round_half_up_like_excel():
+    # 82.25 is exact in binary; Python's round-half-even prints "82.2".
+    assert format_value(82.25, decimals=True) == "82.3"

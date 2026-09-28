@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from src.scripts.tabs.bot_equity import EquityTable
+from src.scripts.tabs.bot_equity import EquityTable, printed_variance
 from src.scripts.tabs.bot_helpers import (
     CAMPUS_ORDER,
     FIRSTGEN_LABELS,
@@ -125,10 +125,16 @@ def actual_vs_target_section(titles: dict, targets: Targets) -> ExcelSection:
 
 def equity_excel_section(table: EquityTable) -> ExcelSection:
     """The equity table as one flat Excel table (Category column first), laid
-    out like the manager's "Equity Analysis" sheet. Values stay unrounded;
-    the number formats round them, like the other Benchmark columns."""
+    out like the manager's "Equity Analysis" sheet. Baseline, Benchmark and
+    Actual stay unrounded (the number formats round them, like the other
+    Benchmark columns); Variance is the printed difference the PDF and tab
+    show, so each row adds up in Excel too."""
     headers = table.headers()
     df = table.rows.rename(columns=headers)
+    df[headers["variance"]] = [
+        printed_variance(row, decimals=table.decimals)
+        for row in table.rows.to_dict("records")
+    ]
     nums = tuple(headers[c] for c in ("baseline", "benchmark", "actual", "variance"))
     if table.decimals:
         return ExcelSection(table.heading, df, decimal_cols=nums)
