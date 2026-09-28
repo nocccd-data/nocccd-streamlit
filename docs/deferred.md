@@ -183,7 +183,9 @@ emits years 2022-23 through 2029-30). The other paths still add a Benchmark colu
 `bot_excel_helpers.py::_rate_detail`, and the race/gender/first-gen `value_summary` calls in
 `bot_goal3_units.py::units_excel_sections`. So from the first run whose display year is past
 2029-30 (the 2031 run), those tables carry a Benchmark column of blank cells — a fix must cover all
-of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`).
+of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`). The equity
+table does not have this problem: `bot_equity.py::equity_year` caps the year at the plan end, so
+from the 2031 run it keeps showing 2029-30, the plan's final result.
 Separately, `config.py::extract_values` (via `config.py::target_acyrs`) keeps pulling
 acyr 2022-2029 indefinitely — harmless on its own (the baseline never changes), but it means
 nothing in the extract step signals that the plan has ended either.
