@@ -195,3 +195,35 @@ def test_display_formats():
     assert format_variance(-0.39, decimals=False) == "0"
     assert format_variance(-0.14, decimals=True) == "-0.1"
     assert format_variance(0.04, decimals=True) == "0"
+
+
+def test_tallest_table_fits_above_the_footer():
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    from src.scripts.tabs.bot_equity import mpl_equity_table
+
+    def every_group(keys, category):
+        return _counts({k: {"2022-2023": 40, "2025-2026": 50} for k in keys}, category=category)
+
+    t = build_equity_table(_targets(), [
+        every_group([f"race{i}" for i in range(9)], RACE_CATEGORY),
+        every_group([f"gender{i}" for i in range(4)], GENDER_CATEGORY),
+        every_group([f"fg{i}" for i in range(3)], FIRSTGEN_CATEGORY),
+    ], min_count=10)
+    assert t is not None and len(t.rows) == 16
+    fig = plt.figure(figsize=(8.5, 11.0))
+    try:
+        mpl_equity_table(fig, t, top=0.505, bottom=0.045)
+        ax = fig.axes[0]
+        rects = [p for p in ax.patches if isinstance(p, Rectangle)]
+        # Every cell sits inside the axes, and the axes sit above *bottom*.
+        assert min(r.get_y() for r in rects) >= -1e-9
+        assert ax.get_position().y0 >= 0.045
+        bands = [r for r in rects if r.get_width() == pytest.approx(1.0)]
+        assert len(bands) == 3
+        heading, note = fig.texts[0], fig.texts[-1]
+        assert heading.get_text() == "Equity Results, 2025-26"
+        assert note.get_position()[1] > 0.045       # the note clears the footer area
+    finally:
+        plt.close(fig)

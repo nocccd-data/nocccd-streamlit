@@ -13,9 +13,11 @@ for the count tabs, ``bot_goal3_units`` for average units). No Streamlit /
 
 from __future__ import annotations
 
+import textwrap
 from dataclasses import dataclass
 
 import pandas as pd
+from matplotlib.patches import Rectangle
 
 from src.scripts.tabs.bot_targets import (
     BENCHMARK,
@@ -37,6 +39,17 @@ GENDER_CATEGORY = "Gender"
 FIRSTGEN_CATEGORY = "First Generation College Student Status"
 
 COLUMNS = ["category", "group", "baseline", "benchmark", "actual", "variance", "status"]
+
+BAND_COLOR = "#004062"   # NOCCCD Dark Teal, as in the manager's tables
+# Status fill: (light theme / PDF, dark theme).
+STATUS_FILL = {ON_TRACK: ("#d6eaf8", "#1d4f6e"), PROGRESSING: ("#f4c3a8", "#7a3f22")}
+
+# Shown columns (Category becomes the band rows) and their x edges on the PDF.
+_SHOWN = [c for c in COLUMNS if c != "category"]
+_COL_EDGES = (0.0, 0.34, 0.47, 0.60, 0.73, 0.85, 1.0)
+_ALIGN = {"group": "left", "status": "center"}   # everything else right
+_MAX_ROW_H = 0.021       # paper units; rows shrink below this to fit
+_HEADER_ROWS = 1.6       # the header row is 1.6 rows tall (two-line labels)
 
 
 @dataclass(frozen=True, eq=False)
@@ -157,3 +170,76 @@ def format_variance(value: float, *, decimals: bool) -> str:
     if shown == 0:
         return "0"
     return f"{shown:+,.1f}" if decimals else f"{shown:+,.0f}"
+
+
+def _cell_texts(row: dict, decimals: bool) -> list[str]:
+    return [
+        str(row["group"]),
+        format_value(row["baseline"], decimals=decimals),
+        format_value(row["benchmark"], decimals=decimals),
+        format_value(row["actual"], decimals=decimals),
+        format_variance(row["variance"], decimals=decimals),
+        str(row["status"]),
+    ]
+
+
+def _two_line(header: str) -> str:
+    """``"2025-26 Benchmark"`` -> ``"2025-26\\nBenchmark"``; one-word headers as is."""
+    return header.replace(" ", "\n", 1) if header[:1].isdigit() else header
+
+
+def mpl_equity_table(fig, table: EquityTable, *, top: float, bottom: float) -> None:
+    """Heading, table and note between paper y *top* and *bottom* (PDF page 1).
+
+    Drawn with Rectangle patches so each category is one full-width band. Row
+    height shrinks to fit, so the tallest table (16 groups + 3 bands) still
+    ends above *bottom*.
+    """
+    fig.text(0.06, top, table.heading, fontsize=10, fontweight="bold", va="top")
+    note = textwrap.fill(table.note, width=140)
+    note_h = 0.012 * (note.count("\n") + 1)
+    ax_top, ax_bottom = top - 0.03, bottom + note_h + 0.01
+    ax_h = ax_top - ax_bottom
+    ax = fig.add_axes((0.06, ax_bottom, 0.88, ax_h))
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+
+    records = table.rows.to_dict("records")
+    n_bands = table.rows["category"].nunique()
+    row_h = min(_MAX_ROW_H / ax_h, 1 / (len(records) + n_bands + _HEADER_ROWS))
+    headers = table.headers()
+
+    def draw_row(y: float, h: float, texts: list[str], *, bold: bool,
+                 fills: list[str] | None = None, header: bool = False) -> None:
+        for i, text in enumerate(texts):
+            x0, x1 = _COL_EDGES[i], _COL_EDGES[i + 1]
+            fill = fills[i] if fills else "white"
+            ax.add_patch(Rectangle((x0, y - h), x1 - x0, h, facecolor=fill,
+                                   edgecolor="#444444", linewidth=0.5))
+            align = "center" if header else _ALIGN.get(_SHOWN[i], "right")
+            tx = {"left": x0 + 0.01, "center": (x0 + x1) / 2, "right": x1 - 0.01}[align]
+            # Status is bold, as in the manager's tables.
+            weight = "bold" if bold or (not header and _SHOWN[i] == "status") else "normal"
+            ax.text(tx, y - h / 2, text, ha=align, va="center", fontsize=7,
+                    fontweight=weight)
+
+    y = 1.0
+    header_h = row_h * _HEADER_ROWS
+    draw_row(y, header_h, [_two_line(headers[c]) for c in _SHOWN], bold=True, header=True)
+    y -= header_h
+    category = None
+    for row in records:
+        if row["category"] != category:
+            category = row["category"]
+            ax.add_patch(Rectangle((0, y - row_h), 1.0, row_h, facecolor=BAND_COLOR,
+                                   edgecolor=BAND_COLOR, linewidth=0.5))
+            ax.text(0.5, y - row_h / 2, str(category), ha="center", va="center",
+                    fontsize=7.5, fontweight="bold", color="white")
+            y -= row_h
+        fills = ["white"] * 5 + [STATUS_FILL[row["status"]][0]]
+        draw_row(y, row_h, _cell_texts(row, table.decimals), bold=False, fills=fills)
+        y -= row_h
+
+    table_bottom = ax_bottom + y * ax_h
+    fig.text(0.06, table_bottom - 0.008, note, fontsize=6.5, color="#555555", va="top")

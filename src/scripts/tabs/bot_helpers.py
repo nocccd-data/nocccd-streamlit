@@ -26,6 +26,7 @@ from src.scripts.tabs.bot_equity import (
     EquitySource,
     EquityTable,
     build_equity_table,
+    mpl_equity_table,
 )
 from src.scripts.tabs.bot_targets import (
     BENCHMARK,
@@ -1160,9 +1161,11 @@ def _draw_section_note(fig, y, note):
              fontsize=6, color="grey", va="top")
 
 
-def add_target_page(pdf, titles: dict, targets: Targets) -> None:
+def add_target_page(pdf, titles: dict, targets: Targets,
+                    equity: EquityTable | None = None) -> None:
     """PDF page 1 for target tabs. The existing pages follow unchanged.
 
+    *equity* (when given) fills the page's bottom half under the chart.
     The caller has already forced the light-theme rcParams.
     """
     fig = plt.figure(figsize=(8.5, 11.0))
@@ -1178,6 +1181,8 @@ def add_target_page(pdf, titles: dict, targets: Targets) -> None:
         district_actual_vs_target(targets), targets.rule,
     )
     _draw_section_source(fig, 0.54, titles.get("source", "Banner"))
+    if equity is not None:
+        mpl_equity_table(fig, equity, top=0.505, bottom=0.045)
     _add_pdf_footer(fig)
     pdf.savefig(fig)
     plt.close(fig)
@@ -1549,7 +1554,7 @@ def generate_bot_pdf(df, titles, base_df=None,
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         if targets is not None:
-            add_target_page(pdf, titles, targets)
+            add_target_page(pdf, titles, targets, equity=equity_table(targets, titles))
 
         # --- Page 1 ---
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))

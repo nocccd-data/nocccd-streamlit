@@ -4,8 +4,11 @@
 2025-26 is k=3 years after the 2022-23 baseline: growth factor 1 + 0.3*3/7.
 """
 
+import io
+
 import pandas as pd
 import pytest
+from pypdf import PdfReader
 
 from src.scripts.tabs.bot_equity import (
     FIRSTGEN_CATEGORY,
@@ -14,7 +17,7 @@ from src.scripts.tabs.bot_equity import (
     RACE_CATEGORY,
 )
 from src.scripts.tabs.bot_excel_helpers import standard_bot_excel_sections
-from src.scripts.tabs.bot_helpers import equity_table
+from src.scripts.tabs.bot_helpers import equity_table, generate_bot_pdf
 from src.scripts.tabs.bot_targets import Targets
 
 GROWTH = {"growth": 0.30}
@@ -141,3 +144,38 @@ def test_no_equity_section_on_headcount_only_tabs_or_without_targets():
     for sections in (standard_bot_excel_sections(df, titles, targets=targets),
                      standard_bot_excel_sections(df, TITLES, base_df=df)):
         assert not any(s.title.startswith("Equity Results") for s in sections)
+
+
+# ---------------------------------------------------------------------------
+# PDF page 1
+# ---------------------------------------------------------------------------
+
+
+def _pdf_pages(pdf: bytes):
+    return PdfReader(io.BytesIO(pdf)).pages
+
+
+def test_pdf_page_one_carries_the_equity_table():
+    df, targets = _district_targets()
+    pages = _pdf_pages(generate_bot_pdf(df, TITLES, base_df=df, targets=targets))
+    assert len(pages) == 3                      # unchanged: the table uses page 1's free half
+    text = pages[0].extract_text()
+    assert "Equity Results, 2025-26" in text
+    assert "On Track" in text and "Progressing" in text
+    assert "Variance = Actual" in text
+    assert "Target" not in text
+
+
+def test_headcount_only_pdf_has_no_equity_table():
+    df, targets = _district_targets()
+    titles = dict(TITLES, headcount_only=True, include_nocccd=False)
+    pages = _pdf_pages(generate_bot_pdf(df, titles, targets=targets))
+    assert len(pages) == 2
+    assert "Equity Results" not in pages[0].extract_text()
+
+
+def test_equity_ignores_the_sidebar_year_selection():
+    df, targets = _district_targets()
+    shown = df[df["academic_year"] == "2022-2023"]          # sidebar narrowed to one year
+    pages = _pdf_pages(generate_bot_pdf(shown, TITLES, base_df=shown, targets=targets))
+    assert "Equity Results, 2025-26" in pages[0].extract_text()
