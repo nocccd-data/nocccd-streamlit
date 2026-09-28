@@ -19,6 +19,14 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
 from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
+from src.scripts.tabs.bot_equity import (
+    FIRSTGEN_CATEGORY,
+    GENDER_CATEGORY,
+    RACE_CATEGORY,
+    EquitySource,
+    EquityTable,
+    build_equity_table,
+)
 from src.scripts.tabs.bot_targets import (
     BENCHMARK,
     Targets,
@@ -915,6 +923,31 @@ def headcount_campus_targets(targets: Targets | None, titles: dict,
         targets.frame, include_nocccd=titles.get("include_nocccd", True),
     )
     return campus_target_rows(agg_plan, value_col="headcount", rule=targets.rule)
+
+
+def equity_table(targets: Targets | None, titles: dict) -> EquityTable | None:
+    """The tab's equity table (count tabs), or None without targets or on a
+    headcount-only tab (Bachelor's has no race/gender/first-gen breakdown).
+
+    Built from the plan frame, so it ignores the sidebar year selection.
+    """
+    if targets is None or titles.get("headcount_only"):
+        return None
+    frame = targets.frame
+    credit_only = titles.get("credit_only_firstgen", True)
+    sources = [
+        EquitySource(category=RACE_CATEGORY, agg=aggregate_race(frame),
+                     key_col="race_description", value_col="count",
+                     order=RACE_ORDER, labels=RACE_SHORT),
+        EquitySource(category=GENDER_CATEGORY, agg=aggregate_gender(frame),
+                     key_col="gender", value_col="count",
+                     order=GENDER_ORDER, labels=GENDER_LABELS),
+        EquitySource(category=FIRSTGEN_CATEGORY,
+                     agg=aggregate_firstgen(frame, credit_only=credit_only),
+                     key_col="fg", value_col="count",
+                     order=FIRSTGEN_ORDER, labels=FIRSTGEN_LABELS),
+    ]
+    return build_equity_table(targets, sources, min_count=CATEGORY_MIN_COUNT)
 
 
 def _campus_toggle_key(prefix: str) -> str:

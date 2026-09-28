@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from src.scripts.tabs.bot_equity import EquityTable
 from src.scripts.tabs.bot_helpers import (
     CAMPUS_ORDER,
     FIRSTGEN_LABELS,
@@ -24,6 +25,7 @@ from src.scripts.tabs.bot_helpers import (
     aggregate_headcount,
     aggregate_race,
     compute_pct_change,
+    equity_table,
     window_bounds,
     window_years,
 )
@@ -119,6 +121,18 @@ def actual_vs_target_section(titles: dict, targets: Targets) -> ExcelSection:
     if targets.is_average:
         return ExcelSection(titles["target_title"], avt, decimal_cols=cols)
     return ExcelSection(titles["target_title"], avt, integer_cols=cols)
+
+
+def equity_excel_section(table: EquityTable) -> ExcelSection:
+    """The equity table as one flat Excel table (Category column first), laid
+    out like the manager's "Equity Analysis" sheet. Values stay unrounded;
+    the number formats round them, like the other Benchmark columns."""
+    headers = table.headers()
+    df = table.rows.rename(columns=headers)
+    nums = tuple(headers[c] for c in ("baseline", "benchmark", "actual", "variance"))
+    if table.decimals:
+        return ExcelSection(table.heading, df, decimal_cols=nums)
+    return ExcelSection(table.heading, df, integer_cols=nums)
 
 
 def _safe_sheet_name(name: str) -> str:
@@ -350,6 +364,9 @@ def standard_bot_excel_sections(
     sections: list[ExcelSection] = []
     if targets is not None:
         sections.append(actual_vs_target_section(titles, targets))
+        equity = equity_table(targets, titles)
+        if equity is not None:
+            sections.append(equity_excel_section(equity))
     sections.append(
         ExcelSection(
             titles["headcount_title"],

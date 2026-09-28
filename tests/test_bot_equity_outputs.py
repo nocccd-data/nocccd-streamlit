@@ -1,0 +1,143 @@
+"""The equity table as the tabs build, draw and export it
+(spec docs/superpowers/specs/2026-09-28-bot-equity-tables-design.md).
+
+2025-26 is k=3 years after the 2022-23 baseline: growth factor 1 + 0.3*3/7.
+"""
+
+import pandas as pd
+import pytest
+
+from src.scripts.tabs.bot_equity import (
+    FIRSTGEN_CATEGORY,
+    GENDER_CATEGORY,
+    PROGRESSING,
+    RACE_CATEGORY,
+)
+from src.scripts.tabs.bot_excel_helpers import standard_bot_excel_sections
+from src.scripts.tabs.bot_helpers import equity_table
+from src.scripts.tabs.bot_targets import Targets
+
+GROWTH = {"growth": 0.30}
+UNITS = {"growth": 0.20, "reduce_over": 60, "value_col": "sum_hours_earned"}
+F3 = 1 + 0.3 * 3 / 7
+
+TITLES = {
+    "tab_title": "BOT Goal 2 - Associate Degrees",
+    "target_title": "Associate Degrees: Progress Toward 2029-30 Benchmark",
+    "org": "NOCCCD Credit Colleges",
+    "headcount_title": "HC", "headcount_caption": "c",
+    "race_title": "Race", "race_caption": "c",
+    "gender_title": "Gender", "gender_caption": "c",
+    "firstgen_title": "FG", "firstgen_caption": "c",
+}
+
+
+def _frame(groups):
+    """groups: {(race, gender, first_gen_ind, site): {year: students}} -> student rows."""
+    rows, pidm = [], 0
+    for (race, gender, fg, site), by_year in groups.items():
+        for year, n in by_year.items():
+            for _ in range(n):
+                rows.append({
+                    "pidm": pidm, "academic_year": year, "acyr_code": year[:4],
+                    "camp_desc": "NOCE" if site == "Noncredit" else "Cypress",
+                    "site": site, "race_description": race, "gender": gender,
+                    "first_gen_ind": fg, "sum_hours_earned": 80.0,
+                })
+                pidm += 1
+    return pd.DataFrame(rows)
+
+
+# Female = Hispanic + Black (110 -> 130); Male = Asian + Filipino + White (85 -> 79);
+# first-gen Y = Hispanic + Filipino (105 -> 140); N = Asian + Black + White (90 -> 69).
+DISTRICT = {
+    ("Hispanic or Latino", "F", "Y", "Credit"): {"2022-2023": 100, "2025-2026": 120},
+    ("Asian", "M", "N", "Credit"): {"2022-2023": 50, "2025-2026": 50},
+    ("Black or African American", "F", "N", "Credit"): {"2022-2023": 10, "2025-2026": 10},
+    ("Filipino", "M", "Y", "Credit"): {"2022-2023": 5, "2025-2026": 20},
+    ("White Non-Hispanic", "M", "N", "Credit"): {"2022-2023": 30, "2025-2026": 9},
+}
+
+
+def _district_targets():
+    df = _frame(DISTRICT)
+    return df, Targets(frame=df, rule=GROWTH)
+
+
+def test_count_tab_rows_in_tab_order_and_labels():
+    _, targets = _district_targets()
+    t = equity_table(targets, TITLES)
+    assert t is not None
+    assert list(zip(t.rows["category"], t.rows["group"])) == [
+        (RACE_CATEGORY, "Latino/Hispanic"),
+        (RACE_CATEGORY, "Asian"),
+        (RACE_CATEGORY, "Black or African American"),   # exactly 10 in both years
+        (GENDER_CATEGORY, "Female"),
+        (GENDER_CATEGORY, "Male"),
+        (FIRSTGEN_CATEGORY, "First Generation Student"),
+        (FIRSTGEN_CATEGORY, "Not First Generation Student"),
+    ]
+    rows = t.rows.set_index("group")
+    assert rows.loc["Female", "baseline"] == 110
+    assert rows.loc["Male", "actual"] == 79
+    assert rows.loc["Male", "status"] == PROGRESSING    # 79 vs 85 * F3 = 95.9
+
+
+def test_no_table_without_targets_or_on_headcount_only_tabs():
+    _, targets = _district_targets()
+    assert equity_table(None, TITLES) is None
+    assert equity_table(targets, dict(TITLES, headcount_only=True)) is None
+
+
+def test_first_gen_follows_the_tabs_credit_only_setting():
+    df = _frame({
+        ("Asian", "F", "Y", "Noncredit"): {"2022-2023": 20, "2025-2026": 30},
+        ("Asian", "F", "N", "Credit"): {"2022-2023": 20, "2025-2026": 30},
+    })
+    targets = Targets(frame=df, rule=GROWTH)
+
+    def first_gen(t):
+        return list(t.rows.loc[t.rows["category"] == FIRSTGEN_CATEGORY, "group"])
+
+    assert first_gen(equity_table(targets, TITLES)) == ["Not First Generation Student"]
+    assert first_gen(equity_table(targets, dict(TITLES, credit_only_firstgen=False))) == [
+        "First Generation Student", "Not First Generation Student",
+    ]
+
+
+def test_benchmark_matches_the_summary_counts_column():
+    df, targets = _district_targets()
+    sections = standard_bot_excel_sections(df, TITLES, base_df=df, targets=targets)
+    summary = next(s for s in sections if s.title == "Race - Summary Counts").df
+    expected = dict(zip(summary["Race/Ethnicity"], summary["2025-2026 Benchmark"]))
+    t = equity_table(targets, TITLES)
+    assert t is not None
+    rows = t.rows.set_index("group")
+    for group in ("Latino/Hispanic", "Asian"):
+        assert rows.loc[group, "benchmark"] == pytest.approx(expected[group])
+
+
+def test_excel_equity_section_follows_the_actual_vs_benchmark_table():
+    df, targets = _district_targets()
+    sections = standard_bot_excel_sections(df, TITLES, base_df=df, targets=targets)
+    assert sections[0].title == TITLES["target_title"]
+    eq = sections[1]
+    assert eq.title == "Equity Results, 2025-26"
+    assert list(eq.df.columns) == [
+        "Category", "Student Population", "2022-23 Baseline", "2025-26 Benchmark",
+        "2025-26 Actual", "Variance", "Status",
+    ]
+    assert eq.integer_cols == (
+        "2022-23 Baseline", "2025-26 Benchmark", "2025-26 Actual", "Variance",
+    )
+    by_pop = eq.df.set_index("Student Population")
+    assert by_pop.loc["Asian", "2025-26 Benchmark"] == pytest.approx(50 * F3)   # unrounded; Excel formats it
+    assert by_pop.loc["Asian", "Status"] == PROGRESSING
+
+
+def test_no_equity_section_on_headcount_only_tabs_or_without_targets():
+    df, targets = _district_targets()
+    titles = dict(TITLES, headcount_only=True, include_nocccd=False)
+    for sections in (standard_bot_excel_sections(df, titles, targets=targets),
+                     standard_bot_excel_sections(df, TITLES, base_df=df)):
+        assert not any(s.title.startswith("Equity Results") for s in sections)
