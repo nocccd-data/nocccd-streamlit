@@ -28,6 +28,7 @@ from src.scripts.tabs.bot_helpers import (
     window_years,
 )
 from src.scripts.tabs.bot_targets import (
+    BENCHMARK,
     PLAN_LENGTH,
     Targets,
     district_actual_vs_target,
@@ -35,6 +36,9 @@ from src.scripts.tabs.bot_targets import (
     group_target,
     years_from_baseline,
 )
+
+# Rate Detail's per-year benchmark column.
+BENCHMARK_COUNT = f"{BENCHMARK} Count"
 
 EXCEL_MAX_ROWS = 1_048_576
 EXCEL_MAX_COLS = 16_384
@@ -77,13 +81,13 @@ def _insert_after(df: pd.DataFrame, after: str, name: str, values) -> pd.DataFra
 
 
 def campus_target_cols(years: list[str], targets: Targets | None) -> tuple[str, ...]:
-    """The campus table's Target columns: one per displayed plan year (the
+    """The campus table's Benchmark columns: one per displayed plan year (the
     2022-23 baseline through 2029-30). Years before the baseline or after the
     plan end have no target, so they get no column."""
     if targets is None:
         return ()
     return tuple(
-        f"{y} Target" for y in years
+        f"{y} {BENCHMARK}" for y in years
         if (k := years_from_baseline(y)) is not None and 0 <= k <= PLAN_LENGTH
     )
 
@@ -92,7 +96,7 @@ def interleave_campus_targets(
     out: pd.DataFrame, years: list[str], targets: Targets | None,
     agg_plan: pd.DataFrame | None, *, value_col: str,
 ) -> pd.DataFrame:
-    """Insert ``"{year} Target"`` right after each plan year's column of a
+    """Insert ``"{year} Benchmark"`` right after each plan year's column of a
     campus table (``Campus`` + one column per year), from each campus's own
     baseline in *agg_plan* (the campus aggregate of the plan-year frame)."""
     target_of = _target_fn(targets, agg_plan, key_col="camp_desc",
@@ -100,18 +104,18 @@ def interleave_campus_targets(
     if target_of is None:
         return out
     for col in campus_target_cols(years, targets):
-        year = col.removesuffix(" Target")
+        year = col.removesuffix(f" {BENCHMARK}")
         out = _insert_after(out, year, col,
                             [target_of(camp, year) for camp in out["Campus"]])
     return out
 
 
 def actual_vs_target_section(titles: dict, targets: Targets) -> ExcelSection:
-    """The data behind the Actual vs Target chart — all 8 plan years."""
+    """The data behind the Actual vs Benchmark chart — all 8 plan years."""
     avt = district_actual_vs_target(targets).rename(columns={
-        "academic_year": "Academic Year", "actual": "Actual", "target": "Target",
+        "academic_year": "Academic Year", "actual": "Actual", "target": BENCHMARK,
     })
-    cols = ("Actual", "Target")
+    cols = ("Actual", BENCHMARK)
     if targets.is_average:
         return ExcelSection(titles["target_title"], avt, decimal_cols=cols)
     return ExcelSection(titles["target_title"], avt, integer_cols=cols)
@@ -179,7 +183,7 @@ def _count_summary(
             f"{last_yr} Count": int(lc),
         }
         if target_of is not None:
-            row[f"{last_yr} Target"] = target_of(key, last_yr)
+            row[f"{last_yr} {BENCHMARK}"] = target_of(key, last_yr)
         row["5-Yr Percent Change"] = ((lc - fc) / fc) if fc > 0 else float("nan")
         rows.append(row)
     return pd.DataFrame(rows)
@@ -222,7 +226,7 @@ def value_summary(
             f"{last_yr} {value_name}": last_val,
         }
         if target_of is not None:
-            row[f"{last_yr} Target"] = target_of(key, last_yr)
+            row[f"{last_yr} {BENCHMARK}"] = target_of(key, last_yr)
         row["5-Yr Percent Change"] = change
         rows.append(row)
     return pd.DataFrame(rows)
@@ -263,7 +267,7 @@ def _rate_detail(
     detail = df[df[key_col].astype(str).isin(order)].copy()
     detail[label_col] = detail[key_col].map(label_map).fillna(detail[key_col])
     if target_of is not None:
-        detail["Target Count"] = [
+        detail[BENCHMARK_COUNT] = [
             target_of(key, year)
             for key, year in zip(detail[key_col], detail["academic_year"])
         ]
@@ -278,7 +282,7 @@ def _rate_detail(
     # regressions, not silently ship blank columns (CLAUDE.md: "fail loudly").
     required_cols = ["Academic Year", label_col, "Numerator Count"]
     if target_of is not None:
-        required_cols.append("Target Count")
+        required_cols.append(BENCHMARK_COUNT)
     required_cols += ["Denominator Count", "Percent"]
     missing = [c for c in required_cols if c not in detail.columns]
     if missing:
@@ -333,7 +337,7 @@ def _headcount_table(
 def _target_cols(years: list[str], targets: Targets | None) -> tuple[str, ...]:
     if targets is None or not window_years(years):
         return ()
-    return (f"{window_bounds(years)[1]} Target",)
+    return (f"{window_bounds(years)[1]} {BENCHMARK}",)
 
 
 def standard_bot_excel_sections(
@@ -376,7 +380,7 @@ def standard_bot_excel_sections(
     )
     target_cols = _target_cols(years, targets)
     detail_int_cols = ("Numerator Count", "Denominator Count") + (
-        ("Target Count",) if targets is not None else ()
+        (BENCHMARK_COUNT,) if targets is not None else ()
     )
 
     df_race = aggregate_race(df, base_df=base_df)
@@ -525,7 +529,7 @@ def standard_bot_excel_sections(
 def avg_unit_cols(df: pd.DataFrame) -> tuple[str, ...]:
     return tuple(
         col for col in df.columns
-        if str(col).endswith("Avg Units") or str(col).endswith(" Target")
+        if str(col).endswith("Avg Units") or str(col).endswith(f" {BENCHMARK}")
     )
 
 

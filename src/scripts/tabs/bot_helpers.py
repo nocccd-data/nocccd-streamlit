@@ -20,6 +20,7 @@ from matplotlib.patches import Rectangle
 
 from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
 from src.scripts.tabs.bot_targets import (
+    BENCHMARK,
     Targets,
     build_target_chart,
     district_actual_vs_target,
@@ -497,11 +498,11 @@ def add_campus_target_ticks(fig, df_agg: pd.DataFrame, df_tgt: pd.DataFrame,
             x=years,
             y=[thick if t is not None else None for t in tgts],
             base=[t - thick / 2 if t is not None else None for t in tgts],
-            offsetgroup=camp, name="Target", legendgroup="target",
+            offsetgroup=camp, name=BENCHMARK, legendgroup="target",
             showlegend=i == 0,
             marker={"color": TICK_COLOR, "line": {"color": "white", "width": 1}},
             customdata=tgts,
-            hovertemplate=f"{camp} %{{x}}<br>Target: %{{customdata:{fmt}}}<extra></extra>",
+            hovertemplate=f"{camp} %{{x}}<br>{BENCHMARK}: %{{customdata:{fmt}}}<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=years,
@@ -516,7 +517,7 @@ def add_campus_target_ticks(fig, df_agg: pd.DataFrame, df_tgt: pd.DataFrame,
         fig.add_trace(go.Scatter(
             x=years,
             y=[t - thick / 2 if t is not None else None for t in tgts],
-            # Hides with the Target ticks when "Target" is clicked.
+            # Hides with the ticks when "Benchmark" is clicked.
             mode="text", offsetgroup=camp, legendgroup="target",
             showlegend=False, hoverinfo="skip",
             text=["" if t is None else format(t, fmt) for t in tgts],
@@ -886,7 +887,7 @@ def _source_html(titles: dict) -> str:
 
 
 def render_target_section(titles: dict, targets: Targets) -> None:
-    """Chart 0: district Actual vs Target, 2022-23 -> 2029-30.
+    """Chart 0: district Actual vs Benchmark, 2022-23 -> 2029-30.
 
     Always the full plan — it does not follow the Academic Years selection.
     """
@@ -921,7 +922,7 @@ def _campus_toggle_key(prefix: str) -> str:
 
 
 def campus_targets_on(prefix: str) -> bool:
-    """Current state of a tab's "Show campus targets" switch.
+    """Current state of a tab's "Show campus benchmarks" switch.
 
     The switch is drawn right above the campus chart, but the tab builds its
     Download PDF earlier in the script; Streamlit keeps the widget's state in
@@ -931,9 +932,9 @@ def campus_targets_on(prefix: str) -> bool:
 
 
 def render_campus_target_toggle(prefix: str) -> bool:
-    """The "Show campus targets" switch, placed right above the campus chart
+    """The "Show campus benchmarks" switch, placed right above the campus chart
     it controls. Off by default so the chart looks exactly as it always has."""
-    return st.toggle("Show campus targets", value=False,
+    return st.toggle("Show campus benchmarks", value=False,
                      key=_campus_toggle_key(prefix))
 
 
@@ -961,9 +962,9 @@ def render_bot_charts(
         include_nocccd (optional, default True) — show NOCCCD unduplicated bar
         credit_only_firstgen (optional, default True) — filter first-gen to credit
         headcount_only (optional, default False) — show only chart 1, skip race/gender/first-gen
-    targets (optional) — Vision 2030 plan rows + rule; renders the Actual vs Target chart first
+    targets (optional) — Vision 2030 plan rows + rule; renders the Actual vs Benchmark chart first
     campus_toggle_prefix (optional) — the tab's widget prefix; with *targets*, draws the
-        "Show campus targets" switch right above the campus chart and, when on, per-campus
+        "Show campus benchmarks" switch right above the campus chart and, when on, per-campus
         target ticks on it
     """
     years = sorted(df["academic_year"].dropna().unique())
@@ -1185,16 +1186,16 @@ def _mpl_headcount(fig, bbox, df_agg, df_pct, df_tgt=None):
             bar_w=bar_w, peak=peak, fmt=",.0f",
         )
     if target:
-        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label="Target")
+        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label=BENCHMARK)
 
     ax_bar.set_xticks(range(n_groups))
     ax_bar.set_xticklabels(years, fontsize=7)
     ax_bar.tick_params(axis="y", labelsize=7)
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
-    # Target (a line handle) sorts ahead of the bars by default; keep it last.
+    # Benchmark (a line handle) sorts ahead of the bars by default; keep it last.
     handles, labels = ax_bar.get_legend_handles_labels()
-    order = sorted(range(len(labels)), key=lambda i: labels[i] == "Target")
+    order = sorted(range(len(labels)), key=lambda i: labels[i] == BENCHMARK)
     ax_bar.legend([handles[i] for i in order], [labels[i] for i in order],
                   fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.08),
                   ncol=n_bars + (1 if target else 0), frameon=False)
@@ -1453,7 +1454,7 @@ def generate_bot_pdf(df, titles, base_df=None,
                      show_campus_targets: bool = False) -> bytes:
     """Generate a portrait PDF with 2 BOT sections per page.
 
-    Page 0 (only with targets): Actual vs Target
+    Page 0 (only with targets): Actual vs Benchmark
     Page 1: Headcount + Race
     Page 2: Gender + First-Gen
     If titles['headcount_only'] is True, only page 1 with just Headcount.

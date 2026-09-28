@@ -32,7 +32,7 @@ def _targets() -> Targets | None:
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - ADT",
-    "target_title": "Associate Degrees for Transfer: Progress Toward 2029-30 Target",
+    "target_title": "Associate Degrees for Transfer: Progress Toward 2029-30 Benchmark",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Headcount of Students who Earned an Associate Degree for Transfer",
     "headcount_caption": (

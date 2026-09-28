@@ -146,11 +146,13 @@ def test_for_dataset_reads_config_rule():
 
 def test_caption_is_derived_from_the_rule():
     assert target_caption(GROWTH) == (
-        "Target: 30% increase over the 2022-23 baseline by 2029-30, "
+        "Benchmark: 30% increase over the 2022-23 baseline by 2029-30, "
         "in equal annual steps."
     )
-    assert "rounded up" in target_caption(BACH)
+    assert target_caption(BACH).endswith(
+        " Benchmarks are rounded up to whole students."
+    )
     assert target_caption(UNITS) == (
-        "Target: reduce the average units above 60 by 20% from the 2022-23 "
+        "Benchmark: reduce the average units above 60 by 20% from the 2022-23 "
         "baseline by 2029-30, in equal annual steps. Lower is better."
     )

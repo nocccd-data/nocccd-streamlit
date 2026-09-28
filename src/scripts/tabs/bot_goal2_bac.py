@@ -28,7 +28,7 @@ def _targets() -> Targets | None:
 
 _TITLES = {
     "tab_title": "BOT Goal 2 - Bachelor's Degrees",
-    "target_title": "Baccalaureate Degrees: Progress Toward 2029-30 Target",
+    "target_title": "Baccalaureate Degrees: Progress Toward 2029-30 Benchmark",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Headcount of Students who Earned a Baccalaureate Degree",
     "headcount_caption": (

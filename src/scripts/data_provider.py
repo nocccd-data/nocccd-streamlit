@@ -84,7 +84,7 @@ def _download_and_read(
 def _read_target_frame(dataset_name: str) -> pd.DataFrame:
     """Vision 2030 plan rows (baseline -> latest) for a target dataset.
 
-    Independent of the sidebar selection: the Actual vs Target chart always
+    Independent of the sidebar selection: the Actual vs Benchmark chart always
     shows the whole plan. Filtered to >= baseline afterwards because
     _download_and_read adds the reference year whenever the requested years
     equal the configured window (the 2027 run).

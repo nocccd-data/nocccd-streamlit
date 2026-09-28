@@ -63,7 +63,7 @@ from src.scripts.tabs.bot_helpers import (
     window_years,
     year_header_fontsize,
 )
-from src.scripts.tabs.bot_targets import Targets
+from src.scripts.tabs.bot_targets import BENCHMARK, Targets
 
 _CFG = DATASETS["bot_goal3_units"]
 _DEFAULT_ACYRS = _CFG[_CFG["param_name"]]
@@ -77,7 +77,7 @@ def _targets() -> Targets | None:
 
 _TITLES = {
     "tab_title": "BOT Goal 3 - Average Units",
-    "target_title": "Average Units Accumulated by ADT Earners: Progress Toward 2029-30 Target",
+    "target_title": "Average Units Accumulated by ADT Earners: Progress Toward 2029-30 Benchmark",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "Average No. of Units Accumulated by Associate Degree for Transfer Earners",
     "headcount_caption": (
@@ -639,16 +639,16 @@ def _mpl_campus(fig, bbox, df_agg, df_pct, df_tgt=None):
             bar_w=bar_w, peak=peak, fmt=".1f",
         )
     if target:
-        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label="Target")
+        ax_bar.plot([], [], color=TICK_COLOR, linewidth=2, label=BENCHMARK)
 
     ax_bar.set_xticks(range(n_groups))
     ax_bar.set_xticklabels(years, fontsize=7)
     ax_bar.tick_params(axis="y", labelsize=7)
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
-    # Target (a line handle) sorts ahead of the bars by default; keep it last.
+    # Benchmark (a line handle) sorts ahead of the bars by default; keep it last.
     handles, labels = ax_bar.get_legend_handles_labels()
-    order = sorted(range(len(labels)), key=lambda i: labels[i] == "Target")
+    order = sorted(range(len(labels)), key=lambda i: labels[i] == BENCHMARK)
     ax_bar.legend([handles[i] for i in order], [labels[i] for i in order],
                   fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.08),
                   ncol=n_bars + (1 if target else 0), frameon=False)

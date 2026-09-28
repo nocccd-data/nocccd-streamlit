@@ -173,21 +173,21 @@ Surfaced by the whole-branch final review of the Vision 2030 targets feature, 20
 Three smaller items from the same feature, grouped here rather than filed as three
 one-line clusters.
 
-**1. Target columns go blank once the plan window is over, and the extract keeps pulling
+**1. Benchmark columns go blank once the plan window is over, and the extract keeps pulling
 baseline years forever.** `bot_targets.py::target_value` returns NaN whenever the years-since-
 baseline offset exceeds `PLAN_LENGTH` (`BOT_TARGET_END_ACYR` − `BOT_TARGET_BASELINE_ACYR` = 7).
 The campus tables already stop at the plan end (`bot_excel_helpers.py::campus_target_cols` only
-emits years 2022-23 through 2029-30). The other paths still add a Target column whenever
+emits years 2022-23 through 2029-30). The other paths still add a Benchmark column whenever
 `targets is not None`, with no check against the plan's end: `bot_excel_helpers.py::_target_cols`,
 `bot_excel_helpers.py::_count_summary` / `bot_excel_helpers.py::value_summary` (via `target_of`),
 `bot_excel_helpers.py::_rate_detail`, and the race/gender/first-gen `value_summary` calls in
 `bot_goal3_units.py::units_excel_sections`. So from the first run whose display year is past
-2029-30 (the 2031 run), those tables carry a Target column of blank cells — a fix must cover all
+2029-30 (the 2031 run), those tables carry a Benchmark column of blank cells — a fix must cover all
 of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`).
 Separately, `config.py::extract_values` (via `config.py::target_acyrs`) keeps pulling
 acyr 2022-2029 indefinitely — harmless on its own (the baseline never changes), but it means
 nothing in the extract step signals that the plan has ended either.
-**Decision:** drop the `"{year} Target"` column once the display year passes
+**Decision:** drop the `"{year} Benchmark"` column once the display year passes
 `BOT_TARGET_END_ACYR`, or keep it and document the blank cells as "plan ended" in the column
 header/caption. Waits on a 2030 plan revision (a new baseline/end year) before it's worth
 picking either way.
@@ -195,7 +195,7 @@ picking either way.
 **2. A missing district baseline fails silently.** `bot_targets.py::district_actual_vs_target`
 looks up the 2022-23 baseline via `actual.get(years[0])`; if that year is absent from the
 target frame, `bot_targets.py::target_value` returns NaN for every plan year, so the Actual vs
-Target chart draws Actual only — with no Target line and no explanation — while
+Benchmark chart draws Actual only — with no Benchmark line and no explanation — while
 `bot_targets.py::target_caption` still prints the growth rule as if a target were plotted.
 **Fix:** when the baseline actual is missing, surface it — an `st.warning` on the Streamlit
 section and a note on `bot_helpers.py::add_target_page`'s PDF page. Low likelihood in practice:
@@ -210,7 +210,7 @@ empty target frame.
 `data_provider.py::fetch_bot_goal2_cert`) are separate `st.cache_data`-wrapped functions over
 the same dataset name, so each independently calls `data_provider.py::_download_and_read`,
 which downloads the `.hyper` from Tableau Cloud again. If a scheduled publish lands between the
-two downloads, the Actual vs Target chart and the tab's own tables could read different
+two downloads, the Actual vs Benchmark chart and the tab's own tables could read different
 snapshots of the same dataset within one page render. **Fix:** derive both the display frame
 and the target frame from a single download — e.g. have the tab's fetch download once and
 derive the target rows from it, rather than calling `data_provider.py::fetch_bot_target_frame`

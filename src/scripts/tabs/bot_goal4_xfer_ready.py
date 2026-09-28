@@ -32,7 +32,7 @@ def _targets() -> Targets | None:
 
 _TITLES = {
     "tab_title": "BOT Goal 4 - Transfer Ready",
-    "target_title": "Transfer-Ready Students: Progress Toward 2029-30 Target",
+    "target_title": "Transfer-Ready Students: Progress Toward 2029-30 Benchmark",
     "org": "NOCCCD Credit Colleges",
     # Transfer readiness is measured district-wide (no campus split), so the
     # headcount chart shows a single Credit-college bar — not Cypress/Fullerton.
