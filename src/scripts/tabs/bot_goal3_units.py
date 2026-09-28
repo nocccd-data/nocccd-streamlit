@@ -25,6 +25,14 @@ from src.scripts.pdf_cache import (
     clear_excel_cache,
     clear_pdf_cache,
 )
+from src.scripts.tabs.bot_equity import (
+    FIRSTGEN_CATEGORY,
+    GENDER_CATEGORY,
+    RACE_CATEGORY,
+    EquitySource,
+    EquityTable,
+    build_equity_table,
+)
 from src.scripts.tabs.bot_excel_helpers import (
     EXCEL_MIME,
     ExcelSection,
@@ -32,6 +40,7 @@ from src.scripts.tabs.bot_excel_helpers import (
     actual_vs_target_section,
     avg_unit_cols,
     campus_target_cols,
+    equity_excel_section,
     interleave_campus_targets,
     matrix_table,
     sections_to_excel_bytes,
@@ -39,6 +48,7 @@ from src.scripts.tabs.bot_excel_helpers import (
 )
 from src.scripts.tabs.bot_helpers import (
     CAMPUS_ORDER,
+    CATEGORY_MIN_COUNT,
     COLOR_MAP,
     FIRSTGEN_COLORS,
     FIRSTGEN_LABELS,
@@ -215,9 +225,12 @@ def _aggregate_firstgen(df):
         stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
     )
     out = (
-        stu.groupby(["academic_year", "fg"])["sum_hours_earned"]
-        .mean()
-        .reset_index(name="avg_units")
+        stu.groupby(["academic_year", "fg"])
+        .agg(
+            avg_units=("sum_hours_earned", "mean"),
+            count=("pidm", "nunique"),
+        )
+        .reset_index()
     )
     out["fg_label"] = out["fg"].map(FIRSTGEN_LABELS)
     return out
@@ -270,6 +283,25 @@ def _campus_targets(targets: Targets | None, show: bool) -> pd.DataFrame | None:
         return None
     return campus_target_rows(_aggregate_campus(targets.frame),
                               value_col="avg_units", rule=targets.rule)
+
+
+def _equity_table(targets: Targets | None) -> EquityTable | None:
+    """Units' equity table: average units per group, where lower is better."""
+    if targets is None:
+        return None
+    frame = targets.frame
+    sources = [
+        EquitySource(category=RACE_CATEGORY, agg=_aggregate_race(frame),
+                     key_col="race_description", value_col="avg_units",
+                     order=RACE_ORDER, labels=RACE_SHORT),
+        EquitySource(category=GENDER_CATEGORY, agg=_aggregate_gender(frame),
+                     key_col="gender", value_col="avg_units",
+                     order=GENDER_ORDER, labels=GENDER_LABELS),
+        EquitySource(category=FIRSTGEN_CATEGORY, agg=_aggregate_firstgen(frame),
+                     key_col="fg", value_col="avg_units",
+                     order=FIRSTGEN_ORDER, labels=FIRSTGEN_LABELS),
+    ]
+    return build_equity_table(targets, sources, min_count=CATEGORY_MIN_COUNT)
 
 
 def _build_campus_chart(df_avg, df_tgt=None):
@@ -924,7 +956,7 @@ def _generate_pdf(df, targets: Targets | None = None,
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         if targets is not None:
-            add_target_page(pdf, _TITLES, targets)
+            add_target_page(pdf, _TITLES, targets, equity=_equity_table(targets))
 
         # Page 1
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
@@ -1044,6 +1076,9 @@ def units_excel_sections(
     sections: list[ExcelSection] = []
     if targets is not None:
         sections.append(actual_vs_target_section(_TITLES, targets))
+        equity = _equity_table(targets)
+        if equity is not None:
+            sections.append(equity_excel_section(equity))
     sections.append(
         ExcelSection(
             _TITLES["headcount_title"],
@@ -1295,7 +1330,7 @@ def render():
 
     targets = _targets()
     if targets is not None:
-        render_target_section(_TITLES, targets)
+        render_target_section(_TITLES, targets, equity=_equity_table(targets))
 
     # Chart 1: Average units by campus
     if targets is not None:

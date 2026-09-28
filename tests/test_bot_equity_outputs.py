@@ -10,9 +10,11 @@ import pandas as pd
 import pytest
 from pypdf import PdfReader
 
+from src.scripts.tabs import bot_goal3_units
 from src.scripts.tabs.bot_equity import (
     FIRSTGEN_CATEGORY,
     GENDER_CATEGORY,
+    ON_TRACK,
     PROGRESSING,
     RACE_CATEGORY,
     equity_html,
@@ -218,3 +220,71 @@ def test_tab_renders_heading_table_and_note(monkeypatch):
     assert calls[0] == ("markdown", "**Equity Results, 2025-26**")
     assert calls[1][0] == "markdown" and calls[1][1].startswith("<table")
     assert calls[2] == ("caption", t.note)
+
+
+# ---------------------------------------------------------------------------
+# Average Units (lower is better)
+# ---------------------------------------------------------------------------
+
+
+def _units_frame(groups):
+    """groups: {(race, gender, first_gen_ind): {year: (students, hours)}}."""
+    rows, pidm = [], 0
+    for (race, gender, fg), by_year in groups.items():
+        for year, (n, hours) in by_year.items():
+            for _ in range(n):
+                rows.append({
+                    "pidm": pidm, "academic_year": year, "acyr_code": year[:4],
+                    "camp_desc": "Cypress", "site": "Credit",
+                    "race_description": race, "gender": gender,
+                    "first_gen_ind": fg, "sum_hours_earned": hours,
+                })
+                pidm += 1
+    return pd.DataFrame(rows)
+
+
+# Hispanic falls 90 -> 80 (below its 87.4 benchmark: On Track); Asian stays at 80
+# (above 78.3: Progressing).
+UNITS_DISTRICT = {
+    ("Hispanic or Latino", "F", "Y"): {"2022-2023": (40, 90.0), "2025-2026": (40, 80.0)},
+    ("Asian", "M", "N"): {"2022-2023": (40, 80.0), "2025-2026": (40, 80.0)},
+}
+
+
+def test_units_equity_uses_averages_and_lower_is_better():
+    df = _units_frame(UNITS_DISTRICT)
+    t = bot_goal3_units._equity_table(Targets(frame=df, rule=UNITS))
+    assert t is not None and t.decimals
+    rows = t.rows[t.rows["category"] == RACE_CATEGORY].set_index("group")
+    assert rows.loc["Latino/Hispanic", "baseline"] == pytest.approx(90.0)
+    assert rows.loc["Latino/Hispanic", "benchmark"] == pytest.approx(90 - 30 * 0.2 * 3 / 7)
+    assert rows.loc["Latino/Hispanic", "status"] == ON_TRACK
+    assert rows.loc["Asian", "status"] == PROGRESSING
+    assert "On Track = at or below the benchmark." in t.note
+
+
+def test_units_first_gen_aggregate_counts_students():
+    agg = bot_goal3_units._aggregate_firstgen(_units_frame(UNITS_DISTRICT))
+    by = agg.set_index(["academic_year", "fg"])["count"]
+    assert by[("2022-2023", "Y")] == 40
+
+
+def test_units_excel_and_pdf_carry_the_equity_table():
+    df = _units_frame(UNITS_DISTRICT)
+    targets = Targets(frame=df, rule=UNITS)
+    sections = bot_goal3_units.units_excel_sections(df, targets=targets)
+    assert sections[0].title == bot_goal3_units._TITLES["target_title"]
+    assert sections[1].title == "Equity Results, 2025-26"
+    assert sections[1].decimal_cols == (
+        "2022-23 Baseline", "2025-26 Benchmark", "2025-26 Actual", "Variance",
+    )
+    pages = _pdf_pages(bot_goal3_units.generate_pdf(df, targets=targets))
+    assert len(pages) == 3
+    assert "Equity Results, 2025-26" in pages[0].extract_text()
+
+
+def test_units_without_targets_has_no_equity_table():
+    df = _units_frame(UNITS_DISTRICT)
+    assert bot_goal3_units._equity_table(None) is None
+    sections = bot_goal3_units.units_excel_sections(df)
+    assert not any(s.title.startswith("Equity Results") for s in sections)
