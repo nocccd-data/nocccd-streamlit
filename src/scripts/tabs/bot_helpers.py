@@ -1454,7 +1454,7 @@ def generate_bot_pdf(df, titles, base_df=None,
                      show_campus_targets: bool = False) -> bytes:
     """Generate a portrait PDF with 2 BOT sections per page.
 
-    Page 0 (only with targets): Actual vs Target
+    Page 0 (only with targets): Actual vs Benchmark
     Page 1: Headcount + Race
     Page 2: Gender + First-Gen
     If titles['headcount_only'] is True, only page 1 with just Headcount.
