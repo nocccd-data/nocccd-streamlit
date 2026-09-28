@@ -11,6 +11,9 @@ Targets are COUNTS (or, for Units, averages). They are never drawn on the
 race/gender/first-gen rate charts: a count target converted into a rate target
 reverses the Met/Not-Met verdict whenever enrollment moves (spec §9).
 
+Readers see the word "Benchmark" (``BENCHMARK``), not "Target" — a
+terminology change requested 2026-09-28. Code names keep "target".
+
 No Streamlit / bot_helpers imports here, so bot_helpers and
 bot_excel_helpers can both depend on this module without a cycle.
 """
@@ -32,6 +35,11 @@ from src.pipeline.config import (
 BASELINE_START = int(BOT_TARGET_BASELINE_ACYR)
 END_START = int(BOT_TARGET_END_ACYR)
 PLAN_LENGTH = END_START - BASELINE_START
+
+# The word for a target everywhere a reader sees one: chart legends and hover,
+# captions, Excel headers. Legend ordering and Excel number formats match on
+# it, so use the constant rather than retyping the word.
+BENCHMARK = "Benchmark"
 
 
 def plan_years() -> list[str]:
@@ -156,17 +164,17 @@ def target_caption(rule: dict) -> str:
     start, end = short_year(years[0]), short_year(years[-1])
     if rule.get("reduce_over") is not None:
         text = (
-            f"Target: reduce the average units above {rule['reduce_over']} by "
+            f"{BENCHMARK}: reduce the average units above {rule['reduce_over']} by "
             f"{pct} from the {start} baseline by {end}, in equal annual steps. "
             "Lower is better."
         )
     else:
         text = (
-            f"Target: {pct} increase over the {start} baseline by {end}, "
+            f"{BENCHMARK}: {pct} increase over the {start} baseline by {end}, "
             "in equal annual steps."
         )
     if rule.get("round_up"):
-        text += " Targets are rounded up to whole students."
+        text += f" {BENCHMARK}s are rounded up to whole students."
     return text
 
 
@@ -178,12 +186,13 @@ def targets_from_cache(cache, name: str) -> Targets | None:
 
 
 # ---------------------------------------------------------------------------
-# Charts — styled after the manager's workbook chart: grey solid Actual with
-# square markers, gold dashed Target with diamonds (NOCCCD brand Grey and
-# Golden Yellow, docs/theme.md).
+# Charts — styled after the manager's workbook chart: dark-blue solid Actual
+# with square markers, gold dashed Benchmark with diamonds (NOCCCD brand Dark
+# Teal and Golden Yellow, docs/theme.md). Every point of both lines is
+# labelled.
 # ---------------------------------------------------------------------------
 
-ACTUAL_COLOR = "#575a5d"
+ACTUAL_COLOR = "#004062"
 TARGET_COLOR = "#ffdd00"
 
 
@@ -197,33 +206,44 @@ def _fmt(rule: dict) -> str:
     return ",.1f" if rule.get("value_col") else ",.0f"
 
 
+def _actual_on_top(avt: pd.DataFrame) -> list[bool]:
+    """Per year: True where Actual is above the Benchmark. Each line's label
+    goes on the outside of the pair — the higher line's above its point, the
+    lower line's below — so the two numbers never land on each other, however
+    close the values (Noncredit 2024-25: 1,094 vs 1,090). Ties and years with
+    no Actual keep Actual below, Benchmark above."""
+    return [bool(a > t) for a, t in zip(avt["actual"], avt["target"])]
+
+
+def _labels(values: pd.Series, fmt: str) -> list[str]:
+    return ["" if pd.isna(v) else format(v, fmt) for v in values]
+
+
 def build_target_chart(avt: pd.DataFrame, rule: dict) -> go.Figure:
     fmt = _fmt(rule)
     x = _x_labels(avt)
     actual = avt["actual"]
     target = avt["target"]
-    # Label the target only at the baseline and the 2029-30 endpoint, as in
-    # the workbook chart; hover shows every value.
-    target_text = [
-        format(v, fmt) if i in (0, len(target) - 1) and pd.notna(v) else ""
-        for i, v in enumerate(target)
-    ]
+    on_top = _actual_on_top(avt)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=x, y=actual, name="Actual", mode="lines+markers+text",
         line={"color": ACTUAL_COLOR, "width": 3},
         marker={"symbol": "square", "size": 9, "color": ACTUAL_COLOR},
-        text=["" if pd.isna(v) else format(v, fmt) for v in actual],
-        textposition="bottom center", textfont={"size": 12},
+        text=_labels(actual, fmt),
+        textposition=["top center" if up else "bottom center" for up in on_top],
+        textfont={"size": 12},
         hovertemplate=f"%{{x}}<br>Actual: %{{y:{fmt}}}<extra></extra>",
     ))
     fig.add_trace(go.Scatter(
-        x=x, y=target, name="Target", mode="lines+markers+text",
+        x=x, y=target, name=BENCHMARK, mode="lines+markers+text",
         line={"color": TARGET_COLOR, "width": 3, "dash": "dash"},
         marker={"symbol": "diamond", "size": 10, "color": TARGET_COLOR,
                 "line": {"color": ACTUAL_COLOR, "width": 1}},
-        text=target_text, textposition="top center", textfont={"size": 12},
-        hovertemplate=f"%{{x}}<br>Target: %{{y:{fmt}}}<extra></extra>",
+        text=_labels(target, fmt),
+        textposition=["bottom center" if up else "top center" for up in on_top],
+        textfont={"size": 12},
+        hovertemplate=f"%{{x}}<br>{BENCHMARK}: %{{y:{fmt}}}<extra></extra>",
     ))
     values = pd.concat([actual, target]).dropna()
     lo, hi = (values.min(), values.max()) if not values.empty else (0.0, 1.0)
@@ -254,16 +274,15 @@ def mpl_target_chart(fig, bbox, avt: pd.DataFrame, rule: dict) -> None:
             markersize=5, label="Actual")
     ax.plot(xs, target, color=TARGET_COLOR, linewidth=2, linestyle="--",
             marker="D", markersize=5, markeredgecolor=ACTUAL_COLOR,
-            markeredgewidth=0.6, label="Target")
-    for x, v in zip(xs, actual):
-        if pd.notna(v):
-            ax.annotate(format(v, fmt), (x, v), textcoords="offset points",
-                        xytext=(0, -11), ha="center", fontsize=6)
-    for x in (xs[0], xs[-1]):
-        v = target[x]
-        if pd.notna(v):
-            ax.annotate(format(v, fmt), (x, v), textcoords="offset points",
-                        xytext=(0, 6), ha="center", fontsize=6)
+            markeredgewidth=0.6, label=BENCHMARK)
+    above, below = 6, -11          # points; text sits on its baseline
+    for x, a, t, up in zip(xs, actual, target, _actual_on_top(avt)):
+        if pd.notna(a):
+            ax.annotate(format(a, fmt), (x, a), textcoords="offset points",
+                        xytext=(0, above if up else below), ha="center", fontsize=6)
+        if pd.notna(t):
+            ax.annotate(format(t, fmt), (x, t), textcoords="offset points",
+                        xytext=(0, below if up else above), ha="center", fontsize=6)
     ax.set_xticks(xs)
     ax.set_xticklabels(_x_labels(avt), fontsize=7)
     ax.tick_params(axis="y", labelsize=6)

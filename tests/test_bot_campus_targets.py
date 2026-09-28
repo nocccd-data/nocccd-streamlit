@@ -27,7 +27,7 @@ YEARS = ["2018-2019", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-
 GROWTH = {"growth": 0.30}
 UNITS = {"growth": 0.20, "reduce_over": 60, "value_col": "sum_hours_earned"}
 TITLES = {
-    "tab_title": "T", "target_title": "AA: Progress Toward 2029-30 Target",
+    "tab_title": "T", "target_title": "AA: Progress Toward 2029-30 Benchmark",
     "org": "NOCCCD Credit Colleges",
     "headcount_title": "HC", "headcount_caption": "c",
     "race_title": "Race", "race_caption": "c",
@@ -68,7 +68,7 @@ def _hc(sections):
 
 
 # ---------------------------------------------------------------------------
-# Excel: campus table carries a Target column after every plan year
+# Excel: campus table carries a Benchmark column after every plan year
 # ---------------------------------------------------------------------------
 
 def test_campus_table_interleaves_a_target_after_every_plan_year():
@@ -76,19 +76,19 @@ def test_campus_table_interleaves_a_target_after_every_plan_year():
     sec = _hc(standard_bot_excel_sections(df, TITLES, base_df=df, targets=_targets(df)))
     assert list(sec.df.columns) == [
         "Campus", "2018-2019", "2021-2022",
-        "2022-2023", "2022-2023 Target",
-        "2023-2024", "2023-2024 Target",
-        "2024-2025", "2024-2025 Target",
-        "2025-2026", "2025-2026 Target",
+        "2022-2023", "2022-2023 Benchmark",
+        "2023-2024", "2023-2024 Benchmark",
+        "2024-2025", "2024-2025 Benchmark",
+        "2025-2026", "2025-2026 Benchmark",
         "5-Yr Percent Change",
     ]
     by = sec.df.set_index("Campus")
-    assert by.loc["Cypress", "2022-2023 Target"] == 70
-    assert by.loc["Cypress", "2023-2024 Target"] == pytest.approx(70 * f(1))
-    assert by.loc["NOCCCD (Unduplicated)", "2024-2025 Target"] == pytest.approx(100 * f(2))
-    # Every Target column is formatted as a whole number.
+    assert by.loc["Cypress", "2022-2023 Benchmark"] == 70
+    assert by.loc["Cypress", "2023-2024 Benchmark"] == pytest.approx(70 * f(1))
+    assert by.loc["NOCCCD (Unduplicated)", "2024-2025 Benchmark"] == pytest.approx(100 * f(2))
+    # Every Benchmark column is formatted as a whole number.
     for y in YEARS[2:]:
-        assert f"{y} Target" in sec.integer_cols
+        assert f"{y} Benchmark" in sec.integer_cols
 
 
 def test_units_campus_table_interleaves_targets_with_decimals():
@@ -97,11 +97,11 @@ def test_units_campus_table_interleaves_targets_with_decimals():
     sec = next(s for s in sections if s.title == bot_goal3_units._TITLES["headcount_title"])
     cols = list(sec.df.columns)
     for y in YEARS[2:]:
-        assert cols[cols.index(y) + 1] == f"{y} Target"
-        assert f"{y} Target" in sec.decimal_cols
-    assert "2021-2022 Target" not in cols
+        assert cols[cols.index(y) + 1] == f"{y} Benchmark"
+        assert f"{y} Benchmark" in sec.decimal_cols
+    assert "2021-2022 Benchmark" not in cols
     base = (70 * 80 + 30 * 90) / 100
-    by = dict(zip(sec.df["Campus"], sec.df["2023-2024 Target"]))
+    by = dict(zip(sec.df["Campus"], sec.df["2023-2024 Benchmark"]))
     assert by["NOCCCD (Unduplicated)"] == pytest.approx(base - (base - 60) * 0.2 / 7)
 
 
@@ -136,7 +136,7 @@ def test_chart_with_ticks_adds_tick_and_label_traces():
     tgt = campus_target_rows(aggregate_headcount(_targets(df).frame),
                              value_col="headcount", rule=GROWTH)
     fig = build_headcount_chart(agg, df_tgt=tgt)
-    ticks = [t for t in _traces(fig) if t.get("name") == "Target"]
+    ticks = [t for t in _traces(fig) if t.get("name") == "Benchmark"]
     assert len(ticks) == 3                       # one per campus
     assert sum(bool(t.get("showlegend")) for t in ticks) == 1
     cyp = next(t for t in ticks if t["offsetgroup"] == "Cypress")
@@ -160,7 +160,7 @@ def test_actual_label_lifts_above_a_missed_target():
     traces = _traces(build_headcount_chart(agg, df_tgt=tgt))
     # Bars no longer draw their own labels; a text trace per campus does.
     assert all(t["textposition"] == "none" for t in traces
-               if t["type"] == "bar" and t.get("name") != "Target")
+               if t["type"] == "bar" and t.get("name") != "Benchmark")
     labels = next(t for t in traces if t["type"] == "scatter"
                   and t["offsetgroup"] == "Cypress" and next(iter(t["text"])) == "70")
     years, ys = list(labels["x"]), list(labels["y"])
@@ -214,7 +214,7 @@ def test_no_tick_where_the_campus_has_no_bar():
                              value_col="headcount", rule=GROWTH)
     ticks = [t for t in _traces(build_headcount_chart(aggregate_headcount(shown),
                                                       df_tgt=tgt))
-             if t.get("name") == "Target" and t["offsetgroup"] == "Fullerton"]
+             if t.get("name") == "Benchmark" and t["offsetgroup"] == "Fullerton"]
     assert len(ticks) == 1
     years, heights = list(ticks[0]["x"]), list(ticks[0]["y"])
     assert heights[years.index("2024-2025")] is None        # no bar -> no tick
@@ -236,7 +236,7 @@ def test_pdf_labels_a_real_zero_but_not_missing_data():
 def test_overlay_labels_follow_their_legend_entry():
     # Clicking a legend entry hides every trace in its legendgroup. The actual
     # labels must hide with their campus's bars, and the target numbers with
-    # the Target ticks — otherwise hiding a series leaves its numbers floating.
+    # the Benchmark ticks — otherwise hiding a series leaves its numbers floating.
     df = _df()
     tgt = campus_target_rows(aggregate_headcount(_targets(df).frame),
                              value_col="headcount", rule=GROWTH)
@@ -248,6 +248,66 @@ def test_overlay_labels_follow_their_legend_entry():
         expected = "target" if is_target_label else t["offsetgroup"]
         assert t.get("legendgroup") == expected, t["offsetgroup"]
     bars = {t["name"]: t["legendgroup"] for t in traces
-            if t["type"] == "bar" and t["name"] != "Target"}
+            if t["type"] == "bar" and t["name"] != "Benchmark"}
     assert bars == {"Cypress": "Cypress", "Fullerton": "Fullerton",
                     "NOCCCD (Unduplicated)": "NOCCCD (Unduplicated)"}
+
+
+# ---------------------------------------------------------------------------
+# Manager revision (2026-09-28): the word is "Benchmark" — on the switch, and
+# as the last PDF legend entry (the ordering keys on the word itself).
+# ---------------------------------------------------------------------------
+
+def test_switch_label_says_benchmarks(monkeypatch):
+    from src.scripts.tabs import bot_helpers
+
+    seen = []
+    monkeypatch.setattr(bot_helpers.st, "toggle",
+                        lambda label, **kwargs: seen.append(label) or False)
+    bot_helpers.render_campus_target_toggle("bg2a")
+    assert seen == ["Show campus benchmarks"]
+
+
+def _legend_texts(ax):
+    return [t.get_text() for t in ax.get_legend().get_texts()]
+
+
+def test_pdf_campus_legend_puts_benchmark_last():
+    import matplotlib.pyplot as plt
+
+    from src.scripts.tabs.bot_helpers import _mpl_headcount, compute_pct_change
+
+    df = _df()
+    agg = aggregate_headcount(df)
+    tgt = campus_target_rows(aggregate_headcount(_targets(df).frame),
+                             value_col="headcount", rule=GROWTH)
+    fig = plt.figure()
+    _mpl_headcount(fig, (0.1, 0.1, 0.8, 0.8), agg, compute_pct_change(agg), tgt)
+    assert _legend_texts(fig.axes[0]) == [
+        "Cypress", "Fullerton", "NOCCCD (Unduplicated)", "Benchmark",
+    ]
+    plt.close(fig)
+
+
+def test_units_pdf_campus_legend_puts_benchmark_last():
+    import matplotlib.pyplot as plt
+
+    df = _df()
+    agg = bot_goal3_units._aggregate_campus(df)
+    pct = bot_goal3_units._pct_change(agg, "camp_desc", bot_goal3_units.CAMPUS_ORDER)
+    tgt = bot_goal3_units._campus_targets(_targets(df, UNITS), True)
+    fig = plt.figure()
+    bot_goal3_units._mpl_campus(fig, (0.1, 0.1, 0.8, 0.8), agg, pct, tgt)
+    labels = _legend_texts(fig.axes[0])
+    assert labels[-1] == "Benchmark" and labels.count("Benchmark") == 1
+    plt.close(fig)
+
+
+def test_no_reader_facing_target_wording_in_the_campus_chart():
+    df = _df()
+    tgt = campus_target_rows(aggregate_headcount(_targets(df).frame),
+                             value_col="headcount", rule=GROWTH)
+    fig = build_headcount_chart(aggregate_headcount(df), df_tgt=tgt)
+    text = fig.to_json()
+    assert text is not None
+    assert "Target" not in text
