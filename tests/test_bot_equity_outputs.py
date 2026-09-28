@@ -15,6 +15,7 @@ from src.scripts.tabs.bot_equity import (
     GENDER_CATEGORY,
     PROGRESSING,
     RACE_CATEGORY,
+    equity_html,
 )
 from src.scripts.tabs.bot_excel_helpers import standard_bot_excel_sections
 from src.scripts.tabs.bot_helpers import equity_table, generate_bot_pdf
@@ -179,3 +180,41 @@ def test_equity_ignores_the_sidebar_year_selection():
     shown = df[df["academic_year"] == "2022-2023"]          # sidebar narrowed to one year
     pages = _pdf_pages(generate_bot_pdf(shown, TITLES, base_df=shown, targets=targets))
     assert "Equity Results, 2025-26" in pages[0].extract_text()
+
+
+# ---------------------------------------------------------------------------
+# Streamlit tab
+# ---------------------------------------------------------------------------
+
+
+def test_html_has_bands_status_cells_and_both_themes():
+    _, targets = _district_targets()
+    t = equity_table(targets, TITLES)
+    assert t is not None
+    html = equity_html(t)
+    for band in (RACE_CATEGORY, GENDER_CATEGORY, FIRSTGEN_CATEGORY):
+        assert f">{band}</td>" in html
+    # On Track: Latino/Hispanic, Female, First Gen. Progressing: Asian, Black, Male, Not First Gen.
+    assert html.count(">On Track</td>") == 3
+    assert html.count(">Progressing</td>") == 4
+    assert "2025-26<br>Benchmark" in html
+    assert ">-6</td>" in html                     # Asian: 50 - 56.43
+    assert "light-dark(#d6eaf8, #1d4f6e)" in html
+    assert "Target" not in html
+
+
+def test_tab_renders_heading_table_and_note(monkeypatch):
+    from src.scripts.tabs import bot_helpers
+
+    calls = []
+    monkeypatch.setattr(bot_helpers.st, "markdown",
+                        lambda body, **kwargs: calls.append(("markdown", body)))
+    monkeypatch.setattr(bot_helpers.st, "caption",
+                        lambda body, **kwargs: calls.append(("caption", body)))
+    _, targets = _district_targets()
+    t = equity_table(targets, TITLES)
+    assert t is not None
+    bot_helpers.render_equity_table(t)
+    assert calls[0] == ("markdown", "**Equity Results, 2025-26**")
+    assert calls[1][0] == "markdown" and calls[1][1].startswith("<table")
+    assert calls[2] == ("caption", t.note)

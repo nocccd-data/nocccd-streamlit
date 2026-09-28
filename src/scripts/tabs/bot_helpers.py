@@ -26,6 +26,7 @@ from src.scripts.tabs.bot_equity import (
     EquitySource,
     EquityTable,
     build_equity_table,
+    equity_html,
     mpl_equity_table,
 )
 from src.scripts.tabs.bot_targets import (
@@ -895,8 +896,16 @@ def _source_html(titles: dict) -> str:
     return f"<div style='text-align:left'><small>Source: {src}</small></div>"
 
 
-def render_target_section(titles: dict, targets: Targets) -> None:
-    """Chart 0: district Actual vs Benchmark, 2022-23 -> 2029-30.
+def render_equity_table(table: EquityTable) -> None:
+    st.markdown(f"**{table.heading}**")
+    st.markdown(equity_html(table), unsafe_allow_html=True)
+    st.caption(table.note)
+
+
+def render_target_section(titles: dict, targets: Targets,
+                          equity: EquityTable | None = None) -> None:
+    """Chart 0: district Actual vs Benchmark, 2022-23 -> 2029-30, and the
+    equity table under it when given.
 
     Always the full plan — it does not follow the Academic Years selection.
     """
@@ -911,6 +920,8 @@ def render_target_section(titles: dict, targets: Targets) -> None:
         width="stretch",
     )
     st.markdown(_source_html(titles), unsafe_allow_html=True)
+    if equity is not None:
+        render_equity_table(equity)
     st.divider()
 
 
@@ -1009,7 +1020,7 @@ def render_bot_charts(
     )
     org = titles["org"]
     if targets is not None:
-        render_target_section(titles, targets)
+        render_target_section(titles, targets, equity=equity_table(targets, titles))
 
     # --- Chart 1: Headcount by Campus ---
     show_campus_targets = (

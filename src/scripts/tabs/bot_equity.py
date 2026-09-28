@@ -243,3 +243,37 @@ def mpl_equity_table(fig, table: EquityTable, *, top: float, bottom: float) -> N
 
     table_bottom = ax_bottom + y * ax_h
     fig.text(0.06, table_bottom - 0.008, note, fontsize=6.5, color="#555555", va="top")
+
+
+_TH = "padding:6px 10px; border-bottom:2px solid #555; text-align:{align};"
+_TD = "padding:4px 10px; border-bottom:1px solid #888; text-align:{align};"
+
+
+def equity_html(table: EquityTable) -> str:
+    """The equity table as HTML for ``st.markdown``. Status fills use
+    ``light-dark()`` like the tab's other HTML tables, so both themes read."""
+    headers = table.headers()
+    out = ['<table style="border-collapse:collapse; font-size:13px;">', "<thead><tr>"]
+    for col in _SHOWN:
+        label = _two_line(headers[col]).replace("\n", "<br>")
+        out.append(f"<th style='{_TH.format(align=_ALIGN.get(col, 'right'))}'>{label}</th>")
+    out.append("</tr></thead><tbody>")
+    category = None
+    for row in table.rows.to_dict("records"):
+        if row["category"] != category:
+            category = row["category"]
+            out.append(
+                f"<tr><td colspan='{len(_SHOWN)}' style='background:{BAND_COLOR}; "
+                "color:#FFFFFF; font-weight:bold; text-align:center; padding:5px;'>"
+                f"{category}</td></tr>"
+            )
+        cells = []
+        for col, text in zip(_SHOWN, _cell_texts(row, table.decimals)):
+            style = _TD.format(align=_ALIGN.get(col, "right"))
+            if col == "status":
+                light, dark = STATUS_FILL[row["status"]]
+                style += f" background:light-dark({light}, {dark}); font-weight:bold;"
+            cells.append(f"<td style='{style}'>{text}</td>")
+        out.append("<tr>" + "".join(cells) + "</tr>")
+    out.append("</tbody></table>")
+    return "\n".join(out)
