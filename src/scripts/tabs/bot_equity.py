@@ -13,6 +13,7 @@ for the count tabs, ``bot_goal3_units`` for average units). No Streamlit /
 
 from __future__ import annotations
 
+import math
 import textwrap
 from dataclasses import dataclass
 
@@ -160,8 +161,16 @@ def equity_note(rule: dict) -> str:
     return text
 
 
+def _whole(value: float) -> int:
+    """Round a non-negative count/benchmark to the nearest whole number, ties
+    rounding HALF UP — Excel's ``#,##0`` (and the manager's workbook), not
+    Python's round-half-even: ``38.5`` -> ``39``, not ``38``. ``round(value, 9)``
+    first so float noise (e.g. ``219.00000000000003``) cannot move a tie."""
+    return math.floor(round(value, 9) + 0.5)
+
+
 def format_value(value: float, *, decimals: bool) -> str:
-    return f"{value:,.1f}" if decimals else f"{value:,.0f}"
+    return f"{value:,.1f}" if decimals else f"{_whole(value):,}"
 
 
 def format_variance(value: float, *, decimals: bool) -> str:
@@ -173,12 +182,26 @@ def format_variance(value: float, *, decimals: bool) -> str:
 
 
 def _cell_texts(row: dict, decimals: bool) -> list[str]:
+    """Cell text for one row, shared by the PDF and HTML renderers.
+
+    On count tabs (``decimals=False``) the printed Variance is the printed
+    Actual minus the printed Benchmark (both whole numbers, rounded half up),
+    so a benchmark landing exactly on ``.5`` can never make Actual, Benchmark
+    and Variance disagree on the page. Status is unaffected — it is computed
+    upstream from the true, unrounded variance. Units (``decimals=True``)
+    keeps the true variance rounded to 1 decimal.
+    """
+    if decimals:
+        variance_text = format_variance(row["variance"], decimals=True)
+    else:
+        printed_variance = int(row["actual"]) - _whole(row["benchmark"])
+        variance_text = format_variance(printed_variance, decimals=False)
     return [
         str(row["group"]),
         format_value(row["baseline"], decimals=decimals),
         format_value(row["benchmark"], decimals=decimals),
         format_value(row["actual"], decimals=decimals),
-        format_variance(row["variance"], decimals=decimals),
+        variance_text,
         str(row["status"]),
     ]
 

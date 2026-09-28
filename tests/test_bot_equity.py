@@ -15,6 +15,7 @@ from src.scripts.tabs.bot_equity import (
     PROGRESSING,
     RACE_CATEGORY,
     EquitySource,
+    _cell_texts,
     build_equity_table,
     equity_note,
     equity_year,
@@ -197,16 +198,80 @@ def test_display_formats():
     assert format_variance(0.04, decimals=True) == "0"
 
 
+def test_half_benchmark_variance_matches_printed_actual_minus_printed_benchmark():
+    # baseline 35, F3 -> benchmark exactly 39.5 -> prints "40" (round-half-up,
+    # like Excel's #,##0). Live case: ADT Black or African American, 35 -> 39.5.
+    def row_for(actual):
+        src = _counts({"g": {"2022-2023": 35, "2025-2026": actual}})
+        t = build_equity_table(_targets(), [src], min_count=10)
+        assert t is not None
+        return t.rows.to_dict("records")[0]
+
+    row41 = row_for(41)
+    assert row41["benchmark"] == pytest.approx(39.5)
+    texts41 = _cell_texts(row41, decimals=False)
+    assert texts41[2] == "40"      # benchmark
+    assert texts41[4] == "+1"      # variance: printed actual - printed benchmark
+    assert row41["status"] == ON_TRACK
+
+    row39 = row_for(39)
+    texts39 = _cell_texts(row39, decimals=False)
+    assert texts39[4] == "-1"
+    assert row39["status"] == PROGRESSING
+
+    row40 = row_for(40)
+    texts40 = _cell_texts(row40, decimals=False)
+    assert texts40[4] == "0"
+    assert row40["variance"] == pytest.approx(0.5)   # true variance, unrounded
+    assert row40["status"] == ON_TRACK               # Status uses the true variance
+
+
+def test_half_benchmark_tie_with_an_even_whole_part():
+    # baseline 25 in 2029-30 (k=7): 25 * 1.3 = 32.5 -> prints "33"; half-even
+    # would have printed "32" here, disagreeing with the half-up case above.
+    src = _counts({"g": {"2022-2023": 25, "2029-2030": 33}})
+    t = build_equity_table(_targets(["2022-2023", "2029-2030"]), [src], min_count=10)
+    assert t is not None
+    row = t.rows.to_dict("records")[0]
+    assert row["benchmark"] == pytest.approx(32.5)
+    texts = _cell_texts(row, decimals=False)
+    assert texts[2] == "33"
+    assert texts[4] == "0"
+    assert row["status"] == ON_TRACK
+
+
+def test_half_benchmark_spec_example_still_holds_below_the_floor():
+    # spec's AA American Indian example: baseline 3, actual 3, benchmark
+    # 3 * F3 = 3.39 -> Variance "0", Progressing. Below CATEGORY_MIN_COUNT,
+    # so assert with min_count=1.
+    src = _counts({"g": {"2022-2023": 3, "2025-2026": 3}})
+    t = build_equity_table(_targets(), [src], min_count=1)
+    assert t is not None
+    row = t.rows.to_dict("records")[0]
+    assert row["benchmark"] == pytest.approx(3 * F3)
+    texts = _cell_texts(row, decimals=False)
+    assert texts[4] == "0"
+    assert row["status"] == PROGRESSING
+
+
 def test_tallest_table_fits_above_the_footer():
+    import typing
+
     import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.patches import Rectangle
 
     from src.scripts.tabs.bot_equity import mpl_equity_table
 
     def every_group(keys, category):
-        return _counts({k: {"2022-2023": 40, "2025-2026": 50} for k in keys}, category=category)
+        # UNITS rule so the note wraps to two lines (the tallest note, as well
+        # as the tallest table), and _averages is Units-shaped.
+        return _averages(
+            {k: {"2022-2023": (40, 90.0), "2025-2026": (40, 80.0)} for k in keys},
+            category=category,
+        )
 
-    t = build_equity_table(_targets(), [
+    t = build_equity_table(_targets(rule=UNITS), [
         every_group([f"race{i}" for i in range(9)], RACE_CATEGORY),
         every_group([f"gender{i}" for i in range(4)], GENDER_CATEGORY),
         every_group([f"fg{i}" for i in range(3)], FIRSTGEN_CATEGORY),
@@ -224,6 +289,13 @@ def test_tallest_table_fits_above_the_footer():
         assert len(bands) == 3
         heading, note = fig.texts[0], fig.texts[-1]
         assert heading.get_text() == "Equity Results, 2025-26"
-        assert note.get_position()[1] > 0.045       # the note clears the footer area
+        assert note.get_text().count("\n") == 1      # the two-line Units note
+        # The note's anchor is its TOP edge (va="top"); check the rendered
+        # extent's bottom edge, not the anchor, so a note running into the
+        # footer would actually fail this.
+        fig.canvas.draw()
+        canvas = typing.cast(FigureCanvasAgg, fig.canvas)
+        renderer = canvas.get_renderer()
+        assert note.get_window_extent(renderer).y0 / fig.bbox.height > 0.045
     finally:
         plt.close(fig)

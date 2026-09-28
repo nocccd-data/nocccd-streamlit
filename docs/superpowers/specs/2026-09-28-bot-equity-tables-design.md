@@ -96,6 +96,9 @@ in two visible ways, both deliberate:
 - **Display:** counts as whole numbers, Units to 1 decimal, Variance signed (`+70`, `−49`,
   `−0.1`). A Variance that rounds to 0 shows `0` with the status of its true sign (e.g. actual
   3 vs benchmark 3.39 → `0`, Progressing — AA American Indian, which the floor hides today).
+  (Amended 2026-09-28 after the final review: on count tabs the printed Variance is the printed
+  Actual minus the printed Benchmark, whole numbers rounded half up like Excel, so a .5
+  benchmark cannot make a row not add up; Units unchanged.)
 - **Note under the table**, generated from the rule like the chart caption:
   "Benchmark: 30% increase over the 2022-23 baseline by 2029-30, in equal annual steps.
   Variance = Actual − Benchmark." Units adds "On Track = at or below the benchmark."
