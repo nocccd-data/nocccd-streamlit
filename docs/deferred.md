@@ -183,7 +183,9 @@ emits years 2022-23 through 2029-30). The other paths still add a Benchmark colu
 `bot_excel_helpers.py::_rate_detail`, and the race/gender/first-gen `value_summary` calls in
 `bot_goal3_units.py::units_excel_sections`. So from the first run whose display year is past
 2029-30 (the 2031 run), those tables carry a Benchmark column of blank cells — a fix must cover all
-of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`).
+of them (or gate once where `target_of` is built, `bot_excel_helpers.py::_target_fn`). The equity
+table does not have this problem: `bot_equity.py::equity_year` caps the year at the plan end, so
+from the 2031 run it keeps showing 2029-30, the plan's final result.
 Separately, `config.py::extract_values` (via `config.py::target_acyrs`) keeps pulling
 acyr 2022-2029 indefinitely — harmless on its own (the baseline never changes), but it means
 nothing in the extract step signals that the plan has ended either.
@@ -203,7 +205,9 @@ section and a note on `bot_helpers.py::add_target_page`'s PDF page. Low likeliho
 extract itself to have dropped 2022-23 data for a group. The same silent result follows if
 `data_provider.py::fetch_bot_target_frame` returns an empty frame: each tab guards its main `df`
 with `df.empty` but stores the target frame unchecked, so the same warning should cover an
-empty target frame.
+empty target frame. The Equity table (`bot_equity.py::build_equity_table`) reads the same
+target frame, so it too disappears silently in this case — no table, no warning, no
+explanation on the tab or the PDF — and the fix above should cover it as well.
 
 **3. Each target tab downloads its own Hyper file twice per Streamlit session.**
 `data_provider.py::fetch_bot_target_frame` and the tab's own fetch function (e.g.
@@ -215,3 +219,7 @@ snapshots of the same dataset within one page render. **Fix:** derive both the d
 and the target frame from a single download — e.g. have the tab's fetch download once and
 derive the target rows from it, rather than calling `data_provider.py::fetch_bot_target_frame`
 separately.
+Since the Equity table shipped, this also has a visible angle, not just a consistency one: the
+tab now shows the target frame's `{year} Actual` count (the Equity table's Actual column)
+directly above the display frame's `{year}` count (Summary Counts) on the same page. A publish
+landing between the two downloads would make those two numbers visibly disagree on screen.

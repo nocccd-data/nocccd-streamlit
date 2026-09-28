@@ -19,6 +19,16 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle
 
 from src.pipeline.config import BOT_WINDOW_YEARS, DATASETS
+from src.scripts.tabs.bot_equity import (
+    FIRSTGEN_CATEGORY,
+    GENDER_CATEGORY,
+    RACE_CATEGORY,
+    EquitySource,
+    EquityTable,
+    build_equity_table,
+    equity_html,
+    mpl_equity_table,
+)
 from src.scripts.tabs.bot_targets import (
     BENCHMARK,
     Targets,
@@ -886,8 +896,16 @@ def _source_html(titles: dict) -> str:
     return f"<div style='text-align:left'><small>Source: {src}</small></div>"
 
 
-def render_target_section(titles: dict, targets: Targets) -> None:
-    """Chart 0: district Actual vs Benchmark, 2022-23 -> 2029-30.
+def render_equity_table(table: EquityTable) -> None:
+    st.markdown(f"**{table.heading}**")
+    st.markdown(equity_html(table), unsafe_allow_html=True)
+    st.caption(table.note)
+
+
+def render_target_section(titles: dict, targets: Targets,
+                          equity: EquityTable | None = None) -> None:
+    """Chart 0: district Actual vs Benchmark, 2022-23 -> 2029-30, and the
+    equity table under it when given.
 
     Always the full plan — it does not follow the Academic Years selection.
     """
@@ -902,6 +920,8 @@ def render_target_section(titles: dict, targets: Targets) -> None:
         width="stretch",
     )
     st.markdown(_source_html(titles), unsafe_allow_html=True)
+    if equity is not None:
+        render_equity_table(equity)
     st.divider()
 
 
@@ -915,6 +935,31 @@ def headcount_campus_targets(targets: Targets | None, titles: dict,
         targets.frame, include_nocccd=titles.get("include_nocccd", True),
     )
     return campus_target_rows(agg_plan, value_col="headcount", rule=targets.rule)
+
+
+def equity_table(targets: Targets | None, titles: dict) -> EquityTable | None:
+    """The tab's equity table (count tabs), or None without targets or on a
+    headcount-only tab (Bachelor's has no race/gender/first-gen breakdown).
+
+    Built from the plan frame, so it ignores the sidebar year selection.
+    """
+    if targets is None or titles.get("headcount_only"):
+        return None
+    frame = targets.frame
+    credit_only = titles.get("credit_only_firstgen", True)
+    sources = [
+        EquitySource(category=RACE_CATEGORY, agg=aggregate_race(frame),
+                     key_col="race_description", value_col="count",
+                     order=RACE_ORDER, labels=RACE_SHORT),
+        EquitySource(category=GENDER_CATEGORY, agg=aggregate_gender(frame),
+                     key_col="gender", value_col="count",
+                     order=GENDER_ORDER, labels=GENDER_LABELS),
+        EquitySource(category=FIRSTGEN_CATEGORY,
+                     agg=aggregate_firstgen(frame, credit_only=credit_only),
+                     key_col="fg", value_col="count",
+                     order=FIRSTGEN_ORDER, labels=FIRSTGEN_LABELS),
+    ]
+    return build_equity_table(targets, sources, min_count=CATEGORY_MIN_COUNT)
 
 
 def _campus_toggle_key(prefix: str) -> str:
@@ -975,7 +1020,7 @@ def render_bot_charts(
     )
     org = titles["org"]
     if targets is not None:
-        render_target_section(titles, targets)
+        render_target_section(titles, targets, equity=equity_table(targets, titles))
 
     # --- Chart 1: Headcount by Campus ---
     show_campus_targets = (
@@ -1127,9 +1172,11 @@ def _draw_section_note(fig, y, note):
              fontsize=6, color="grey", va="top")
 
 
-def add_target_page(pdf, titles: dict, targets: Targets) -> None:
+def add_target_page(pdf, titles: dict, targets: Targets,
+                    equity: EquityTable | None = None) -> None:
     """PDF page 1 for target tabs. The existing pages follow unchanged.
 
+    *equity* (when given) fills the page's bottom half under the chart.
     The caller has already forced the light-theme rcParams.
     """
     fig = plt.figure(figsize=(8.5, 11.0))
@@ -1145,6 +1192,8 @@ def add_target_page(pdf, titles: dict, targets: Targets) -> None:
         district_actual_vs_target(targets), targets.rule,
     )
     _draw_section_source(fig, 0.54, titles.get("source", "Banner"))
+    if equity is not None:
+        mpl_equity_table(fig, equity, top=0.505, bottom=0.045)
     _add_pdf_footer(fig)
     pdf.savefig(fig)
     plt.close(fig)
@@ -1516,7 +1565,7 @@ def generate_bot_pdf(df, titles, base_df=None,
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         if targets is not None:
-            add_target_page(pdf, titles, targets)
+            add_target_page(pdf, titles, targets, equity=equity_table(targets, titles))
 
         # --- Page 1 ---
         fig = plt.figure(figsize=(PAGE_W, PAGE_H))
