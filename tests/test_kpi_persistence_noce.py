@@ -30,6 +30,7 @@ from src.scripts.tabs.kpi_persistence import (
     _build_campus_fig,
     _build_excel_sections,
     _build_overall,
+    _credit_exclusion_terms,
     _generate_excel,
     _generate_pdf,
     _load_noce_extract,
@@ -94,11 +95,22 @@ MV_2022 = pd.DataFrame({
     "next_fall_headcount_excl_credit": [4031],
 })
 
-# The Fall 2025 cohort's next fall (202615) is still running on TODAY.
+# Banner's end dates (stvterm, 2026-09-30). NOCE and credit terms of the same
+# season end on different days; the credit ones are what the exclusion reads.
+# The Fall 2025 cohort's next fall (202615 / 202610) is still running on TODAY.
 CALENDAR = pd.DataFrame({
-    "stvterm_code": ["202435", "202535", "202515", "202615"],
-    "stvterm_end_date": pd.to_datetime(
-        ["2025-05-22", "2026-05-21", "2025-12-18", "2026-12-17"]),
+    "stvterm_code": ["202435", "202420", "202515", "202510",
+                     "202535", "202520", "202615", "202610"],
+    "stvterm_end_date": pd.to_datetime([
+        "2025-05-23",   # NOCE Spring 2025
+        "2025-05-31",   # credit Spring 2025
+        "2025-12-19",   # NOCE Fall 2025
+        "2025-12-13",   # credit Fall 2025
+        "2026-05-21",   # NOCE Spring 2026
+        "2026-05-30",   # credit Spring 2026
+        "2026-12-17",   # NOCE Fall 2026
+        "2026-12-12",   # credit Fall 2026
+    ]),
 })
 
 
@@ -479,3 +491,68 @@ def test_difference_ignores_a_main_extract_from_another_refresh():
 
 def test_difference_note_says_where_noce_comes_from():
     assert "same extract" in kp._NOCE_DIFF_NOTE
+
+
+# ---------------------------------------------------------------------------
+# Provisional: the excluded series also waits on the credit terms it reads
+# ---------------------------------------------------------------------------
+
+# Between NOCE Spring 2026's end (May 21) and credit Spring 2026's (May 30).
+MAY_25 = pd.Timestamp("2026-05-25")
+
+
+def _flag(view: pd.DataFrame, campus: str, term_short: str) -> bool:
+    rows = view[(view["campus"] == campus) & (view["term_short"] == term_short)]
+    assert len(rows) == 1, rows
+    return bool(rows.iloc[0]["is_provisional"])
+
+
+def test_credit_exclusion_terms_follow_the_mv():
+    # The MV: credit spring = credit fall + 10, credit next fall = + 100.
+    # Fall 2025 (mis 257, credit fall 202510) -> 202520, 202610.
+    assert _credit_exclusion_terms(257, SPRING) == ["202520"]
+    assert _credit_exclusion_terms(257, NEXT_FALL) == ["202520", "202610"]
+
+
+def test_excl_point_stays_provisional_until_the_credit_spring_ends():
+    """On May 25 NOCE's spring is over but the credit spring is not.
+
+    A late credit registration could still move a student out of the Fall
+    2025 cohort, so the excluded point is still partial; plain NOCE is final.
+    """
+    types, overall = _combined()
+    _, view = _views_for_mode(types, overall, SPRING, CALENDAR, MAY_25)
+    assert not _flag(view, "NOCE", "Fall 2025")
+    assert _flag(view, NOCE_EXCL_CREDIT, "Fall 2025")
+    assert not _flag(view, NOCE_EXCL_CREDIT, "Fall 2024")
+
+    _, view = _views_for_mode(
+        types, overall, SPRING, CALENDAR, pd.Timestamp("2026-05-31"))
+    assert not _flag(view, NOCE_EXCL_CREDIT, "Fall 2025")
+
+
+def test_next_fall_excl_point_waits_for_every_term_it_reads():
+    types, overall = _combined()
+    # Credit Fall 2026 ends Dec 12, NOCE Fall 2026 Dec 17: NOCE decides.
+    _, view = _views_for_mode(
+        types, overall, NEXT_FALL, CALENDAR, pd.Timestamp("2026-12-15"))
+    assert _flag(view, NOCE_EXCL_CREDIT, "Fall 2025")
+    _, view = _views_for_mode(
+        types, overall, NEXT_FALL, CALENDAR, pd.Timestamp("2026-12-18"))
+    assert not _flag(view, NOCE_EXCL_CREDIT, "Fall 2025")
+
+
+def test_missing_credit_term_keeps_the_excl_point_provisional():
+    no_credit_spring = CALENDAR[CALENDAR["stvterm_code"] != "202520"]
+    types, overall = _combined()
+    _, view = _views_for_mode(
+        types, overall, SPRING, no_credit_spring, pd.Timestamp("2026-09-30"))
+    assert _flag(view, NOCE_EXCL_CREDIT, "Fall 2025")
+    assert not _flag(view, "NOCE", "Fall 2025")
+
+
+def test_difference_row_is_provisional_while_the_credit_spring_runs():
+    table = _noce_diff_for_mode(_prepare_noce_pair(MV_ROWS), SPRING, CALENDAR, MAY_25)
+    assert table is not None
+    assert _row(table, "Fall 2025")["is_provisional"]
+    assert not _row(table, "Fall 2024")["is_provisional"]

@@ -320,6 +320,16 @@ def _attach_completeness(
     be surfaced instead of passing as a silent caveat. This is not theoretical:
     Banner may define a credit term before its NOCE counterpart.
     """
+    end_by_code = _end_dates(calendar)
+    out = df.copy()
+    end = out[term_code_col].astype(str).str.strip().map(end_by_code)
+    out["has_calendar"] = end.notna()
+    out["is_provisional"] = ~(end < today)
+    return out
+
+
+def _end_dates(calendar: pd.DataFrame) -> pd.Series:
+    """``stvterm_code`` -> end date, the lookup every completeness check uses."""
     cal = calendar[["stvterm_code", "stvterm_end_date"]].copy()
     cal["stvterm_code"] = cal["stvterm_code"].astype(str).str.strip()
     if not cal["stvterm_code"].is_unique:
@@ -333,15 +343,63 @@ def _attach_completeness(
     # range and would otherwise raise OutOfBoundsDatetime for the whole lookup.
     # Coercing it to NaT is also semantically right — an end date we cannot
     # represent is certainly not in the past, so it lands on provisional.
-    end_by_code = pd.to_datetime(
+    return pd.to_datetime(
         cal.set_index("stvterm_code")["stvterm_end_date"], errors="coerce"
     )
 
+
+def _attach_credit_completeness(
+    df: pd.DataFrame,
+    calendar: pd.DataFrame,
+    persistence_type: str,
+    today: pd.Timestamp,
+) -> pd.DataFrame:
+    """Keep an excluded-series point provisional until its credit terms end.
+
+    Its exclusion reads credit enrollment, and credit terms end on their own
+    dates: NOCE Spring 2026 ended May 21, credit Spring 2026 May 30. In
+    between, the NOCE-only flag called Fall 2025 → Spring 2026 final while a
+    late credit registration could still move a student out of that cohort.
+
+    Only rows of `NOCE_EXCL_CREDIT` change, and only toward provisional. A
+    credit term missing from the calendar has not verifiably ended, so it
+    also counts as provisional; the NOCE term's own gap handling
+    (``has_calendar``, "unverified") is left as `_attach_completeness` set it.
+    """
+    mask = df["campus"] == NOCE_EXCL_CREDIT
+    if not mask.any():
+        return df
+    end_by_code = _end_dates(calendar)
+    terms = df.loc[mask, "term_sort"]
+    running = pd.Series(
+        [
+            any(
+                not (end_by_code.get(code, pd.NaT) < today)
+                for code in _credit_exclusion_terms(term, persistence_type)
+            )
+            for term in terms
+        ],
+        index=terms.index,
+        dtype=bool,
+    )
     out = df.copy()
-    end = out[term_code_col].astype(str).str.strip().map(end_by_code)
-    out["has_calendar"] = end.notna()
-    out["is_provisional"] = ~(end < today)
+    out.loc[mask, "is_provisional"] = out.loc[mask, "is_provisional"] | running
     return out
+
+
+def _credit_exclusion_terms(term_sort: int, persistence_type: str) -> list[str]:
+    """Credit terms whose enrollment decides who the excluded series drops.
+
+    Mirrors the MV's ``credit_spring_term`` / ``credit_next_fall_term``: the
+    cohort's credit fall + 10 and + 100. Fall 2025 (mis 257, credit fall
+    202510) -> 202520 for Fall → Spring, plus 202610 for Fall → Next Fall,
+    which excludes credit enrollment in either term.
+    """
+    credit_fall = (2000 + int(term_sort) // 10) * 100 + 10
+    spring = str(credit_fall + 10)
+    if persistence_type == "Fall → Spring":
+        return [spring]
+    return [spring, str(credit_fall + 100)]
 
 
 # Banner term dates are California academic-calendar dates, but the app runs on
@@ -397,6 +455,9 @@ def _views_for_mode(
     if calendar is not None and not overall.empty:
         overall = _attach_completeness(
             overall, calendar, opts["term_code_col"], today,
+        )
+        overall = _attach_credit_completeness(
+            overall, calendar, persistence_type, today,
         )
     return types, overall
 
