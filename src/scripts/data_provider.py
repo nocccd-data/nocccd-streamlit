@@ -161,6 +161,11 @@ def fetch_kpi_persistence(terms: tuple[str, ...]) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600, show_spinner="Loading data...")
+def fetch_kpi_persistence_noce(terms: tuple[str, ...]) -> pd.DataFrame:
+    return _download_and_read("kpi_persistence_noce", "mis_term_id", terms)
+
+
+@st.cache_data(ttl=600, show_spinner="Loading data...")
 def fetch_term_calendar() -> pd.DataFrame:
     """Banner term start/end dates, whole. Join on ``stvterm_code`` only."""
     return _download_and_read("term_calendar")

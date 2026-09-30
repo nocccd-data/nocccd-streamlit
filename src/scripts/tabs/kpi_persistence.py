@@ -1,4 +1,6 @@
 import io
+import textwrap
+from decimal import ROUND_HALF_UP, Decimal
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -8,10 +10,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter
+from matplotlib.transforms import Bbox
 
 from src.pipeline.config import DATASETS
-from src.scripts.data_provider import fetch_kpi_persistence, fetch_term_calendar
+from src.scripts.data_provider import (
+    fetch_kpi_persistence,
+    fetch_kpi_persistence_noce,
+    fetch_term_calendar,
+)
 from src.scripts.pdf_cache import (
     cached_excel_bytes,
     cached_pdf_bytes,
@@ -30,6 +38,16 @@ _CFG = DATASETS["kpi_persistence"]
 _DEFAULT_TERMS = _CFG[_CFG["param_name"]]
 
 CAMP_MAP = {"1": "Cypress", "2": "Fullerton", "3": "NOCE"}
+
+# The NOCE cohort again, without students who enroll at Cypress or Fullerton in
+# the follow-up term (`dwh.mv_noce_persistence_excl_credit`). It gets its own
+# chart right after NOCE and is carried through every step as one more campus.
+NOCE_EXCL_CREDIT = "NOCE (excl. Credit Students)"
+CAMPUSES = (*CAMP_MAP.values(), NOCE_EXCL_CREDIT)
+
+# The credit exclusion moves NOCE by -0.1 to +0.3 points (live, Fall 2020-2025),
+# so at whole percents the two NOCE charts would print identical labels.
+_ONE_DECIMAL_CAMPUSES = frozenset({CAMP_MAP["3"], NOCE_EXCL_CREDIT})
 
 # Display labels for student types, ordered as they should appear in legends.
 STYP_MAP = {
@@ -89,6 +107,24 @@ _REQUIRED_COLS = frozenset({
     *_TERM_CODE_COLS,
 })
 
+# The NOCE extract's credit-excluded counts, renamed onto the columns the rest
+# of the tab reads. Its unchanged-rule columns repeat the main extract's NOCE
+# rows; the charts ignore them and only the difference table reads them.
+_EXCL_CREDIT_COLS = {
+    "spring_p_count_excl_credit": "curr_fall_p_count",
+    "spring_headcount_excl_credit": "spring_total_headcount",
+    "next_fall_p_denominator_excl_credit": "next_fall_p_denominator",
+    "next_fall_headcount_excl_credit": "next_fall_total_headcount",
+}
+_NOCE_BASE_COLS = (
+    "mis_term_id",
+    "camp_code",
+    "styp_code",
+    *_TERM_CODE_COLS,
+    *_EXCL_CREDIT_COLS.values(),
+)
+_NOCE_EXCL_REQUIRED_COLS = frozenset({*_NOCE_BASE_COLS, *_EXCL_CREDIT_COLS})
+
 
 # ---------------------------------------------------------------------------
 # Data preparation
@@ -133,6 +169,63 @@ def _prepare_data(df: pd.DataFrame) -> pd.DataFrame:
         out["next_fall_total_headcount"] / next_fall_denom
     )
     return out.sort_values(["term_sort", "campus", "styp_label"])
+
+
+def _prepare_noce_excl_credit(df: pd.DataFrame) -> pd.DataFrame:
+    """The NOCE-excluding-credit extract, shaped like `_prepare_data` output.
+
+    Only the ``*_excl_credit`` counts are kept, under the standard names, so
+    the Overall line, incomplete cohorts, provisional flags, projections, the
+    PDF and the Excel all handle it as one more campus.
+    """
+    keep = [
+        "mis_term_id", "camp_code", "styp_code", *_TERM_CODE_COLS,
+        *_EXCL_CREDIT_COLS,
+    ]
+    out = _prepare_data(df[keep].rename(columns=_EXCL_CREDIT_COLS))
+    out["campus"] = NOCE_EXCL_CREDIT
+    return out
+
+
+def _prepare_noce_pair(df: pd.DataFrame) -> pd.DataFrame:
+    """Both NOCE series from the NOCE extract alone: its unchanged-rule
+    columns as ``NOCE`` and its credit-excluded ones as `NOCE_EXCL_CREDIT`.
+
+    The difference table reads this rather than the main extract's NOCE rows.
+    One refresh, so its Change is the credit exclusion and nothing else: on
+    2026-09-30 the main extract was a day behind and its Fall 2024 cohort one
+    student bigger, which printed -215 where the exclusion is -214.
+    """
+    return pd.concat(
+        [_prepare_data(df[list(_NOCE_BASE_COLS)]), _prepare_noce_excl_credit(df)],
+        ignore_index=True,
+    )
+
+
+def _load_noce_extract(
+    terms: tuple[str, ...],
+) -> tuple[pd.DataFrame | None, str | None]:
+    """``(pair, error)`` — never raises. ``pair`` is `_prepare_noce_pair`.
+
+    The extra chart and table must not take the Cypress, Fullerton and NOCE
+    charts down with them. An extract that was never published, predates a
+    column, or has no rows for the selection leaves those three as they are,
+    and the tab shows the reason where the new chart would be.
+    """
+    run = "`python -m src.pipeline.run kpi_persistence_noce`"
+    try:
+        df = fetch_kpi_persistence_noce(terms)
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
+        return None, f"{type(exc).__name__}: {exc}. Run {run}."
+    if df.empty:
+        return None, f"The extract has no rows for the selected terms. Run {run}."
+    missing = _NOCE_EXCL_REQUIRED_COLS.difference(df.columns)
+    if missing:
+        return None, (
+            f"The extract is missing `{'`, `'.join(sorted(missing))}`. Refresh "
+            f"`dwh.mv_noce_persistence_excl_credit`, then run {run}."
+        )
+    return _prepare_noce_pair(df), None
 
 
 def _build_overall(df: pd.DataFrame) -> pd.DataFrame:
@@ -527,6 +620,28 @@ def _hover_template(persistence_type: str) -> str:
     )
 
 
+def _rate_label(value: float, campus: str) -> str:
+    """Point label: one decimal on the two NOCE charts, whole elsewhere."""
+    return f"{value:.1%}" if campus in _ONE_DECIMAL_CAMPUSES else f"{value:.0%}"
+
+
+def _noce_excl_credit_note(persistence_type: str) -> str:
+    """What the NOCE-excluding-credit chart leaves out, for one mode.
+
+    Fall → Next Fall also drops spring credit enrollees: the MV widens that
+    exclusion the same way it widens the completer rule.
+    """
+    terms = (
+        "the following spring" if persistence_type == "Fall → Spring"
+        else "the following spring or the next fall"
+    )
+    return (
+        f"{NOCE_EXCL_CREDIT}: the same NOCE fall cohorts, without students "
+        f"enrolled at Cypress or Fullerton in {terms}. They are taken out of "
+        "both the cohort and the persisted count."
+    )
+
+
 def _is_dark_theme() -> bool:
     """True when Streamlit reports a dark theme.
 
@@ -622,7 +737,10 @@ def _build_campus_fig(
             name=OVERALL_LABEL,
             line={"color": overall_color, "width": 3, "dash": "dash"},
             marker={"symbol": "diamond", "size": 9, "color": overall_color},
-            text=[f"{v:.0%}" if pd.notna(v) else "" for v in dfo[rate_col]],
+            text=[
+                _rate_label(v, campus) if pd.notna(v) else ""
+                for v in dfo[rate_col]
+            ],
             textposition="top center",
             customdata=dfo[[opts["headcount_col"], opts["p_count_col"]]].to_numpy(),
             hovertemplate=hover,
@@ -667,7 +785,7 @@ def _build_campus_fig(
                 mode="lines+markers+text",
                 line={"dash": "dash", "color": "grey"},
                 marker={"symbol": "diamond", "size": 10},
-                text=["", f"{proj_row.iloc[0][rate_col]:.0%}"],
+                text=["", _rate_label(proj_row.iloc[0][rate_col], campus)],
                 textposition="top center",
                 showlegend=False,
                 hovertemplate="<b>%{x}</b><br>Projected: %{y:.1%}<extra></extra>",
@@ -681,6 +799,191 @@ def _build_campus_fig(
         tickangle=-45, tickmode="array", tickvals=tickvals, ticktext=ticktext,
     )
     return fig
+
+
+# ---------------------------------------------------------------------------
+# NOCE vs NOCE excluding credit: the difference table
+# ---------------------------------------------------------------------------
+
+_NOCE_DIFF_NOTE = (
+    "Change = Excl. − NOCE: the students the credit exclusion removes, and "
+    "what that does to the rate. The rate change is in percentage points, "
+    "taken from the rates as printed, so each row adds up. Both sides come "
+    "from the same extract, so the change is the exclusion alone; its NOCE "
+    "counts can differ from the NOCE chart by a student or two when the two "
+    "extracts were refreshed at different times."
+)
+
+
+def _noce_diff_heading(persistence_type: str) -> str:
+    return f"NOCE vs {NOCE_EXCL_CREDIT} — {persistence_type}"
+
+
+def _pct_shown(rate: float) -> Decimal:
+    """*rate* as the difference table prints it: percent to 2 decimals, ties
+    rounding half away from zero like Excel's ``0.00%`` (Python's format
+    rounds half to even). ``round(…, 9)`` first so float noise cannot move a
+    tie."""
+    return Decimal(str(round(rate * 100, 9))).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP,
+    )
+
+
+def _noce_diff_table(
+    df_overall: pd.DataFrame, persistence_type: str,
+) -> pd.DataFrame | None:
+    """NOCE against NOCE excl. credit, one row per cohort both series have.
+
+    Counts (``p_*`` the mode's P-Count, ``hc_*`` the persisted headcount) and
+    rates (``rate_*``) for each side, and each ``*_change`` = excl − NOCE.
+    ``rate_change`` is in points and is the *printed* difference, so a row
+    always adds up: Fall 2022 → Spring 2023 prints 65.80% and 65.91%, a
+    +0.11 change, where the true +0.104 would print +0.10.
+
+    Rows are whatever ``df_overall`` holds — the charts' view on screen and in
+    the PDF, every cohort (rates blanked) in Excel. None when either series is
+    missing, e.g. the second extract failed to load.
+    """
+    opts = RATE_OPTIONS[persistence_type]
+    source = {
+        "p": opts["p_count_col"],
+        "hc": opts["headcount_col"],
+        "rate": opts["rate_col"],
+    }
+    keys = ["term_sort", "term_short"]
+
+    def side(campus: str, suffix: str) -> pd.DataFrame:
+        rows = df_overall[df_overall["campus"] == campus]
+        return rows[keys + list(source.values())].rename(
+            columns={col: f"{name}_{suffix}" for name, col in source.items()}
+        )
+
+    table = side(CAMP_MAP["3"], "noce").merge(
+        side(NOCE_EXCL_CREDIT, "excl"), on=keys, how="inner",
+    )
+    if table.empty:
+        return None
+    table["p_change"] = table["p_excl"] - table["p_noce"]
+    table["hc_change"] = table["hc_excl"] - table["hc_noce"]
+    table["rate_change"] = [
+        float(_pct_shown(excl) - _pct_shown(noce))
+        if pd.notna(noce) and pd.notna(excl) else float("nan")
+        for noce, excl in zip(table["rate_noce"], table["rate_excl"])
+    ]
+
+    # Both series point at the same NOCE follow-up terms, so their flags
+    # agree; a cohort is flagged if either side is. No columns (the calendar
+    # did not load) means no flags, as on the charts.
+    both = df_overall[df_overall["campus"].isin([CAMP_MAP["3"], NOCE_EXCL_CREDIT])]
+    by_term = both.groupby("term_sort")
+    table["is_provisional"] = (
+        table["term_sort"].map(by_term["is_provisional"].any()).astype(bool)
+        if "is_provisional" in both.columns else False
+    )
+    table["has_calendar"] = (
+        table["term_sort"].map(by_term["has_calendar"].all()).astype(bool)
+        if "has_calendar" in both.columns else True
+    )
+    return table.sort_values("term_sort").reset_index(drop=True)
+
+
+def _noce_diff_for_mode(
+    noce_pair: pd.DataFrame,
+    persistence_type: str,
+    calendar: pd.DataFrame | None,
+    today: pd.Timestamp,
+) -> pd.DataFrame | None:
+    """The on-screen / PDF difference table: the charts' cohorts and flags,
+    applied to the NOCE extract's own pair (`_prepare_noce_pair`)."""
+    _, view = _views_for_mode(
+        noce_pair, _build_overall(noce_pair), persistence_type, calendar, today,
+    )
+    return _noce_diff_table(view, persistence_type)
+
+
+def _fmt_count(value) -> str:
+    return "—" if pd.isna(value) else f"{int(value):,}"
+
+
+def _fmt_pct(value) -> str:
+    return "—" if pd.isna(value) else f"{_pct_shown(value):.2f}%"
+
+
+def _fmt_change(value, decimals: int) -> str:
+    """Signed (``-214``, ``+0.24``); a change that prints as zero is ``0``."""
+    if pd.isna(value):
+        return "—"
+    if round(value, decimals) == 0:
+        return "0"
+    return f"{value:+,.{decimals}f}"
+
+
+def _noce_diff_cells(table: pd.DataFrame, persistence_type: str) -> list[list[str]]:
+    """Cell text per row, shared by the HTML table and the PDF page."""
+    rows = []
+    terms = table["term_sort"].astype(int).tolist()
+    for term, row in zip(terms, table.itertuples()):
+        cohort = _axis_tick(term, persistence_type, " ")
+        if row.is_provisional:
+            cohort += f" ({_flag_text(row)})"
+        rows.append([
+            cohort,
+            _fmt_count(row.p_noce), _fmt_count(row.p_excl),
+            _fmt_change(row.p_change, 0),
+            _fmt_count(row.hc_noce), _fmt_count(row.hc_excl),
+            _fmt_change(row.hc_change, 0),
+            _fmt_pct(row.rate_noce), _fmt_pct(row.rate_excl),
+            _fmt_change(row.rate_change, 2),
+        ])
+    return rows
+
+
+def _noce_diff_groups(persistence_type: str) -> list[str]:
+    """The three column groups: the mode's P-Count, persisted, rate."""
+    return [RATE_OPTIONS[persistence_type]["p_count_label"], "Persisted", "Rate"]
+
+
+_NOCE_DIFF_SUBHEADS = ("NOCE", "Excl.", "Change")
+
+_DIFF_TH = "padding:6px 10px; border-bottom:2px solid #555; text-align:{align};"
+_DIFF_TD = "padding:4px 10px; border-bottom:1px solid #888; text-align:{align};"
+# Each group's first column carries a rule so the three groups read apart.
+_DIFF_GROUP_EDGE = " border-left:1px solid #888;"
+
+
+def _noce_diff_html(table: pd.DataFrame, persistence_type: str) -> str:
+    """The difference table as HTML for ``st.markdown``: a grouped header
+    (P-Count / Persisted / Rate, each NOCE · Excl. · Change) that
+    ``st.dataframe`` cannot draw."""
+    out = [
+        '<table style="border-collapse:collapse; font-size:13px;">',
+        "<thead><tr>",
+        f"<th rowspan='2' style='{_DIFF_TH.format(align='left')}'>Fall Cohort</th>",
+    ]
+    for group in _noce_diff_groups(persistence_type):
+        style = _DIFF_TH.format(align="center").replace("2px", "1px")
+        out.append(
+            f"<th colspan='3' style='{style}{_DIFF_GROUP_EDGE}'>{group}</th>"
+        )
+    out.append("</tr><tr>")
+    for g in range(3):
+        for i, sub in enumerate(_NOCE_DIFF_SUBHEADS):
+            label = "Change (pts)" if g == 2 and sub == "Change" else sub
+            edge = _DIFF_GROUP_EDGE if i == 0 else ""
+            out.append(
+                f"<th style='{_DIFF_TH.format(align='right')}{edge}'>{label}</th>"
+            )
+    out.append("</tr></thead><tbody>")
+    for cells in _noce_diff_cells(table, persistence_type):
+        tds = [f"<td style='{_DIFF_TD.format(align='left')}'>{cells[0]}</td>"]
+        for i, text in enumerate(cells[1:]):
+            edge = _DIFF_GROUP_EDGE if i % 3 == 0 else ""
+            tds.append(
+                f"<td style='{_DIFF_TD.format(align='right')}{edge}'>{text}</td>"
+            )
+        out.append("<tr>" + "".join(tds) + "</tr>")
+    out.append("</tbody></table>")
+    return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -744,8 +1047,10 @@ def _blank_incomplete_rates(
 
 def _build_excel_sections(
     df_types: pd.DataFrame, df_overall: pd.DataFrame,
+    noce_pair: pd.DataFrame | None = None,
 ) -> list[ExcelSection]:
-    """Overall rates, then the same rates broken out by student type."""
+    """Overall rates, the same by student type, then NOCE vs NOCE excl.
+    credit per rate (from ``noce_pair``, when the NOCE extract loaded)."""
     overall = _blank_incomplete_rates(df_overall, df_overall).sort_values(
         ["campus", "term_sort"]
     ).rename(columns=_EXCEL_COLS)[
@@ -756,7 +1061,7 @@ def _build_excel_sections(
         ["campus", "term_sort", "styp_label"]
     ).rename(columns=_EXCEL_COLS)[_EXCEL_ORDER]
 
-    return [
+    sections = [
         ExcelSection(
             "Persistence Rates (All Students)",
             overall,
@@ -770,13 +1075,62 @@ def _build_excel_sections(
             integer_cols=_EXCEL_INTEGERS,
         ),
     ]
+    # Both rates, whatever the tab's radio says — like the sections above.
+    if noce_pair is not None:
+        pair_overall = _build_overall(noce_pair)
+        for persistence_type in RATE_OPTIONS:
+            diff = _noce_diff_excel_section(pair_overall, persistence_type)
+            if diff is not None:
+                sections.append(diff)
+    return sections
+
+
+def _noce_diff_excel_section(
+    df_overall: pd.DataFrame, persistence_type: str,
+) -> ExcelSection | None:
+    """The difference table for one rate, every cohort in the selection.
+
+    As in the sections above, a cohort with no follow-up yet keeps its counts
+    and leaves its rates blank. Rates are stored unrounded and shown to two
+    decimals; the rate change holds the printed difference, like the tab.
+    """
+    table = _noce_diff_table(
+        _blank_incomplete_rates(df_overall, df_overall), persistence_type,
+    )
+    if table is None:
+        return None
+    opts = RATE_OPTIONS[persistence_type]
+    names = {
+        "p": _EXCEL_COLS[opts["p_count_col"]],
+        "hc": _EXCEL_COLS[opts["headcount_col"]],
+        "rate": _EXCEL_COLS[opts["rate_col"]],
+    }
+    cols = {"term_short": "Fall Cohort"}
+    for key, name in names.items():
+        cols[f"{key}_noce"] = f"{name}: NOCE"
+        cols[f"{key}_excl"] = f"{name}: Excl. Credit"
+        cols[f"{key}_change"] = f"{name}: Change" + (" (pts)" if key == "rate" else "")
+    formats = {
+        cols["rate_noce"]: "0.00%",
+        cols["rate_excl"]: "0.00%",
+        cols["rate_change"]: "+0.00;-0.00;0",
+        cols["p_change"]: "+#,##0;-#,##0;0",
+        cols["hc_change"]: "+#,##0;-#,##0;0",
+    }
+    return ExcelSection(
+        f"NOCE vs {NOCE_EXCL_CREDIT}: {persistence_type}",
+        table.rename(columns=cols)[list(cols.values())],
+        integer_cols=tuple(cols[k] for k in ("p_noce", "p_excl", "hc_noce", "hc_excl")),
+        num_formats=formats,
+    )
 
 
 def _generate_excel(
     df_types: pd.DataFrame, df_overall: pd.DataFrame,
+    noce_pair: pd.DataFrame | None = None,
 ) -> bytes:
     return sections_to_excel_bytes(
-        _build_excel_sections(df_types, df_overall),
+        _build_excel_sections(df_types, df_overall, noce_pair),
         title="KPI - Persistence - Chart Table Data",
     )
 
@@ -786,8 +1140,8 @@ def _generate_excel(
 # ---------------------------------------------------------------------------
 
 # Lowest y the methodology page's body text may reach. Below this sit the
-# caveat block (~0.02) and, for Linear Regression, the R² table (~0.185 with
-# three campuses) — which must still clear the footer at 0.02.
+# caveat block (~0.02) and, for Linear Regression, the R² table (~0.21 with
+# four charts) — which must still clear the footer at 0.02.
 _METHOD_TEXT_FLOOR = 0.30
 
 _PDF_FOOTER_LEFT = "https://nocccd.streamlit.app/"
@@ -829,7 +1183,8 @@ def _mpl_line_chart(
     # labels would overlap into noise.
     for i, r in enumerate(rates):
         if pd.notna(r):
-            ax.annotate(f"{r:.0%}", (i, r), textcoords="offset points",
+            ax.annotate(_rate_label(r, campus), (i, r),
+                        textcoords="offset points",
                         xytext=(0, 10), ha="center", fontsize=8,
                         fontweight="bold")
 
@@ -862,7 +1217,7 @@ def _mpl_line_chart(
             linestyle="--", color="grey",
         )
         ax.annotate(
-            f"{proj_rate:.0%}", (len(terms), proj_rate),
+            _rate_label(proj_rate, campus), (len(terms), proj_rate),
             textcoords="offset points", xytext=(0, 10),
             ha="center", fontsize=8, color="grey",
         )
@@ -884,12 +1239,69 @@ def _mpl_line_chart(
     ax.grid(axis="y", alpha=0.3)
 
 
+def _noce_diff_page(
+    table: pd.DataFrame, persistence_type: str, page_w: float, page_h: float,
+):
+    """The difference table on its own page, cells shared with the tab.
+
+    ``ax.table`` has no merged cells, so the group labels (P-Count /
+    Persisted / Rate) are drawn above it, each over its three columns.
+    """
+    fig = plt.figure(figsize=(page_w, page_h))
+    fig.text(0.50, 0.97, "KPI - Persistence",
+             fontsize=16, fontweight="bold", ha="center")
+    fig.suptitle(_noce_diff_heading(persistence_type),
+                 fontsize=14, fontweight="bold", y=0.93)
+
+    cells = _noce_diff_cells(table, persistence_type)
+    headers = ["Fall Cohort"] + [
+        "Change\n(pts)" if g == 2 and sub == "Change" else sub
+        for g in range(3) for sub in _NOCE_DIFF_SUBHEADS
+    ]
+    widths = [0.28] + [0.72 / 9] * 9
+    left, width, top, row_h = 0.06, 0.88, 0.80, 0.045
+    height = row_h * (len(cells) + 1)
+    ax = fig.add_axes((left, top - height, width, height))
+    ax.axis("off")
+    tbl = ax.table(cellText=cells, colLabels=headers, colWidths=widths,
+                   cellLoc="right", bbox=Bbox.from_bounds(0, 0, 1, 1))
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    for (r, c), cell in tbl.get_celld().items():
+        cell.set_edgecolor("#888888")
+        if c == 0:
+            cell.get_text().set_horizontalalignment("left")
+            cell.PAD = 0.02
+        if r == 0:
+            cell.set_text_props(fontweight="bold")
+            cell.set_facecolor("#D9EAF7")
+
+    # Group labels over columns 1-3, 4-6, 7-9.
+    edges = np.cumsum([0.0, *widths])
+    for g, label in enumerate(_noce_diff_groups(persistence_type)):
+        x0 = left + width * edges[1 + 3 * g]
+        x1 = left + width * edges[4 + 3 * g]
+        fig.text((x0 + x1) / 2, top + 0.012, label, fontsize=9,
+                 fontweight="bold", ha="center", va="bottom")
+        fig.add_artist(Line2D([x0 + 0.004, x1 - 0.004], [top + 0.008] * 2,
+                              color="#555555", linewidth=0.8))
+
+    note_y = top - height - 0.04
+    for text in (_NOCE_DIFF_NOTE, _noce_excl_credit_note(persistence_type)):
+        fig.text(left, note_y, textwrap.fill(text, width=150),
+                 fontsize=8, color="grey", va="top")
+        note_y -= 0.045
+    _add_pdf_footer(fig)
+    return fig
+
+
 def _generate_pdf(
     df_types: pd.DataFrame,
     df_overall: pd.DataFrame,
     persistence_type: str,
     proj_overall: pd.DataFrame | None = None,
     proj_method: str | None = None,
+    noce_diff: pd.DataFrame | None = None,
 ) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
@@ -918,7 +1330,7 @@ def _generate_pdf(
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         # One page per campus: a line per student type plus Overall
-        for campus in CAMP_MAP.values():
+        for campus in CAMPUSES:
             dfc_overall = df_overall[df_overall["campus"] == campus]
             if dfc_overall.empty:
                 continue
@@ -958,7 +1370,20 @@ def _generate_pdf(
                     "projection."
                 )
                 fig.text(0.10, 0.06, note, fontsize=8, color="grey")
+            if campus == NOCE_EXCL_CREDIT:
+                # The page has no tab caption beside it, so it says itself
+                # who is left out. Wrapped: one line runs off the page.
+                fig.text(0.10, 0.112,
+                         textwrap.fill(_noce_excl_credit_note(persistence_type),
+                                       width=140),
+                         fontsize=8, color="grey", va="top")
             _add_pdf_footer(fig)
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        # NOCE vs NOCE excl. credit, after the two NOCE pages
+        if noce_diff is not None:
+            fig = _noce_diff_page(noce_diff, persistence_type, PAGE_W, PAGE_H)
             pdf.savefig(fig)
             plt.close(fig)
 
@@ -1043,7 +1468,7 @@ def _generate_pdf(
             if proj_method == "Linear Regression":
                 r_sq_data: list[tuple[str, str]] = []
                 if "_r_squared" in proj_overall.columns:
-                    for campus in CAMP_MAP.values():
+                    for campus in CAMPUSES:
                         row = proj_overall[proj_overall["campus"] == campus]
                         if not row.empty:
                             r_sq_data.append(
@@ -1113,8 +1538,9 @@ def render():
         if not selected_terms:
             st.warning("Select at least one term.")
             return
+        terms = tuple(sorted(selected_terms))
         fetch_kpi_persistence.clear()
-        df = fetch_kpi_persistence(tuple(sorted(selected_terms)))
+        df = fetch_kpi_persistence(terms)
         if df.empty:
             st.warning("No data returned for the selected terms.")
             return
@@ -1128,6 +1554,17 @@ def render():
             )
             return
         df_prepared = _prepare_data(df)
+        # Same Query, same terms: the NOCE-excluding-credit series joins the
+        # frame as a fourth campus, and the pair (both NOCE series from that
+        # one extract) feeds the difference table. If it fails, the other
+        # charts still show.
+        fetch_kpi_persistence_noce.clear()
+        noce_pair, excl_error = _load_noce_extract(terms)
+        if noce_pair is not None:
+            excl = noce_pair[noce_pair["campus"] == NOCE_EXCL_CREDIT]
+            df_prepared = pd.concat([df_prepared, excl], ignore_index=True)
+        st.session_state["pbs_noce_pair"] = noce_pair
+        st.session_state["pbs_noce_excl_error"] = excl_error
         st.session_state["pbs_df_types"] = df_prepared
         st.session_state["pbs_df_overall"] = _build_overall(df_prepared)
         clear_pdf_cache("pbs")
@@ -1136,6 +1573,7 @@ def render():
     # --- PDF download in sidebar (after query block) ---
     if "pbs_df_overall" in st.session_state:
         ptype_val = st.session_state.get("pbs_ptype", "Fall → Spring")
+        noce_pair = st.session_state.get("pbs_noce_pair")
 
         pdf_types, pdf_overall = _views_for_mode(
             st.session_state["pbs_df_types"],
@@ -1168,6 +1606,10 @@ def render():
                 ptype_val,
                 proj_overall=pdf_proj_overall,
                 proj_method=proj_method if show_projection else None,
+                noce_diff=(
+                    None if noce_pair is None else
+                    _noce_diff_for_mode(noce_pair, ptype_val, calendar, today)
+                ),
             ),
         )
         st.sidebar.download_button(
@@ -1183,6 +1625,7 @@ def render():
             lambda: _generate_excel(
                 st.session_state["pbs_df_types"],
                 st.session_state["pbs_df_overall"],
+                noce_pair,
             ),
         )
         st.sidebar.download_button(
@@ -1291,9 +1734,11 @@ def render():
     # --- Persistence by campus (all three) ---
     dark = _is_dark_theme()
     overall_color = _overall_line_color(dark)
-    for campus in CAMP_MAP.values():
+    for campus in CAMPUSES:
         if campus not in set(df_overall["campus"].unique()):
             continue
+        if campus == NOCE_EXCL_CREDIT:
+            st.caption(_noce_excl_credit_note(persistence_type))
         st.plotly_chart(
             _build_campus_fig(
                 df_types, df_overall, campus, persistence_type,
@@ -1301,6 +1746,25 @@ def render():
             ),
             width="stretch",
         )
+
+    excl_error = st.session_state.get("pbs_noce_excl_error")
+    if excl_error:
+        st.warning(
+            f"The {NOCE_EXCL_CREDIT} chart could not be loaded; the charts "
+            f"above are unaffected. ({excl_error})"
+        )
+
+    # --- NOCE vs NOCE excl. credit, same cohorts as the charts ---
+    noce_pair = st.session_state.get("pbs_noce_pair")
+    diff = (
+        None if noce_pair is None else
+        _noce_diff_for_mode(noce_pair, persistence_type, calendar, today)
+    )
+    if diff is not None:
+        st.markdown(f"**{_noce_diff_heading(persistence_type)}**")
+        st.markdown(_noce_diff_html(diff, persistence_type),
+                    unsafe_allow_html=True)
+        st.caption(_NOCE_DIFF_NOTE)
 
     # --- Projection methodology expander ---
     if show_projection and proj_method:
@@ -1352,7 +1816,7 @@ def render():
             if proj_method == "Linear Regression":
                 r_sq_rows: list[dict] = []
                 if proj_overall is not None and "_r_squared" in proj_overall.columns:
-                    for campus in CAMP_MAP.values():
+                    for campus in CAMPUSES:
                         row = proj_overall[proj_overall["campus"] == campus]
                         if not row.empty:
                             r_sq_rows.append({
