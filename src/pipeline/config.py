@@ -1,5 +1,11 @@
 from pathlib import Path
 
+# Fall cohorts for the KPI - Persistence tab. Shared by both of its extracts:
+# one Query sends the same selection to each. Must match the MVs' own floor
+# (`stvterm_mis_term_id >= '207'` in cte_params). A term the MV holds but this
+# list omits simply never reaches the app -- the extract SQL filters on it.
+_PERSISTENCE_TERMS = ["207", "217", "227", "237", "247", "257", "267"]
+
 DATASETS = {
     "fast_facts_emp": {
         "sql_file": "fast_facts_emp.sql",
@@ -67,12 +73,18 @@ DATASETS = {
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },
-    # Must match the MV's own floor (`stvterm_mis_term_id >= '207'` in
-    # cte_params). A term the MV holds but this list omits simply never
-    # reaches the app -- the extract SQL filters on it.
     "kpi_persistence": {
         "sql_file": "kpi_persistence.sql",
-        "mis_term_id": ["207", "217", "227", "237", "247", "257", "267"],
+        "mis_term_id": _PERSISTENCE_TERMS,
+        "param_name": "mis_term_id",
+        "db_section": "dwhdb",
+    },
+    # NOCE only, with students who enroll at Cypress/Fullerton in the
+    # follow-up term taken out of the cohort (the MV's *_excl_credit
+    # columns). Plotted below the NOCE chart on the same tab.
+    "kpi_persistence_noce": {
+        "sql_file": "kpi_persistence_noce.sql",
+        "mis_term_id": _PERSISTENCE_TERMS,
         "param_name": "mis_term_id",
         "db_section": "dwhdb",
     },

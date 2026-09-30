@@ -461,11 +461,11 @@ def test_methodology_page_text_always_clears_the_footer():
     advance, adding four lines to the Linear Regression text put the R2 table
     at y=0.000 — under the footer and off the page, with no error.
     """
-    from src.scripts.tabs.kpi_persistence import _METHOD_TEXT_FLOOR
+    from src.scripts.tabs.kpi_persistence import _METHOD_TEXT_FLOOR, CAMPUSES
 
     # Worst case below the body: caveat, then the R2 heading, header row and
-    # one row per campus. Mirrors the offsets in `_generate_pdf`.
-    below = 0.02 + 0.05 + 0.035 + 0.025 + 0.025 * 3
+    # one row per chart. Mirrors the offsets in `_generate_pdf`.
+    below = 0.02 + 0.05 + 0.035 + 0.025 + 0.025 * len(CAMPUSES)
     assert _METHOD_TEXT_FLOOR - below > 0.02, "R2 table would reach the footer"
 
     for n_lines in (10, 23, 40, 80):

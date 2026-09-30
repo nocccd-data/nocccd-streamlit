@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import io
 import re
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -55,6 +55,9 @@ class ExcelSection:
     percent_cols: tuple[str, ...] = ()
     integer_cols: tuple[str, ...] = ()
     decimal_cols: tuple[str, ...] = ()
+    # Column -> Excel number format, for the odd column the three fixed
+    # formats above do not cover (e.g. a rate to two decimals). Wins over them.
+    num_formats: Mapping[str, str] = field(default_factory=dict)
 
 
 # (group key, academic-year label) -> target; NaN where none is defined.
@@ -585,6 +588,7 @@ def _format_columns(
     percent_cols: tuple[str, ...] = (),
     integer_cols: tuple[str, ...] = (),
     decimal_cols: tuple[str, ...] = (),
+    num_formats: Mapping[str, str] | None = None,
 ) -> None:
     # Formats are applied per-cell within this section's data range, NOT via
     # set_column. Multiple sections on a single sheet share the same Excel
@@ -599,11 +603,17 @@ def _format_columns(
     percent_set = set(percent_cols)
     integer_set = set(integer_cols)
     decimal_set = set(decimal_cols)
+    custom = {
+        col: workbook.add_format({"num_format": fmt})
+        for col, fmt in (num_formats or {}).items()
+    }
     sample = df.head(500)
 
     col_formats: list = []
     for col in df.columns:
-        if col in percent_set:
+        if col in custom:
+            col_formats.append(custom[col])
+        elif col in percent_set:
             col_formats.append(percent_fmt)
         elif col in integer_set:
             col_formats.append(integer_fmt)
@@ -646,6 +656,7 @@ def _format_dataframe(
     percent_cols: tuple[str, ...] = (),
     integer_cols: tuple[str, ...] = (),
     decimal_cols: tuple[str, ...] = (),
+    num_formats: Mapping[str, str] | None = None,
 ) -> None:
     header_fmt = workbook.add_format({
         "bold": True,
@@ -666,6 +677,7 @@ def _format_dataframe(
         percent_cols=percent_cols,
         integer_cols=integer_cols,
         decimal_cols=decimal_cols,
+        num_formats=num_formats,
     )
 
     if df.empty or df.columns.empty:
@@ -740,6 +752,7 @@ def write_sections_sheet(
             percent_cols=section.percent_cols,
             integer_cols=section.integer_cols,
             decimal_cols=section.decimal_cols,
+            num_formats=section.num_formats,
         )
         row += len(df) + 3
 
