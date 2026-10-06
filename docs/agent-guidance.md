@@ -10,12 +10,15 @@ This file is loaded on demand from `AGENTS.md` or `CLAUDE.md`; it is not importe
 |------|--------------|
 | `docs/agent-guidance.md` (this file) | Architecture overview, commands, deployment, hard constraints |
 | `docs/workflow.md` | Cross-repo workflow (notebooks → streamlit), what gets ported from `nocccd-scff` / `nocccd-sql` |
-| `docs/pipeline.md` | `src/pipeline/`: dataset config, extract.py shapes, SQL parameterization, bind-variable + db_section gotchas |
-| `docs/tabs.md` | Tab system, adding-a-tab checklist, cascading filters, per-campus Seat Count layout, Persistence projections, Class Schedule Heatmap, admin auth, sidebar download patterns, PDF rendering rules |
+| `docs/pipeline.md` | `src/pipeline/`: dataset config, extract.py shapes, SQL parameterization, bind-variable + db_section gotchas, scheduled refresh & failure isolation |
+| `docs/windows-scheduling.md` | The daily refresh: Windows Task Scheduler (the current setup, live since 2026-08-01) |
+| `docs/macos-scheduling.md` | The retired macOS launchd job (fallback / historical) |
+| `docs/tabs.md` | Tab system, adding-a-tab checklist, cascading filters, per-campus Seat Count layout, KPI tabs (Persistence projections, NOCE excl. credit chart + difference table, Applied-to-Enrolled, Dual Enrollment), Class Schedule Heatmap, admin auth, sidebar download patterns, PDF rendering rules |
 | `docs/bot-tabs.md` | All BOT goal/metric tabs, base population rules, `_TITLES` flags, BOT PDF generator + paper coordinates, Excel helpers, BOT-specific gotchas |
-| `docs/exports.md` | Bulk exports: `seat_count_export.py`, `bot_export.py`, `bot_excel_export.py` |
+| `docs/exports.md` | Bulk exports: `seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`, `equity_export.py` (Equity Analysis PPG-1) |
 | `docs/mail.md` | Mass mailing system, REPORT_REGISTRY, CAMPAIGNS, sender, GitHub Actions workflow |
 | `docs/theme.md` | Theme system, light-dark CSS, Streamlit 1.55 gotchas, color palette + NOCCCD brand colors |
+| `docs/deferred.md` | Known issues deliberately left unfixed, and the decision each one is waiting on |
 
 ## What This Is
 
@@ -62,6 +65,9 @@ python -m src.pipeline.bot_export
 # BOT chart-table Excel export to OneDrive
 # (one workbook with one chart-data sheet per BOT metric tab)
 python -m src.pipeline.bot_excel_export
+
+# Equity Analysis (PPG-1) workbook to OneDrive (on demand; same output as the tab's download)
+python -m src.pipeline.equity_export
 ```
 
 Use `.venv/` unless told otherwise. Use `ruff` for Python linting.
@@ -91,7 +97,7 @@ Filter columns are part of the Hyper schema contract. `_download_and_read()`, `_
 
 ## Deployment
 
-Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger automatic redeploy. Tableau secrets are configured in the Streamlit Cloud dashboard. After Oracle data changes, re-run the pipeline (`python -m src.pipeline.run`) to refresh Hyper files on Tableau Cloud.
+Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger automatic redeploy. Tableau secrets are configured in the Streamlit Cloud dashboard. The daily refresh of the Hyper files on Tableau Cloud runs on a Windows box under Task Scheduler and pulls `main` itself before each run (non-fatal; a changed `requirements.txt` is flagged, not installed — see `docs/windows-scheduling.md`); to refresh sooner after Oracle data changes, run the pipeline by hand (`python -m src.pipeline.run [dataset]`).
 
 ## Key Constraints
 

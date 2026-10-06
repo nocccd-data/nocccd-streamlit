@@ -33,6 +33,7 @@ the gap — never renumber.
 | 2 | [The persistence PDF cache key does not track term-calendar republishes](#2-the-persistence-pdf-cache-key-does-not-track-term-calendar-republishes) | Bug | Low | XS | ready |
 | 6 | [The persistence x axis spaces terms evenly regardless of the gaps between them](#6-the-persistence-x-axis-spaces-terms-evenly-regardless-of-the-gaps-between-them) | Bug | Low | M | needs-decision (1) |
 | 7 | [Vision 2030 targets follow-ups](#7-vision-2030-targets-follow-ups) | Bug | Low | M | needs-decision (1) |
+| 8 | [The KPI - Persistence extracts are taken before their MVs refresh](#8-the-kpi---persistence-extracts-are-taken-before-their-mvs-refresh) | Bug | Low | XS | needs-decision (1) |
 
 ---
 
@@ -101,10 +102,10 @@ the on-screen chart for the same cohort.
 includes `today`, which covers a date rollover, but nothing identifying the `term_calendar`
 snapshot the footnote was rendered from. That extract refreshes on its own cadence — a 600 s
 `st.cache_data` TTL on `data_provider.py::fetch_term_calendar`, plus the scheduled daily
-pipeline publish (see [macos-scheduling.md](macos-scheduling.md), noon).
+pipeline publish (see [windows-scheduling.md](windows-scheduling.md)).
 
 **To observe:** download the PDF while a term is missing from the calendar (footnoted
-provisional), let the noon job republish with that term now present and already ended. The
+provisional), let the daily run republish with that term now present and already ended. The
 chart updates when the TTL expires; the cached PDF keeps the stale footnote until midnight.
 
 **Severity:** `Low` — it needs a same-day calendar change to bite, which happens at most once
@@ -223,3 +224,32 @@ Since the Equity table shipped, this also has a visible angle, not just a consis
 tab now shows the target frame's `{year} Actual` count (the Equity table's Actual column)
 directly above the display frame's `{year}` count (Summary Counts) on the same page. A publish
 landing between the two downloads would make those two numbers visibly disagree on screen.
+
+## 8. The KPI - Persistence extracts are taken before their MVs refresh
+
+**[Bug · Low · XS · needs-decision (1)]**
+
+Surfaced by the docs check of 2026-10-06, after PR #31 added the second persistence extract.
+
+The daily Windows run (`docs/windows-scheduling.md`) reaches `kpi_persistence` and
+`kpi_persistence_noce`, adjacent in `config.py::DATASETS`, early: both were published at ~08:37
+on 2026-09-30 and 10-06. Their MVs refresh in DWHDB at 09:00
+(`DWH.JOB_REFRESH_MV_PERSISTENCE_BY_STYP`, `DWH.JOB_REFRESH_MV_NOCE_PERSISTENCE_EXCL_CREDIT`,
+defined in `nocccd-sql/district/jobs/`). Both are complete, atomic `DBMS_MVIEW.REFRESH(…, 'C')`
+runs, so readers see the old rows until commit. In the week to 2026-10-06 the NOCE MV finished
+after ~35 min (~09:35) and `mv_persistence_by_styp` after ~1 h 40 min (~10:40). So the tab
+normally shows the previous day's MV. On its own that is a fixed one-day lag.
+
+The risk is the window between the two commits. A run that reaches the pair between ~09:35 and
+~10:40 takes the NOCE extract from today and the main one from yesterday. The NOCE (excl.
+Credit Students) chart then differs from the NOCE chart by a day of Banner changes. This
+happened once, through a manual publish, on 2026-09-30: the Fall 2024 cohort's P-Count was
+10,400 in one extract and 10,399 in the other. The difference table is immune, because
+`kpi_persistence.py::_prepare_noce_pair` reads both of its sides from the NOCE extract. The
+run currently gets there about an hour before the window opens; a slower REPT morning or a
+later trigger would close that gap.
+
+**Decision:** move both MV jobs ahead of the run (e.g. 06:00, in the job definitions in
+`nocccd-sql/district/jobs/`), so the tab shows the same day's MV and the window cannot be hit.
+The refresh only has to finish before the run reaches these datasets (~08:30). Or leave it and
+accept the one-day lag.

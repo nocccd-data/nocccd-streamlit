@@ -11,7 +11,11 @@ ETL flow that extracts Oracle data, writes local `.hyper` files, and publishes t
 
 ## Scheduled refresh & failure isolation
 
-The daily refresh is a **launchd agent** (`~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`), not cron and not AppleScript. It runs `python -m src.pipeline.run` with no arguments at 12:00, which selects every dataset whose config lacks `skip_refresh: True`. Runs normally take 143–197 min.
+The daily refresh runs on an always-on **Windows** box under Task Scheduler, live since 2026-08-01 (`docs/windows-scheduling.md`). Its wrapper first runs `git pull --ff-only`, so dataset and SQL changes merged to `main` reach the next run with no manual step (a failed pull is non-fatal: it logs `[git] WARNING` in the Windows log and the run uses the code already on disk; a changed `requirements.txt` is flagged, not installed — run that `pip install` on the box by hand), then `python -m src.pipeline.run` with no arguments, which selects every dataset whose config lacks `skip_refresh: True`. Runs took 143–197 min in July 2026 and longer since; the observed start and end times, and the headroom they leave under the 5 h watchdog below, are kept in one place: the Goal section of `docs/windows-scheduling.md`.
+
+The KPI - Persistence extracts are normally taken before their MVs' 09:00 refresh, so that tab shows the previous day's MV; the timing and the one window where its two extracts can come from different days are in `docs/deferred.md` #8.
+
+Before the cutover the refresh was a launchd agent on the author's Mac (`docs/macos-scheduling.md`), now retired; the July 2026 incidents below happened there.
 
 `run.py` has three guards, all added after a July 2026 post-mortem:
 
