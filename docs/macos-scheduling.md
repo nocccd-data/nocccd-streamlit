@@ -1,7 +1,13 @@
-# macOS launchd — daily pipeline refresh (reference)
+# macOS launchd — daily pipeline refresh (retired; reference)
 
-This documents the **current** macOS scheduling of `python -m src.pipeline.run`, so the
-setup is reproducible from git rather than living only on one laptop. Its Windows
+> **Status:** retired. The daily refresh moved to the Windows box on 2026-08-01 (see
+> `docs/windows-scheduling.md`). On the author's Mac this job stayed loaded and kept
+> firing daily until it was booted out and disabled on 2026-09-30 (Step 5): on all 60
+> days from 2026-08-02 to 09-30 it failed preflight and published nothing,
+> because its plist still pointed at a removed Instant Client directory.
+
+This documents the macOS scheduling of `python -m src.pipeline.run` as it ran before the
+cutover, so the setup stays reproducible from git as a fallback. Its Windows
 counterpart is `docs/windows-scheduling.md`; the two are kept parallel on purpose.
 
 > **Note:** despite being informally called "the AppleScript," there is no AppleScript
@@ -16,9 +22,8 @@ run queries Oracle, writes a local `.hyper` extract, and publishes it to Tableau
 ~28 datasets, **normally 143–197 minutes end to end.**
 
 This machine requires the **district VPN** to be connected for the Oracle DSNs to
-resolve — which is the reason the refresh is being moved to an always-on Windows box
-(see `docs/windows-scheduling.md`). Keep this doc current as the fallback / historical
-record even after the cutover.
+resolve — which is the reason the refresh moved to an always-on Windows box
+(see `docs/windows-scheduling.md`). This doc is kept as the fallback / historical record.
 
 ## Prerequisites this repo does NOT contain
 
@@ -161,12 +166,15 @@ Notes on the fields:
 
 Modern launchd (`bootstrap` into the per-user GUI domain):
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
 launchctl enable gui/$(id -u)/com.nocccd.pipeline.refresh
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
 ```
-(Legacy equivalent, still works: `launchctl load ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`.)
+`enable` first: launchd refuses to bootstrap a service that is disabled, which it is after
+Step 5. On a fresh install `enable` is a harmless no-op.
+(Legacy equivalent: `launchctl load -w ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist`. The `-w` clears a `disable`; a plain `load` leaves a disabled job off, with no error.)
 
-After editing the plist, reload by booting it out (Step 5) and bootstrapping again.
+After editing the plist, reload with `launchctl bootout` (the first command in Step 5)
+and bootstrapping again.
 
 ## Step 4 — verify / operate
 
@@ -180,7 +188,7 @@ launchctl kickstart -k gui/$(id -u)/com.nocccd.pipeline.refresh
 # Watch the log:
 tail -f ~/Library/Logs/nocccd-pipeline.log
 ```
-A healthy run ends with `Done. 28 succeeded, 0 failed, 0 skipped of 28.`
+A healthy run ended with `Done. 28 succeeded, 0 failed, 0 skipped of 28.` (28 datasets then; 30 as of 2026-10-06).
 
 If a run appears wedged (no log growth for a long time and a PID still shown by
 `launchctl list`), kill it so it stops blocking the schedule:
@@ -194,12 +202,16 @@ Turn this off once the Windows Task Scheduler job is confirmed, or **both machin
 publish to the same Tableau site every day**:
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
+launchctl disable gui/$(id -u)/com.nocccd.pipeline.refresh
 ```
-(Legacy: `launchctl unload ...`.) This stops it without deleting the plist, so it can be
-bootstrapped back later.
+**Both lines.** `bootout` (legacy: `launchctl unload ...`) only unloads the job from the
+current login session; the plist is still in `~/Library/LaunchAgents`, so launchd loads it
+again at the next login. `disable` is recorded persistently and keeps it off. Neither
+deletes the plist; to bring it back, run Step 3 (its `launchctl enable` undoes the
+`disable`). Check with `launchctl print-disabled gui/$(id -u) | grep nocccd`.
 
 ## Notes / out of scope
 - The daily refresh does **not** run the bulk PDF/Excel export scripts
-  (`bot_excel_export.py`, `seat_count_export.py`, `bot_export.py`).
+  (`bot_excel_export.py`, `seat_count_export.py`, `bot_export.py`, `equity_export.py`).
 - `enrollment_dashboard` is intentionally `skip_refresh: True` (source MV dropped); the
   no-arg run already excludes it.

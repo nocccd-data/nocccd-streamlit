@@ -20,7 +20,9 @@ same plain Python module you will schedule here.
 
 What the daily run does: for every dataset in `src/pipeline/config.py` that is **not**
 marked `skip_refresh: True`, it queries Oracle, writes a local `.hyper` extract, and
-publishes it to Tableau Cloud. ~28 datasets, **normally 143–197 minutes end to end.**
+publishes it to Tableau Cloud. 30 datasets as of 2026-10-06 (all 30 published that day). **143–197
+minutes end to end in July 2026; about 4 h by October** (2026-10-06: first publish 08:01,
+last 12:02), which leaves roughly 1 h under `run.py`'s 5 h watchdog.
 
 ## Before you schedule anything: prerequisites this repo does NOT contain
 
@@ -126,7 +128,7 @@ Only once *both* are green, do a full dry run of the real thing:
 ```powershell
 .\.venv\Scripts\python.exe -m src.pipeline.run --extract-only    # all 28, no upload; ~2–3h
 ```
-Expect `Done. 28 succeeded, 0 failed, 0 skipped of 28.` and exit `0`.
+Expect `Done. 30 succeeded, 0 failed, 0 skipped of 30.` and exit `0` (30 as of 2026-10-06: the count is the datasets in `config.py` without `skip_refresh`).
 
 ### Exit codes `run.py` returns (you will key alerting off these)
 | Code | Meaning |
@@ -294,7 +296,7 @@ Added 2026-08-02. Without it the box silently drifts: SQL and dataset changes me
 "run before task X" ordering, so a separate pull task would fire a few minutes early and
 *hope* it finished. The failure mode is bad: git rewriting `src/pipeline/*.sql` while
 Python is already mid-run reading those files per dataset. Inline gives a hard sequencing
-guarantee, one log, and one exit code. The pull adds seconds to a ~3h run, so the existing
+guarantee, one log, and one exit code. The pull adds seconds to a ~3–4h run, so the existing
 `-ExecutionTimeLimit 6h` still fits.
 
 Four details are load-bearing:
@@ -317,7 +319,8 @@ Four details are load-bearing:
   "pull failed" and the `requirements.txt` check (inside the success branch) never runs.
   This was caught in testing; it is silent and easy to reintroduce.
 
-A healthy run now opens with:
+A healthy run now opens with (this sample is from 2026-08-02, under the original noon
+trigger):
 ```
 ==== run started 2026-08-02 12:00:01 ====
 [git] branch=main HEAD before: 4878ebd
@@ -333,7 +336,7 @@ A healthy run now opens with:
 just today. The warning sits directly above the `ImportError` it explains — run the pip
 install by hand.
 
-Test the wrapper by itself once (it will do a full ~3h run and log to `$LogDir`):
+Test the wrapper by itself once (it will do a full ~3–4h run and log to `$LogDir`):
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\<you>\scripts\run_streamlit_pipeline.ps1
 ```
@@ -379,7 +382,11 @@ $Script = "C:\Users\<you>\scripts\run_streamlit_pipeline.ps1"
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Script`""
 
-$trigger = New-ScheduledTaskTrigger -Daily -At "12:00PM"
+# Start early: in Sept 2026 REPT slowed sharply after ~10:00 and the noon runs hit the
+# 5h watchdog. The cutover used 12:00PM; see Goal for the observed run times.
+$trigger = New-ScheduledTaskTrigger -Daily -At "8:00AM"
+# Already registered at another time? Change just the trigger:
+#   Set-ScheduledTask -TaskName "NOCCCD Pipeline Refresh" -Trigger (New-ScheduledTaskTrigger -Daily -At "8:00AM")
 
 # One line on purpose: a `#` comment after a line-continuation backtick breaks the
 # continuation, and PowerShell then parses each -Parameter as its own command
@@ -406,7 +413,7 @@ Why these settings — each maps to a lesson from the Mac side:
   days — do not omit this.
 - **`-MultipleInstances IgnoreNew`** — like launchd, Task Scheduler will not start a
   second copy while one is running. Combined with the timeout above, a stuck run clears
-  well before the next noon fire instead of blocking it indefinitely.
+  well before the next day's fire instead of blocking it indefinitely.
 - **`-User`/`-Password` (stored credential)** — makes it "run whether user is logged on
   or not." The single most common Task Scheduler mistake is leaving it "run only when
   logged on," so it never fires on a locked/headless box. **Run as the human user, not
@@ -414,7 +421,7 @@ Why these settings — each maps to a lesson from the Mac side:
   `.streamlit\secrets.toml` all live in that user's profile, which `SYSTEM` cannot see.
 - **`-RunLevel Limited`** — the run needs no elevation (Oracle read, `.hyper` write,
   Tableau upload are all user-level); least privilege even if the account is an admin.
-- **`-StartWhenAvailable`** — if the machine happens to be off at noon, run at next wake.
+- **`-StartWhenAvailable`** — if the machine happens to be off at the trigger time, run at next wake.
 
 > **Password rotation gotcha.** The stored password is a snapshot. If district policy
 > forces the account's password to change, the task starts failing to launch
@@ -431,7 +438,7 @@ Get-ScheduledTask     -TaskName "NOCCCD Pipeline Refresh"    # State: Ready (or 
 Get-ScheduledTaskInfo -TaskName "NOCCCD Pipeline Refresh"    # NextRunTime, LastTaskResult
 ```
 
-**A registered task is enabled and will auto-fire at the next noon.** Do not let that
+**A registered task is enabled and will auto-fire at the next trigger time.** Do not let that
 happen until (a) this box has pulled the resilience code and (b) the Mac scheduler is
 out of the way — otherwise you get a stale-code run and/or two machines publishing to the
 same Tableau site. Until you are ready, park it:
@@ -441,12 +448,12 @@ Disable-ScheduledTask -TaskName "NOCCCD Pipeline Refresh"
 Enable-ScheduledTask  -TaskName "NOCCCD Pipeline Refresh"
 ```
 
-When you do want a live end-to-end test (full ~3h run that publishes to Tableau):
+When you do want a live end-to-end test (full ~3–4h run that publishes to Tableau):
 ```powershell
 Start-ScheduledTask -TaskName "NOCCCD Pipeline Refresh"
 Get-Content "C:\Users\<you>\logs\streamlit-pipeline\nocccd-pipeline.log" -Wait -Tail 20
 ```
-A healthy run ends with `Done. 28 succeeded, 0 failed, 0 skipped of 28.` and the wrapper
+A healthy run ends with `Done. 30 succeeded, 0 failed, 0 skipped of 30.` (30 as of 2026-10-06) and the wrapper
 appends `exit=0`. `Get-ScheduledTaskInfo` then shows `LastTaskResult 0`.
 
 ## Step 5 — tell the author to disable the Mac scheduler
@@ -457,13 +464,16 @@ day** (wasteful, and the two runs can interleave). The author does this on the M
 you:
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.nocccd.pipeline.refresh.plist
+launchctl disable gui/$(id -u)/com.nocccd.pipeline.refresh
 ```
-Report back that Windows is live so they can run that.
+Both lines: `bootout` alone lasts only until the next login (see `docs/macos-scheduling.md`
+Step 5). Report back that Windows is live so they can run that. *(Done 2026-09-30.)*
 
 ## Notes / out of scope
 - The daily refresh does **not** run the bulk PDF/Excel export scripts
-  (`bot_excel_export.py`, `seat_count_export.py`, `bot_export.py`). Those contain
-  hardcoded macOS iCloud paths and are irrelevant to scheduling. If you are ever asked
+  (`bot_excel_export.py`, `seat_count_export.py`, `bot_export.py`, `equity_export.py`).
+  Those default to hardcoded macOS OneDrive folders (`~/Library/CloudStorage/OneDrive-…`)
+  and are irrelevant to scheduling. If you are ever asked
   to run those on Windows too, they need their output paths fixed first — flag it then.
 - `enrollment_dashboard` is intentionally `skip_refresh: True` (its source MV was
   dropped); the no-arg run already excludes it. Leave it alone.
