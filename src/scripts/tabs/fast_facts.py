@@ -247,7 +247,12 @@ def _generate_pdf(datasets: list[tuple[pd.DataFrame, str]]) -> bytes:
 
             ax = fig.add_axes([0.06, (cursor - h) / PAGE_H, 0.88, h / PAGE_H])
             ax.axis("off")
-            ax.set_title(label, fontsize=13, fontweight="bold", loc="center", color="black")
+            title = ax.set_title(label, fontsize=13, fontweight="bold", loc="center", color="black")
+            # A many-term title (202530 + 202605 + ...) can be wider than the page; text
+            # width scales with font size, so one measured rescale fits it to the axes.
+            title_w = title.get_window_extent().width
+            if title_w > ax.bbox.width:
+                title.set_fontsize(13 * ax.bbox.width / title_w)
 
             tbl = ax.table(
                 cellText=df.values,

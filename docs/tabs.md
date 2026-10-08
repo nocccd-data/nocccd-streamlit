@@ -33,7 +33,7 @@ This pattern is suitable for any tab where the full dataset fits in memory and u
 Fast Facts (`fast_facts.py`) uses the same load-then-filter pattern for one level. Query stores the raw student and employee rows (`ff_raw`), and a **Student - Term** multiselect appears under it, listing the term codes in the loaded academic year. It defaults to all of them, so the unfiltered view and its titles (`2025-2026 Race/Ethnicity`) match the tab before the filter existed. A new Query drops the old selection, so a different year's codes can't carry over.
 
 - **Districtwide term = both tracks.** A districtwide Fall is the credit term plus the NOCE term (`202510` + `202515`), and the two must be selected *together* rather than added up. A student enrolled in both tracks counts once in the headcounts, and the race and gender percentages can't be combined by hand at all.
-- **Subset titles** list the codes (`202510 + 202515 Race/Ethnicity`) in the tab and the PDF.
+- **Subset titles** list the codes (`202510 + 202515 Race/Ethnicity`) in the tab and the PDF. A PDF title wider than its table area (five ticked terms do it) is shrunk to fit; a normal-width title stays at 13pt.
 - **Student Characteristics** is credit only. With no credit term selected it shows `N/A`, not `0.00`.
 - **Employee tables** are fiscal-year based and ignore the term filter.
 - **Labels** (`202510 · Fall 2025 (Credit)`) take the season from the code suffix and the calendar year from the code: `05`/`10`/`15` start in the code's own year and `20`/`25`/`30`/`35` in the next (`202430` is Summer 2025), checked against `stvterm` start dates. A suffix not in that table (e.g. `40`, which has no calendar rows) shows as the bare code rather than a guessed label.

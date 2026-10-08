@@ -7,10 +7,16 @@ student enrolled in both tracks, and a credit-only percentage that reads 0.00
 when no credit term is selected at all.
 """
 
+import fitz
 import pandas as pd
 import pytest
 
-from src.scripts.tabs.fast_facts import _process, _student_scope, _term_label
+from src.scripts.tabs.fast_facts import (
+    _generate_pdf,
+    _process,
+    _student_scope,
+    _term_label,
+)
 
 
 # Year rule checked against the Banner term calendar (stvterm start dates):
@@ -114,3 +120,11 @@ def test_process_does_not_write_through_a_filtered_slice():
     emp = pd.concat([_EMP, _EMP.assign(pidm=901, ecls_desc="Other")], ignore_index=True)
     df, label = _student_scope(_FALL_AND_SPRING, ["202610"])
     _process(df, emp, "2026", label)
+
+
+def test_pdf_keeps_a_five_term_title_on_the_page():
+    """Five ticked terms made the longest title run past both page edges."""
+    label = "202530 + 202605 + 202610 + 202615 + 202620"
+    pdf = _generate_pdf(_process(_FALL_AND_SPRING, _EMP, "2026", label))
+    page = fitz.open(stream=pdf, filetype="pdf")[0]
+    assert f"{label} Districtwide Headcount (Unduplicated)" in page.get_text()
