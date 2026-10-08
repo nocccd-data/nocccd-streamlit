@@ -15,7 +15,7 @@ DATASETS = {
     },
     "fast_facts_stu": {
         "sql_file": "fast_facts_stu.sql",
-        "acyr_code": ["2023", "2024", "2025"],
+        "acyr_code": ["2023", "2024", "2025", "2026"],
         "param_name": "acyr_code",
         "db_section": "rept",
     },

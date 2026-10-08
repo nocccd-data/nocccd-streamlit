@@ -33,8 +33,44 @@ _ETHN_MAP = {
     "X": "Unreported",
 }
 
+# Season and calendar-year offset per term-code suffix, checked against stvterm
+# start dates: 05/10/15 start in the code's own year, 20/25/30/35 in the next
+# (202430 is Summer 2025). The last digit is the track: 0 credit, 5 NOCE.
+_TERM_SEASONS = {
+    "05": ("Summer", 0),
+    "10": ("Fall", 0),
+    "15": ("Fall", 0),
+    "20": ("Spring", 1),
+    "25": ("Winter", 1),
+    "30": ("Summer", 1),
+    "35": ("Spring", 1),
+}
 
-def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list[tuple[pd.DataFrame, str]]:
+
+def _term_label(term_code: str) -> str:
+    """``202610`` -> ``202610 · Fall 2026 (Credit)``; an unknown suffix stays the bare code."""
+    season = _TERM_SEASONS.get(term_code[4:])
+    if season is None:
+        return term_code
+    name, offset = season
+    track = "Credit" if term_code.endswith("0") else "NOCE"
+    return f"{term_code} · {name} {int(term_code[:4]) + offset} ({track})"
+
+
+def _student_scope(df_stu: pd.DataFrame, terms: list[str]) -> tuple[pd.DataFrame, str]:
+    """Rows for the selected terms, and the label that prefixes every student title.
+
+    Selecting every term keeps the academic-year label, so the default view reads as before.
+    """
+    scoped = df_stu[df_stu["term_code"].isin(terms)]
+    if set(df_stu["term_code"]) <= set(terms):
+        return scoped, df_stu["academic_year"].iloc[0]
+    return scoped, " + ".join(sorted(terms))
+
+
+def _process(
+    df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str, stu_label: str
+) -> list[tuple[pd.DataFrame, str]]:
     """Build the 10 summary DataFrames from raw student + employee data."""
     acyr = df_stu["academic_year"].iloc[0]
     fy_label = f"FY {fisc_year}"
@@ -87,7 +123,7 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
     df4.insert(0, "academic_year", acyr)
     df4 = df4.sort_values("site")
 
-    # df5 — Student Characteristics (Credit only)
+    # df5 — Student Characteristics (Credit only); N/A when no credit term is selected
     df_credit = df_stu[df_stu["site"] == "Credit"]
     total_credit = df_credit["pidm"].nunique()
     econ_ct = df_credit[df_credit["econ_disa_ind"] == "Y"]["pidm"].nunique()
@@ -96,8 +132,8 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
         "academic_year": [acyr, acyr],
         "characteristic": ["Economically Disadvantaged", "First Generation"],
         "pct": [
-            round(econ_ct * 100.0 / total_credit, 2) if total_credit else 0,
-            round(fgen_ct * 100.0 / total_credit, 2) if total_credit else 0,
+            round(econ_ct * 100.0 / total_credit, 2) if total_credit else "N/A",
+            round(fgen_ct * 100.0 / total_credit, 2) if total_credit else "N/A",
         ],
     })
 
@@ -131,7 +167,7 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
     df8 = df8.sort_values("agegroup")
 
     # df9 — Employee Race/Ethnicity
-    df_emp["race_description"] = df_emp["ipeds_ethn"].map(_ETHN_MAP).fillna("Unreported")
+    df_emp = df_emp.assign(race_description=df_emp["ipeds_ethn"].map(_ETHN_MAP).fillna("Unreported"))
     df9 = (
         df_emp.groupby("race_description", as_index=False)["pidm"]
         .nunique()
@@ -150,12 +186,12 @@ def _process(df_stu: pd.DataFrame, df_emp: pd.DataFrame, fisc_year: str) -> list
                 d[col] = d[col].map("{:,.2f}".format)
 
     return [
-        (df1, f"{acyr} Districtwide Headcount (Unduplicated)"),
-        (df1b, f"{acyr} Campus Headcount (Unduplicated)"),
-        (df2, f"{acyr} Race/Ethnicity"),
-        (df3, f"{acyr} Gender"),
-        (df4, f"{acyr} Avg. Age"),
-        (df5, f"{acyr} Student Characteristics"),
+        (df1, f"{stu_label} Districtwide Headcount (Unduplicated)"),
+        (df1b, f"{stu_label} Campus Headcount (Unduplicated)"),
+        (df2, f"{stu_label} Race/Ethnicity"),
+        (df3, f"{stu_label} Gender"),
+        (df4, f"{stu_label} Avg. Age"),
+        (df5, f"{stu_label} Student Characteristics"),
         (df6, f"{fy_label} Employee Classification"),
         (df7, f"{fy_label} Employee Gender"),
         (df8, f"{fy_label} Employee Age Group"),
@@ -274,29 +310,47 @@ def render():
             st.warning("No employee data returned.")
             return
 
-        st.session_state["ff_data"] = _process(df_stu, df_emp, fisc_year)
+        # Raw rows, not summaries, so the term filter below can re-scope without a re-query.
+        st.session_state["ff_raw"] = (df_stu, df_emp, fisc_year)
+        # A new year brings new term codes; drop the old selection so it defaults to all.
+        st.session_state.pop("ff_terms", None)
         clear_pdf_cache("ff")
 
-    # --- PDF download in sidebar (only when data is loaded) ---
-    if "ff_data" in st.session_state:
-        pdf_bytes = cached_pdf_bytes(
-            "ff",
-            id(st.session_state["ff_data"]),
-            lambda: _generate_pdf(st.session_state["ff_data"]),
-        )
-        st.sidebar.download_button(
-            "Download PDF",
-            data=pdf_bytes,
-            file_name="fast_facts.pdf",
-            mime="application/pdf",
-            key="ff_pdf_btn",
-        )
-
-    if "ff_data" not in st.session_state:
+    if "ff_raw" not in st.session_state:
         st.info("Select Academic Year / Fiscal Year and press **Query** to load data.")
         return
 
-    datasets = st.session_state["ff_data"]
+    df_stu, df_emp, loaded_fisc_year = st.session_state["ff_raw"]
+
+    # --- Student term filter (local pandas, from the loaded academic year) ---
+    term_codes = sorted(df_stu["term_code"].unique())
+    terms = st.sidebar.multiselect(
+        "Student - Term",
+        options=term_codes,
+        default=term_codes,
+        format_func=_term_label,
+        key="ff_terms",
+    )
+    if not terms:
+        st.warning("Select at least one **Student - Term**.")
+        return
+
+    scoped, stu_label = _student_scope(df_stu, terms)
+    datasets = _process(scoped, df_emp, loaded_fisc_year, stu_label)
+
+    # --- PDF download in sidebar; keyed per term selection so reruns reuse the bytes ---
+    pdf_bytes = cached_pdf_bytes(
+        "ff",
+        (id(df_stu), tuple(sorted(terms))),
+        lambda: _generate_pdf(datasets),
+    )
+    st.sidebar.download_button(
+        "Download PDF",
+        data=pdf_bytes,
+        file_name="fast_facts.pdf",
+        mime="application/pdf",
+        key="ff_pdf_btn",
+    )
 
     # --- Student tables ---
     st.subheader("Students")
