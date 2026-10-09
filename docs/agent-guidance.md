@@ -102,6 +102,18 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
 ## Key Constraints
 
 - `pantab` must stay pinned to `==5.2.2` (API differences between major versions)
+- **`requirements.txt` is a full lock**: the 14 direct dependencies plus every transitive one (77 packages), at the exact versions the local `.venv` runs. While it was unpinned, the live app picked up a newer Streamlit whose selectbox no longer matches the theme CSS, and the sidebar dropdowns went white-on-white in light mode (noticed 2026-10-09; reproduced on 1.65.0, see `docs/theme.md`). An unpinned rebuild would also pull untested majors such as pandas 3, plotly 7 and pyarrow 26.
+  - **Who installs it:**
+    - Streamlit Cloud, on every rebuild. Its Python version is set in the Cloud app settings, not in this repo. The lock assumes **3.13** (as in `.python-version`), and numpy/pandas need ≥ 3.11.
+    - `.github/workflows/mail-reports.yml` (Python 3.13).
+    - The Windows refresh box only *flags* a changed file. Run `pip install -r requirements.txt` there by hand to match.
+  - **Test-only packages** (pytest, PyMuPDF, openpyxl) live in `requirements-dev.txt`, which includes the lock. Cloud never installs them.
+  - **To upgrade**, in its own PR:
+    1. Bump the direct pin(s) in `.venv` (`pip install <pkg>==<new>`).
+    2. Regenerate the lock from a fresh venv: install the direct pins with `-c <(.venv/bin/pip freeze)`, then `pip freeze`. Keep the direct/transitive sections.
+    3. Run `pytest` from `requirements-dev.txt`.
+    4. Check every tab in both themes.
+    5. Reinstall on the Windows box.
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
 - SQL files live in `src/pipeline/sql/` (tracked in git); `.hyper` files are gitignored in `src/pipeline/hyper/`
 - Oracle Instant Client: `/Users/hoonywise/Oracle/instantclient` with `lib -> .` symlink (macOS SIP workaround)
