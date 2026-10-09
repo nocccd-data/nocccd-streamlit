@@ -102,6 +102,7 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
 ## Key Constraints
 
 - `pantab` must stay pinned to `==5.2.2` (API differences between major versions)
+- **Every package in `requirements.txt` is pinned** (`==`) to the versions the app was tested on, matching the local `.venv`. Streamlit Cloud installs whatever the file says when it rebuilds. While the file was unpinned, the live app picked up a newer Streamlit whose selectbox no longer matches the theme CSS, and the sidebar dropdowns went white-on-white in light mode (noticed 2026-10-09; reproduced on 1.65.0, see `docs/theme.md`). An unpinned rebuild would also pull major upgrades nobody has tested here, such as pandas 3 and plotly 7. Upgrade deliberately, in its own PR: bump the pin, reinstall `.venv`, run the tests, and check every tab in both themes.
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
 - SQL files live in `src/pipeline/sql/` (tracked in git); `.hyper` files are gitignored in `src/pipeline/hyper/`
 - Oracle Instant Client: `/Users/hoonywise/Oracle/instantclient` with `lib -> .` symlink (macOS SIP workaround)

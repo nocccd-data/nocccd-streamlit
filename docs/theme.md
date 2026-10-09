@@ -11,6 +11,8 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 
 ## Gotchas (Streamlit 1.55)
 
+- **Selectors are version-specific; Streamlit is pinned for that reason.** In 1.65 the selectbox is rebuilt on React Aria: there is no `div[data-baseweb="select"]`, just a `div[role="group"]` holding an `<input role="combobox">`. So every `theme.py` rule that targets `stSelectbox … div[data-baseweb="select"]` silently stops matching. The sidebar box then falls back to a white background while `[theme.light.sidebar] textColor` keeps its text white, leaving the value and the open option list unreadable in light mode. Dark mode stays readable. Before bumping the Streamlit pin, re-check each rule below against the new DOM, in both themes.
+
 - **Portaled dropdowns**: Baseweb selectbox dropdowns are portaled to the document root, outside `stApp`. They don't inherit `color-scheme`, so `light-dark()` won't work without the `_COLOR_SCHEME_SYNC` observer. Dropdown text color needs a separate `stSelectboxVirtualDropdown` rule since it can't be scoped to a sidebar/main ancestor.
 - **Selector names**: `stVerticalBlockBorderWrapper` doesn't exist in 1.55. Use `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` for card styling.
 - **Progress bar fill**: The fill bar is `[data-testid="stProgress"] [role="progressbar"] > div > div > div` (triple-nested div). Targeting `[role="progressbar"]` itself only styles the container track.
