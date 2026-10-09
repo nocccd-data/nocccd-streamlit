@@ -128,3 +128,24 @@ def test_pdf_keeps_a_five_term_title_on_the_page():
     pdf = _generate_pdf(_process(_FALL_AND_SPRING, _EMP, "2026", label))
     page = fitz.open(stream=pdf, filetype="pdf")[0]
     assert f"{label} Districtwide Headcount (Unduplicated)" in page.get_text()
+
+
+def _title_sizes(pdf: bytes, needle: str) -> set[float]:
+    page = fitz.open(stream=pdf, filetype="pdf")[0]
+    return {
+        round(span["size"], 1)
+        for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+        for span in line["spans"]
+        if needle in span["text"]
+    }
+
+
+def test_pdf_shrinks_only_titles_too_wide_for_the_page():
+    short = _generate_pdf(_process(_FALL_AND_SPRING, _EMP, "2026", "2026-2027"))
+    assert _title_sizes(short, "Districtwide Headcount") == {13.0}
+
+    label = "202530 + 202605 + 202610 + 202615 + 202620"
+    long = _generate_pdf(_process(_FALL_AND_SPRING, _EMP, "2026", label))
+    (size,) = _title_sizes(long, "Districtwide Headcount")
+    assert size < 13
