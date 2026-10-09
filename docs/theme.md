@@ -11,7 +11,10 @@ The app supports light/dark mode via Streamlit 1.55's built-in theme toggle. Cus
 
 ## Gotchas (Streamlit 1.55)
 
-- **Selectors are version-specific; Streamlit is pinned for that reason.** In 1.65 the selectbox is rebuilt on React Aria: there is no `div[data-baseweb="select"]`, just a `div[role="group"]` holding an `<input role="combobox">`. So every `theme.py` rule that targets `stSelectbox … div[data-baseweb="select"]` silently stops matching. The sidebar box then falls back to a white background while `[theme.light.sidebar] textColor` keeps its text white, leaving the value and the open option list unreadable in light mode. Dark mode stays readable. Before bumping the Streamlit pin, re-check each rule below against the new DOM, in both themes.
+- **Selectors are version-specific; Streamlit is pinned for that reason.** Two separate breaks, both seen on 1.65 (light mode; dark mode stays readable):
+  - **Closed box:** the selectbox is rebuilt on React Aria. There is no `div[data-baseweb="select"]`, just a `div[role="group"]` holding an `<input role="combobox">`. So the `theme.py` sidebar rules targeting `stSelectbox … div[data-baseweb="select"]` stop matching. The box falls back to white while `[theme.light.sidebar] textColor` keeps the value white.
+  - **Open option list:** `stSelectboxVirtualDropdown` still exists, but each option is now a `div[role="option"]`, not an `li`. So the `li[role="option"]` color rules in `theme.py` stop matching, and the options inherit white on a white list.
+  - **Before bumping the Streamlit pin,** re-check every selector in `src/scripts/theme.py` against the new DOM, in both themes. That includes the `_COLOR_SCHEME_SYNC` script, which also queries `li[role="option"]`.
 
 - **Portaled dropdowns**: Baseweb selectbox dropdowns are portaled to the document root, outside `stApp`. They don't inherit `color-scheme`, so `light-dark()` won't work without the `_COLOR_SCHEME_SYNC` observer. Dropdown text color needs a separate `stSelectboxVirtualDropdown` rule since it can't be scoped to a sidebar/main ancestor.
 - **Selector names**: `stVerticalBlockBorderWrapper` doesn't exist in 1.55. Use `[data-testid="stColumn"] [data-testid="stVerticalBlock"]` for card styling.
