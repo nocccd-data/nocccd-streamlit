@@ -28,6 +28,18 @@ The Seat Count Report tab (`seat_count_report.py`) uses cascading dynamic filter
 
 This pattern is suitable for any tab where the full dataset fits in memory and users need hierarchical drill-down.
 
+## Fast Facts student term filter
+
+Fast Facts (`fast_facts.py`) uses the same load-then-filter pattern for one level. Query stores the raw student and employee rows (`ff_raw`), and a **Student - Term** multiselect appears under it, listing the term codes in the loaded academic year. It defaults to all of them, so the unfiltered view and its titles (`2025-2026 Race/Ethnicity`) match the tab before the filter existed. A new Query drops the old selection, so a different year's codes can't carry over.
+
+- **Districtwide term = both tracks.** A districtwide Fall is the credit term plus the NOCE term (`202510` + `202515`), and the two must be selected *together* rather than added up. A student enrolled in both tracks counts once in the Districtwide headcount and in the race and gender tables, which can't be combined by hand at all. The Campus and Avg. Age tables group by campus or site, so they count that student under each (their `pct` divides by the sum of those per-group headcounts, as it did before the filter).
+- **Subset titles** list the codes (`202510 + 202515 Race/Ethnicity`) in the tab and the PDF. A PDF title wider than its table area (five ticked terms do it) is shrunk to fit; a normal-width title stays at 13pt.
+- **Student Characteristics** is credit only. With no credit term selected it shows `N/A`, not `0.00`.
+- **Employee tables** are fiscal-year based and ignore the term filter.
+- **Labels** (`202510 · Fall 2025 (Credit)`) take the season from the code suffix and the calendar year from the code: `05`/`10`/`15` start in the code's own year and `20`/`25`/`30`/`35` in the next (`202430` is Summer 2025), checked against `stvterm` start dates. A suffix not in that table (e.g. `40`, which has no calendar rows) shows as the bare code rather than a guessed label.
+- **Summaries rebuild on every rerun.** `_process` therefore must not write into a filtered slice (pinned by a `SettingWithCopyWarning` test). The PDF bytes are cached on `(loaded data, selected terms)`.
+- **Academic years** come from `DATASETS["fast_facts_stu"]["acyr_code"]`, and the dropdown defaults to the last one. When adding a year, refresh the extract (`python -m src.pipeline.run fast_facts_stu`) *before* merging. Otherwise the new default year shows "No student data returned" until the next scheduled run.
+
 ## Per-campus column layout (Seat Count Report)
 
 The Seat Count Report shows a different column set per campus, in both the banded HTML table and the PDF (interactive download + bulk export):
