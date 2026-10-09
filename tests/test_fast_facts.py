@@ -7,6 +7,8 @@ student enrolled in both tracks, and a credit-only percentage that reads 0.00
 when no credit term is selected at all.
 """
 
+from typing import cast
+
 import fitz
 import pandas as pd
 import pytest
@@ -132,9 +134,11 @@ def test_pdf_keeps_a_five_term_title_on_the_page():
 
 def _title_sizes(pdf: bytes, needle: str) -> set[float]:
     page = fitz.open(stream=pdf, filetype="pdf")[0]
+    # get_text() is typed str | list | dict across its modes; "dict" mode returns a dict.
+    text = cast(dict, page.get_text("dict"))
     return {
         round(span["size"], 1)
-        for block in page.get_text("dict")["blocks"]
+        for block in text["blocks"]
         for line in block.get("lines", [])
         for span in line["spans"]
         if needle in span["text"]
