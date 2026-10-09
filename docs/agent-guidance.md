@@ -107,11 +107,12 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
     - Streamlit Cloud, on every rebuild. Its Python version is set in the Cloud app settings, not in this repo. The lock assumes **3.13** (as in `.python-version`), and numpy/pandas need ≥ 3.11.
     - `.github/workflows/mail-reports.yml` (Python 3.13).
     - The Windows refresh box only *flags* a changed file. Run `pip install -r requirements.txt` there by hand to match.
-  - **Test-only packages** (pytest, PyMuPDF, openpyxl) live in `requirements-dev.txt`, which includes the lock. Cloud never installs them.
+  - **Test-only packages** (pytest, PyMuPDF, openpyxl) live in `requirements-dev.txt`, listed alone so Dependabot doesn't count every locked package twice. Install both files: `pip install -r requirements.txt -r requirements-dev.txt`. Cloud never installs the dev file.
+  - **Dependabot alerts watch the lock.** Pinning makes them visible, and a locked version stays vulnerable until someone bumps it, so leave the alerts on. For a security bump, take each advisory's first patched version, bump it in `.venv`, and regenerate (step 2 below). Check the diff: only the bumped packages should move.
   - **To upgrade**, in its own PR:
     1. Bump the direct pin(s) in `.venv` (`pip install <pkg>==<new>`).
     2. Regenerate the lock from a fresh venv: install the direct pins with `-c <(.venv/bin/pip freeze)`, then `pip freeze`. Keep the direct/transitive sections.
-    3. Run `pytest` from `requirements-dev.txt`.
+    3. Run `pytest` in a fresh venv with both files installed.
     4. Check every tab in both themes.
     5. Reinstall on the Windows box.
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
