@@ -112,7 +112,7 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
   - **To upgrade**, in its own PR:
     1. Bump the direct pin(s) in `.venv` (`pip install <pkg>==<new>`).
     2. Regenerate the lock from a fresh venv: install the direct pins with `-c <(.venv/bin/pip freeze)`, then `pip freeze`. Keep the direct/transitive sections.
-    3. Run `pytest` in a fresh venv with both files installed, and `pip-audit -r requirements.txt -r requirements-dev.txt`.
+    3. Run `pytest` in a fresh venv with both files installed, and `pip-audit -r requirements.txt -r requirements-dev.txt --no-deps --disable-pip`. pip-audit is in neither file; install it in its own throwaway venv.
     4. Check every tab in both themes. For a Streamlit bump, also re-check the `theme.py` selectors (`docs/theme.md`).
     5. Reinstall on the Windows box.
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
