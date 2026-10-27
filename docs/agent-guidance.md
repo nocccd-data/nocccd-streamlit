@@ -17,7 +17,7 @@ This file is loaded on demand from `AGENTS.md` or `CLAUDE.md`; it is not importe
 | `docs/bot-tabs.md` | All BOT goal/metric tabs, base population rules, `_TITLES` flags, BOT PDF generator + paper coordinates, Excel helpers, BOT-specific gotchas |
 | `docs/exports.md` | Bulk exports: `seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`, `equity_export.py` (Equity Analysis PPG-1) |
 | `docs/mail.md` | Mass mailing system, REPORT_REGISTRY, CAMPAIGNS, sender, GitHub Actions workflow |
-| `docs/theme.md` | Theme system, light-dark CSS, Streamlit 1.55 gotchas, color palette + NOCCCD brand colors |
+| `docs/theme.md` | Theme system, light-dark CSS, Streamlit 1.66 gotchas, color palette + NOCCCD brand colors |
 | `docs/deferred.md` | Known issues deliberately left unfixed, and the decision each one is waiting on |
 
 ## What This Is
@@ -101,19 +101,19 @@ Deployed to Streamlit Cloud at `nocccd.streamlit.app`. Pushes to `main` trigger 
 
 ## Key Constraints
 
-- `pantab` must stay pinned to `==5.2.2` (API differences between major versions)
-- **`requirements.txt` is a full lock**: the 14 direct dependencies plus every transitive one (77 packages), at the exact versions the local `.venv` runs. While it was unpinned, the live app picked up a newer Streamlit whose selectbox no longer matches the theme CSS, and the sidebar dropdowns went white-on-white in light mode (noticed 2026-10-09; reproduced on 1.65.0, see `docs/theme.md`). An unpinned rebuild would also pull untested majors such as pandas 3, plotly 7 and pyarrow 26.
+- `pantab` stays on 5.x (API differences between major versions). It moved 5.2.2 → 5.3.0 on 2026-10-27: extracts written by either version read back identically in both, through `_write_hyper` (checked on six datasets, including NULLs, times and an all-NULL column).
+- **`requirements.txt` is a full lock**: the 14 direct dependencies plus every transitive one (75 packages), at the exact versions the local `.venv` runs. While it was unpinned, the live app picked up a newer Streamlit whose selectbox no longer matched the theme CSS, and the sidebar dropdowns went white-on-white in light mode (noticed 2026-10-09). The lock was then moved deliberately to Streamlit 1.66, pandas 3, plotly 7 and pyarrow 26 on 2026-10-27, with the theme CSS fixed (see `docs/theme.md`). An unpinned rebuild would pull untested releases again.
   - **Who installs it:**
-    - Streamlit Cloud, on every rebuild. Its Python version is set in the Cloud app settings, not in this repo. The lock assumes **3.13** (as in `.python-version`), and numpy/pandas need ≥ 3.11.
+    - Streamlit Cloud, on every rebuild. Its Python version is set in the Cloud app settings, not in this repo. The lock assumes **3.13** (as in `.python-version`), and numpy/contourpy need ≥ 3.12.
     - `.github/workflows/mail-reports.yml` (Python 3.13).
-    - The Windows refresh box only *flags* a changed file. Run `pip install -r requirements.txt` there by hand to match.
+    - The Windows refresh box only *flags* a changed file. Run `pip install -r requirements.txt` there by hand to match. oracledb 26 thick mode needs Oracle Client 19c or newer (the box runs Instant Client 23, see `docs/windows-scheduling.md`).
   - **Test-only packages** (pytest, PyMuPDF, openpyxl) live in `requirements-dev.txt`, listed alone so Dependabot doesn't count every locked package twice. Install both files: `pip install -r requirements.txt -r requirements-dev.txt`. Cloud never installs the dev file.
   - **Dependabot alerts watch the lock.** Pinning makes them visible, and a locked version stays vulnerable until someone bumps it, so leave the alerts on. For a security bump, take each package's **highest** first patched version across all its open advisories, the smallest version that clears every one of them. For example, cryptography's advisories were patched in 46.0.6, 46.0.7, 48.0.1, 49.0.0 and 50.0.0, so it goes to 50.0.0, not 46.0.6. Bump those in `.venv` and regenerate (step 2 below). Check the diff: only the bumped packages should move.
   - **To upgrade**, in its own PR:
     1. Bump the direct pin(s) in `.venv` (`pip install <pkg>==<new>`).
     2. Regenerate the lock from a fresh venv: install the direct pins with `-c <(.venv/bin/pip freeze)`, then `pip freeze`. Keep the direct/transitive sections.
-    3. Run `pytest` in a fresh venv with both files installed.
-    4. Check every tab in both themes.
+    3. Run `pytest` in a fresh venv with both files installed, and `pip-audit -r requirements.txt -r requirements-dev.txt`.
+    4. Check every tab in both themes. For a Streamlit bump, also re-check the `theme.py` selectors (`docs/theme.md`).
     5. Reinstall on the Windows box.
 - `streamlit_app.py` inserts repo root into `sys.path` at startup — required for Streamlit Cloud where only the script's directory is on the path
 - SQL files live in `src/pipeline/sql/` (tracked in git); `.hyper` files are gitignored in `src/pipeline/hyper/`

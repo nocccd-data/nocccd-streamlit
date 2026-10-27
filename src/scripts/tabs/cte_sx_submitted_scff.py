@@ -48,8 +48,8 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
             margins=True, margins_name="Total",
         ).fillna(0).astype(int)
         table2.index.name = None
-        ordered_idx = [x for x in _FUNDING_ORDER if x in table2.index] + ["Total"]
-        table2 = table2.reindex(ordered_idx)
+        # pandas 3 drops a funding category with no rows; keep it as a zero row like pandas 2.
+        table2 = table2.reindex(_FUNDING_ORDER + ["Total"], fill_value=0)
         data_cols = [c for c in _MATCH_ORDER if c in table2.columns]
         if "Total" in table2.columns:
             data_cols += ["Total"]

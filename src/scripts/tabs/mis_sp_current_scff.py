@@ -32,6 +32,11 @@ def _ordered_crosstab(df, row_col, col_col, count_col, sort_cols=True, col_order
         values=df[count_col], aggfunc="count",
         margins=True, margins_name="Total",
     ).fillna(0).astype(int)
+    # pandas 3 drops a category with no rows; keep it as a zero column like pandas 2.
+    if isinstance(df[col_col].dtype, pd.CategoricalDtype):
+        for c in df[col_col].cat.categories:
+            if c not in ct.columns:
+                ct[c] = 0
     ct.columns.name = "award_type"
     ct.index.name = None
     ordered_idx = [x for x in _AWARD_ORDER if x in ct.index] + ["Total"]
@@ -109,6 +114,8 @@ def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_co
             values=subset[count_col], aggfunc="count",
             margins=True, margins_name="Total",
         ).fillna(0).astype(int)
+        if isinstance(subset[detail_col].dtype, pd.CategoricalDtype):
+            sub_ct = sub_ct.reindex([*subset[detail_col].cat.categories, "Total"], fill_value=0)
         for c in all_cols:
             if c not in sub_ct.columns:
                 sub_ct[c] = 0

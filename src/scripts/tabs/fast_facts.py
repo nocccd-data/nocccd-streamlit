@@ -89,7 +89,7 @@ def _process(
         .agg(enrollments=("pidm", "size"), headcount=("pidm", "nunique"))
     )
     df1b["camp_code"] = df1b["camp_code"].astype(str).map(CAMP_MAP)
-    df1b.rename(columns={"camp_code": "campus"}, inplace=True)
+    df1b = df1b.rename(columns={"camp_code": "campus"})
     df1b["pct"] = (df1b["headcount"] * 100.0 / df1b["headcount"].sum()).round(2)
     df1b.insert(0, "academic_year", acyr)
 

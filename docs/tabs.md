@@ -37,7 +37,7 @@ Fast Facts (`fast_facts.py`) uses the same load-then-filter pattern for one leve
 - **Student Characteristics** is credit only. With no credit term selected it shows `N/A`, not `0.00`.
 - **Employee tables** are fiscal-year based and ignore the term filter.
 - **Labels** (`202510 · Fall 2025 (Credit)`) take the season from the code suffix and the calendar year from the code: `05`/`10`/`15` start in the code's own year and `20`/`25`/`30`/`35` in the next (`202430` is Summer 2025), checked against `stvterm` start dates. A suffix not in that table (e.g. `40`, which has no calendar rows) shows as the bare code rather than a guessed label.
-- **Summaries rebuild on every rerun.** `_process` therefore must not write into a filtered slice (pinned by a `SettingWithCopyWarning` test). The PDF bytes are cached on `(loaded data, selected terms)`.
+- **Summaries rebuild on every rerun.** `_process` therefore must not use chained assignment (`df[mask]["col"] = …`). pandas 3 skips that write without an error, so the value never lands. A test turns pandas' `ChainedAssignmentError` warning into a failure. The PDF bytes are cached on `(loaded data, selected terms)`.
 - **Academic years** come from `DATASETS["fast_facts_stu"]["acyr_code"]`, and the dropdown defaults to the last one. When adding a year, refresh the extract (`python -m src.pipeline.run fast_facts_stu`) *before* merging. Otherwise the new default year shows "No student data returned" until the next scheduled run.
 
 ## Per-campus column layout (Seat Count Report)
