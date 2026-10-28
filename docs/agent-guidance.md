@@ -13,7 +13,7 @@ This file is loaded on demand from `AGENTS.md` or `CLAUDE.md`; it is not importe
 | `docs/pipeline.md` | `src/pipeline/`: dataset config, extract.py shapes, SQL parameterization, bind-variable + db_section gotchas, scheduled refresh & failure isolation |
 | `docs/windows-scheduling.md` | The daily refresh: Windows Task Scheduler (the current setup, live since 2026-08-01) |
 | `docs/macos-scheduling.md` | The retired macOS launchd job (fallback / historical) |
-| `docs/tabs.md` | Tab system, adding-a-tab checklist, cascading filters, per-campus Seat Count layout, KPI tabs (Persistence projections, NOCE excl. credit chart + difference table, Applied-to-Enrolled, Dual Enrollment), Class Schedule Heatmap, admin auth, sidebar download patterns, PDF rendering rules |
+| `docs/tabs.md` | Tab system, adding-a-tab checklist, cascading filters, per-campus Seat Count layout, KPI tabs (Persistence projections, NOCE excl. credit chart + difference table, Applied-to-Enrolled, Dual Enrollment, Student Headcount by Type), Class Schedule Heatmap, admin auth, sidebar download patterns, PDF rendering rules |
 | `docs/bot-tabs.md` | All BOT goal/metric tabs, base population rules, `_TITLES` flags, BOT PDF generator + paper coordinates, Excel helpers, BOT-specific gotchas |
 | `docs/exports.md` | Bulk exports: `seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`, `equity_export.py` (Equity Analysis PPG-1) |
 | `docs/mail.md` | Mass mailing system, REPORT_REGISTRY, CAMPAIGNS, sender, GitHub Actions workflow |

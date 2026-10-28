@@ -65,6 +65,16 @@ PROJECTS = [
         ],
     },
     {
+        "tab_label": "KPI - Student Headcount by Type",
+        "description": "Fall headcount by student type: Cypress and Fullerton combined, plus NOCE.",
+        "metrics": [
+            "Credit headcount by student type, each student counted once",
+            "Special admit and dual enrollment as one combined type",
+            "NOCE noncredit headcount",
+            "Change since the first selected Fall",
+        ],
+    },
+    {
         "tab_label": "COI vs NHRDIST Validation",
         "description": "Validates COI estimated term salaries against NHRDIST actual payments.",
         "metrics": [
