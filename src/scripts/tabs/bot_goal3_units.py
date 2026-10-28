@@ -125,7 +125,9 @@ _TITLES = {
 # ---------------------------------------------------------------------------
 
 def _mean_by(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
-    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
+    # One row per student per group, so a student with rows in two groups counts
+    # in both (by campus: an award at each college in the same year).
+    stu = df.drop_duplicates(subset=["pidm", *group_cols])
     return (
         stu.groupby(group_cols)["sum_hours_earned"]
         .mean()
@@ -136,13 +138,9 @@ def _mean_by(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
 def _aggregate_campus(df):
     by_campus = _mean_by(df, ["academic_year", "camp_desc"])
     # NOCCCD (Unduplicated): mean across ADT recipients at both credit
-    # campuses combined per academic year.
-    stu = df.drop_duplicates(subset=["pidm", "academic_year"])
-    nocccd = (
-        stu.groupby("academic_year")["sum_hours_earned"]
-        .mean()
-        .reset_index(name="avg_units")
-    )
+    # campuses combined per academic year (one row per student; which college's
+    # units a two-college completer contributes is open, docs/deferred.md #9).
+    nocccd = _mean_by(df, ["academic_year"])
     nocccd["camp_desc"] = "NOCCCD (Unduplicated)"
     out = pd.concat([by_campus, nocccd], ignore_index=True)
     out["camp_desc"] = pd.Categorical(

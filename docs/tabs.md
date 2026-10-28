@@ -157,6 +157,14 @@ The KPI - Dual Enrollment tab shows one line chart per **credit campus** (Cypres
 
 Widget prefix: `"kde_"`
 
+## SCFF Awards – MIS FA Submitted (`mis_fa_submitted_scff.py`)
+
+The tab reconciles the SCFF file CCCCO sends back against our MIS FA submission, award type by award type. The CCCCO SCFF metric definitions count Pell recipients as SF21 `GP` and Promise Grant (CCPG) recipients as SF21 `BA`/`B1`/`B2`/`B3`/`BB`/`BC`/`BD`, each with an SF22 amount > 0, as one headcount per student. They don't rank one CCPG method above another.
+
+- **Reconcile on the award-type rows** ("FA Submitted File Match Counts": ccpg, pell, other) against "SCFF File Counts". Those rows, and each expanded sub-table's Total, count every student once.
+- **Expanded description rows count the students who received that award**, from all of the award type's records: a student with both CCPG Method B and Method C appears in both rows, so the rows can add up to more than the Total (ACYR 220 ccpg: 11,871 + 8,719 vs 19,945, with 645 holding both). Until 2026-10-28 each student was counted under one description picked by row order, which undercounted stacked "other" grants (Cal Grant B showed ~1,600 of 4,767) and moved between queries.
+- The "Counts by Award Type and DICD Code" table counts records, not students: a student with awards in three terms counts three times.
+
 ## Admin authentication (`auth.py`, `admin_config.py`)
 
 Protected tabs (currently Mail Admin) require a password before access. The system:

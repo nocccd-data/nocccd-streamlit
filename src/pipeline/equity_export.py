@@ -415,13 +415,12 @@ def _composition_counts(df: pd.DataFrame, year_label: str) -> dict[tuple[str, st
         n = int(gender_counts.get(sub.bot_key, 0) or 0)
         out[(sub.group_type, sub.label)] = (n, total_all)
 
-    # First-Gen — credit-only filter mirrors the BOT goal1 firstgen rule
-    fg_stu = stu[stu["site"] == "Credit"].copy()
-    fg_total = int(fg_stu["pidm"].nunique()) if not fg_stu.empty else 0
-    fg_stu["fg"] = fg_stu["first_gen_ind"].where(
-        fg_stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
-    )
-    fg_counts = fg_stu.groupby("fg")["pidm"].nunique()
+    # First-Gen — the BOT Goal 1 rule itself (credit-only, filtered before the
+    # dedup). An inline copy that deduped first let a student with both a Credit
+    # and a Noncredit row drop out whenever the Noncredit row was read first.
+    df_fg = aggregate_firstgen(yr, credit_only=True)
+    fg_counts = df_fg.set_index("fg")["count"]
+    fg_total = int(df_fg["total"].iloc[0]) if not df_fg.empty else 0
     for sub in SUBGROUPS:
         if sub.group_type != "First-Generation Status":
             continue
@@ -461,17 +460,14 @@ def _rate_counts(
     # Pre-compute base-population subgroup denominators so a subgroup with
     # zero outcomes (no row in df_*) still gets a real denominator.
     base_stu = base_yr.drop_duplicates(subset=["pidm", "academic_year"])
-    base_stu_credit = (
-        base_stu[base_stu["site"] == "Credit"] if firstgen_credit_only and "site" in base_stu.columns
-        else base_stu
-    )
     race_denom = base_stu.groupby("race_description")["pidm"].nunique().to_dict()
     gender_denom = base_stu.groupby("gender")["pidm"].nunique().to_dict()
-    fg_denom_src = base_stu_credit.copy()
-    fg_denom_src["fg"] = fg_denom_src["first_gen_ind"].where(
-        fg_denom_src["first_gen_ind"].isin(["Y", "N"]), "Unknown",
+    # Same cohort rule as df_fg's denominators, so a zero-outcome row and its
+    # neighbours share one base (raises if a credit-only base lacks "site").
+    fg_denom = (
+        aggregate_firstgen(base_yr, credit_only=firstgen_credit_only)
+        .set_index("fg")["count"].to_dict()
     )
-    fg_denom = fg_denom_src.groupby("fg")["pidm"].nunique().to_dict()
 
     for sub in SUBGROUPS:
         if sub.group_type == "Race/Ethnicity":
@@ -556,10 +552,9 @@ def _units_counts(df: pd.DataFrame, year_label: str) -> dict[tuple[str, str], tu
     # same students get the same first-gen cohort across metric types.
     # bot_goal3_units SQL is already credit-only, so the filter is a no-op
     # if the column is all "Credit"; it documents intent and protects
-    # against future SQL changes.
-    fg_stu = (
-        stu[stu["site"] == "Credit"].copy() if "site" in stu.columns else stu.copy()
-    )
+    # against future SQL changes (a missing "site" column raises rather than
+    # silently counting everyone). Filter before the dedup, as above.
+    fg_stu = yr[yr["site"] == "Credit"].drop_duplicates(subset=["pidm", "academic_year"]).copy()
     fg_stu["fg"] = fg_stu["first_gen_ind"].where(
         fg_stu["first_gen_ind"].isin(["Y", "N"]), "Unknown",
     )

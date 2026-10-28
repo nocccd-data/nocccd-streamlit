@@ -15,7 +15,7 @@
 - Raw DataFrame stored in `st.session_state["bg1_df"]` — all 4 charts aggregate from it, no re-querying
 - NOCCCD unduplicated count: `df.groupby("academic_year")["pidm"].nunique()` (cross-campus dedup, NOT sum of per-campus counts)
 - Credit-only filter for first-gen: `df[df["site"] == "Credit"]` (NOCE excluded due to survey data gaps)
-- Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting
+- Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting. For first-gen, filter to Credit **first**: a student in both tracks has a Credit and a Noncredit row, and deduping first keeps whichever row Hyper returns first (the order changes from read to read), so the student can silently drop out.
 - 5-yr % change: `(last_year - first_year) / first_year * 100`, where first/last are the edges of the **metrics window** (see below), never the reference year
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells
@@ -111,6 +111,8 @@ Most tabs break the headcount chart out by campus (Cypress / Fullerton / NOCE) p
 ## Average-metric tabs (Goal 3 Average Units)
 
 Unlike other BOT tabs which use count/proportion metrics via `render_bot_charts()` and `generate_bot_pdf()`, the Average Units tab computes **mean of a value column** (`sum_hours_earned`) per demographic group. It has its own self-contained implementation in `bot_goal3_units.py` — imports only the shared constants (COLOR_MAP, RACE_COLORS, etc.) and label maps from `bot_helpers.py`, but uses its own aggregation/chart/PDF functions. Same 4-section layout (campus / race / gender / first-gen) but values display as decimal numbers (e.g., "67.5") instead of percentages. No `base_df` denominator — average is computed within the tab's own data (ADT recipients).
+
+A student awarded at both Cypress and Fullerton in the same year has a row for each college, each carrying the units earned at that college. The campus averages count such a student at both colleges (`_mean_by` dedups per student, year and campus). The NOCCCD line and the race/gender/first-gen groups still keep one row per student and year, so they take whichever college's units are read first. What the district value should be is an open decision: see `docs/deferred.md` #9.
 
 When adding a new tab, align the titles dict (`org`, captions) with the SQL's actual scope. "NOCCCD Credit Colleges" vs "NOCE" vs "NOCCCD" as appropriate.
 

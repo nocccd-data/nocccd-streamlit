@@ -6,6 +6,7 @@ __pycache__/
 .playwright-mcp/
 .claude/
 .claude-octopus/
+.agents/
 config.ini
 .streamlit/secrets.toml
 src/pipeline/hyper/

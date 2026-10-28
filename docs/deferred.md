@@ -34,6 +34,7 @@ the gap — never renumber.
 | 6 | [The persistence x axis spaces terms evenly regardless of the gaps between them](#6-the-persistence-x-axis-spaces-terms-evenly-regardless-of-the-gaps-between-them) | Bug | Low | M | needs-decision (1) |
 | 7 | [Vision 2030 targets follow-ups](#7-vision-2030-targets-follow-ups) | Bug | Low | M | needs-decision (1) |
 | 8 | [The KPI - Persistence extracts are taken before their MVs refresh](#8-the-kpi---persistence-extracts-are-taken-before-their-mvs-refresh) | Bug | Low | XS | needs-decision (1) |
+| 9 | [A two-college completer's district units depend on row order](#9-a-two-college-completers-district-units-depend-on-row-order) | Bug | Low | XS | needs-decision (1) |
 
 ---
 
@@ -253,3 +254,40 @@ later trigger would close that gap.
 `nocccd-sql/district/jobs/`), so the tab shows the same day's MV and the window cannot be hit.
 The refresh only has to finish before the run reaches these datasets (~08:30). Or leave it and
 accept the one-day lag.
+
+## 9. A two-college completer's district units depend on row order
+
+**[Bug · Low · XS · needs-decision (1)]**
+
+Surfaced while fixing the order-dependent counts on PR #37, 2026-10-28. **PRE-EXISTING.** The
+same PR fixed the per-campus half: a two-college completer now counts in both campus averages.
+
+**Symptom:** in a few cases, the Average Units district figures are not tied to a defined value. The
+BOT Goal 3 Average Units "NOCCCD (Unduplicated)" line, its race/gender/first-gen groups, and the
+Equity workbook's "Reduce Units to Completion" rows can each use either college's units for a student
+awarded at both Cypress and Fullerton in the same year.
+
+**Root cause:** `bot_goal3_units.sql` returns one row per student, year and college, with
+`sum_hours_earned` = units earned at that college (`shrtgpa` hours by level) joined to the award
+there. `bot_goal3_units.py::_aggregate_campus` (district line), `::_aggregate_race`,
+`::_aggregate_gender`, `::_aggregate_firstgen` and `equity_export.py::_units_counts` dedup on
+`pidm` + `academic_year`, keeping whichever row is read first.
+
+**Severity:** `Low`. It affects 1–3 students a year (2021-22: 2, 2023-24: 3, 2024-25: 3,
+2025-26: 1). For example, 2025-26 has one student with 161.0 units at Cypress and 183.5 at
+Fullerton. Across the possible row orders, the district average stays within 83.18–83.19
+(2021-22), 82.99–83.01 (2023-24), 83.47–83.50 (2024-25) and 82.12–82.14 (2025-26). Each of those
+ranges rounds to a single value at one decimal, so the displayed figure doesn't change. An Equity group's average moves by at most the gap ÷ the group's size (about 0.02
+in Latino/Hispanic). In practice this small extract has come back in a stable order.
+
+**Decision (1): what are a two-college completer's district units?** The options are:
+- (a) **The sum of both colleges** ("units accumulated in the district"). This moves the displayed
+  district average up by 0.1–0.2 in each of the four years (2021-22 83.2 → 83.3, 2023-24 83.0 → 83.2,
+  2024-25 83.5 → 83.6, 2025-26 82.1 → 82.2).
+- (b) **One college, by a fixed rule** (for example, the larger total).
+- (c) **Leave it as is.** This is the current state: on 2026-10-28 the effect was judged too
+  small to act on, and the definition question was left open rather than answered.
+
+**Fix (if (a) or (b)):** apply the rule in one helper shared by the four `bot_goal3_units.py`
+aggregates and `equity_export.py::_units_counts`, so the tab, the BOT PDF/Excel and the Equity
+workbook agree. Leave `_mean_by`'s per-campus averages as they are.
