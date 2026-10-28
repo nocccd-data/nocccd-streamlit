@@ -15,7 +15,7 @@
 - Raw DataFrame stored in `st.session_state["bg1_df"]` — all 4 charts aggregate from it, no re-querying
 - NOCCCD unduplicated count: `df.groupby("academic_year")["pidm"].nunique()` (cross-campus dedup, NOT sum of per-campus counts)
 - Credit-only filter for first-gen: `df[df["site"] == "Credit"]` (NOCE excluded due to survey data gaps)
-- Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting
+- Deduplication: `df.drop_duplicates(subset=["pidm", "academic_year"])` before counting. For first-gen, filter to Credit **first**: a student in both tracks has a Credit and a Noncredit row, and deduping first keeps whichever row Hyper returns first (the order changes from read to read), so the student can silently drop out.
 - 5-yr % change: `(last_year - first_year) / first_year * 100`, where first/last are the edges of the **metrics window** (see below), never the reference year
 - Each chart section has: title block (subheader + markdown + caption), chart+table columns, "Source: Banner" footer
 - Summary HTML tables use race/gender/first-gen colored backgrounds on all cells

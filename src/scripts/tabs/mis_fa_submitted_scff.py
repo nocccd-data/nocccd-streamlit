@@ -27,7 +27,7 @@ def _ordered_crosstab(df, row_col, col_col, count_col, sort_cols=True, col_order
     return ct
 
 
-def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_col, detail_col, title):
+def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_col, detail_col, title, aggfunc="count"):
     uid = "xt_" + hashlib.md5(title.encode()).hexdigest()[:8]
     data_cols = [c for c in summary_ct.columns if c != "Total"]
     all_cols = data_cols + (["Total"] if "Total" in summary_ct.columns else [])
@@ -91,7 +91,7 @@ def _build_expandable_crosstab(summary_ct, source_df, row_col, col_col, count_co
         subset = source_df[source_df[row_col] == row_val].copy()
         sub_ct = pd.crosstab(
             subset[detail_col], subset[col_col],
-            values=subset[count_col], aggfunc="count",
+            values=subset[count_col], aggfunc=aggfunc,
             margins=True, margins_name="Total",
         ).fillna(0).astype(int)
         for c in all_cols:
@@ -141,10 +141,14 @@ def _render_acyr_tables(df1_acyr: pd.DataFrame, df2_acyr: pd.DataFrame, acyr: st
     if not df2_acyr.empty:
         df2_dedup = df2_acyr.drop_duplicates(subset=["student_id", "award_type", "match_status"])
         table2 = _ordered_crosstab(df2_dedup, "award_type", "match_status", "student_id", col_order=_MATCH_ORDER)
+        # Description rows count the students who received each award, from all
+        # award records: a student holding Method B and C appears in both rows.
+        # The sub-table Total is the unduplicated headcount (= the award-type row).
         st.markdown(
             _build_expandable_crosstab(
-                table2, df2_dedup, "award_type", "match_status", "student_id",
+                table2, df2_acyr, "award_type", "match_status", "student_id",
                 "award_type_desc", f"FA Submitted File Match Counts — ACYR {acyr}",
+                aggfunc="nunique",
             ),
             unsafe_allow_html=True,
         )
