@@ -181,6 +181,51 @@ html[data-app-scheme="light"] [data-testid="stSidebar"] [data-testid="stMultiSel
 .sc-fillrate-high { background: light-dark(#D4EDDA, #1B4D3E) !important; }
 .sc-fillrate-med  { background: light-dark(#FFF3CD, #4D3F00) !important; }
 .sc-fillrate-low  { background: light-dark(#F8D7DA, #4D1F24) !important; }
+
+/* Student Headcount by Type cards (kpi_styp_headcount.py). Container keys:
+   ksh_grid_* a card grid, ksh_card_* plain card, ksh_hl_* highlighted card,
+   ksh_head_* the title row, ksh_up_* / ksh_down_* / ksh_flat_* the change figure. Every
+   block inside a ksh_ container is transparent, which clears the grid's empty
+   slots; the card rules carry one more selector so they still paint the
+   cards. The stColumn prefix outranks the
+   Home card and card text rules above, which would otherwise paint every
+   block in a column grey and every span black. */
+[data-testid="stColumn"] [data-testid="stVerticalBlock"][class*="st-key-ksh_card_"] {
+    background-color: light-dark(#FFFFFF, #0A0A0A) !important;
+    border-color: light-dark(#C9D3E0, rgba(255, 255, 255, 0.2)) !important;
+}
+[data-testid="stColumn"] [data-testid="stVerticalBlock"][class*="st-key-ksh_hl_"] {
+    background-color: light-dark(#FFF6EA, rgba(224, 137, 43, 0.12)) !important;
+    border: 2px solid #E0892B !important;
+}
+[class*="st-key-ksh_"] [data-testid="stVerticalBlock"] {
+    background-color: transparent !important;
+}
+[class*="st-key-ksh_head_"] {
+    border-left: 4px solid #9DB2CE;
+    padding-left: 0.6rem;
+}
+[class*="st-key-ksh_head_hl_"] {
+    border-left-color: #E0892B;
+}
+[data-testid="stColumn"] [class*="st-key-ksh_head_"] [data-testid="stMarkdownContainer"] strong {
+    color: light-dark(#003056, #FFFFFF) !important;
+}
+[data-testid="stColumn"] [class*="st-key-ksh_up_"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stColumn"] [class*="st-key-ksh_down_"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stColumn"] [class*="st-key-ksh_flat_"] [data-testid="stMarkdownContainer"] p {
+    font-size: 1.35rem;
+    line-height: 1.2;
+}
+[data-testid="stColumn"] [class*="st-key-ksh_up_"] [data-testid="stMarkdownContainer"] strong {
+    color: light-dark(#1B7F30, #66BB6A) !important;
+}
+[data-testid="stColumn"] [class*="st-key-ksh_down_"] [data-testid="stMarkdownContainer"] strong {
+    color: light-dark(#C62828, #EF5350) !important;
+}
+[data-testid="stColumn"] [class*="st-key-ksh_flat_"] [data-testid="stMarkdownContainer"] strong {
+    color: light-dark(#555555, #AAAAAA) !important;
+}
 </style>"""
 
 

@@ -157,6 +157,23 @@ The KPI - Dual Enrollment tab shows one line chart per **credit campus** (Cypres
 
 Widget prefix: `"kde_"`
 
+## Student headcount by type (`kpi_styp_headcount.py`)
+
+The KPI - Student Headcount by Type tab replicates the district's "Who Is Driving Enrollment?" slide: one small line chart ("card") per student type, Fall headcount, with the change from the first selected Fall to the last. The district asked for the six types on the **credit colleges combined** (Cypress + Fullerton), plus a seventh card for **NOCE**, which has no type split.
+
+- **The SQL returns finished headcounts; the tab never adds rows together.** One row per Fall × `college_group` (`credit` / `noce`) × `styp_code`, each a distinct headcount. There is no `camp_code` column on purpose: 1,758 (Fall 2022) to 2,500 (Fall 2026) students take classes at both credit colleges, and adding per-college counts would count them twice. The one sum the tab does is the credit total row in the table and Excel ("Total (six types)"), which counts no one twice because each credit student lands in at most one type. It is not quite the credit headcount: the few credit students with no usable type (12 in Fall 2025) are in no card.
+- **Student types** (`kpi_styp_headcount.sql`, run on REPT): the combined **Special Admit / Dual Enrollment** type is tested first. It is dual enrollment as in `nocccd-sql/district/views/mv_dual_enrollment.sql` (CCAP or early-college record, matched per college) or a special admit as in `nocccd-sql/district/queries/special_admit.sql` (styp `Y`, education level `100`, program `1SPADMIT`/`2SPADMIT`, major `1111`/`2222`, or rate `HS` on the effective SGBSTDN record). Testing it first matters: these students often carry styp `1` or `5`. A student flagged at either college counts as this type for the whole credit group. Then first-time / first-time transfer (styp `1` / `2`, under 25), returning (`3`/`4`), continuing (`5`), adult (`1`/`2`, 25+). NOCE is all one `adult` count. This card is broader than the dual-enrollment cohort on KPI - Persistence, which drops concurrent special admits.
+- **Checked against the slide (2026-10-28):** run with the old styp-`Y`-only rule, Fall 2025 reproduces the slide's six numbers exactly. The new rule moves 61 students into Special Admit / Dual Enrollment (3,528 → 3,589): 29 from first-time, 20 from continuing, 12 who had no type.
+- **Baseline** is the earliest selected Fall, not a fixed term (unlike Applied-to-Enrolled): the cards read "vs. Fall 2022" when 227 is selected. One selected Fall shows no change. A zero or missing baseline shows no change rather than `inf`.
+- **Highlighted (orange) cards** are the two credit types with the largest gains; a decline is never highlighted, and a tie goes to the earlier card. NOCE is never highlighted. On the slide's data these are Special Admit / Dual Enrollment and Adult.
+- **Each card is scaled to its own data** (the y-axis is hidden), as on the slide, so compare cards by their percentages, not by line slope.
+- **A type the SQL emits but no card shows raises** in `_prepare_data()`, rather than silently disappearing from the screen.
+- **Card styling** is keyed CSS in `theme.py` (`ksh_card_*`, `ksh_hl_*`, `ksh_head_*`, `ksh_up_*`/`ksh_down_*`/`ksh_flat_*`, `ksh_grid_*`); see `docs/theme.md` for why the change colors can't use markdown `:green[]`.
+- **PDF export**: one landscape page in the slide's layout: two rows of credit cards, then the NOCE card, each row under a section label. Card positions are figure fractions (`_PDF_*` constants); the card boxes sit at `zorder=-1`, or their fill covers the charts.
+- **Excel export**: one `chart_data` sheet: the credit types plus a credit total by Fall with the % change, then the NOCE row.
+
+Widget prefix: `"ksh_"`
+
 ## SCFF Awards – MIS FA Submitted (`mis_fa_submitted_scff.py`)
 
 The tab reconciles the SCFF file CCCCO sends back against our MIS FA submission, award type by award type. The CCCCO SCFF metric definitions count Pell recipients as SF21 `GP` and Promise Grant (CCPG) recipients as SF21 `BA`/`B1`/`B2`/`B3`/`BB`/`BC`/`BD`, each with an SF22 amount > 0, as one headcount per student. They don't rank one CCPG method above another.
@@ -185,9 +202,9 @@ Widget prefix: `"csh_"`
 
 ## Sidebar download exports
 
-Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, KPI - 1st Time Applied to Enrolled, KPI - Dual Enrollment, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. The BOT tabs and all three KPI tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
+Tabs with PDF export (Fast Facts, Class Schedule Heatmap, Seat Count Report, KPI - Persistence, KPI - 1st Time Applied to Enrolled, KPI - Dual Enrollment, KPI - Student Headcount by Type, all BOT tabs) use `st.sidebar.download_button()` to offer a PDF download. The BOT tabs and all four KPI tabs also show a `Download Excel` button directly below `Download PDF`; each button downloads only the current tab as one `.xlsx` workbook with a single `chart_data` worksheet, not the all-BOT workbook produced by `src.pipeline.bot_excel_export`.
 
-The KPI tabs build their Excel from the underlying chart data via the generic `ExcelSection` / `sections_to_excel_bytes` / `EXCEL_MIME` building blocks in `bot_excel_helpers.py` (these are not BOT-specific — only `generate_bot_excel` and `standard_bot_excel_sections` are). Each KPI tab has a small `_build_excel_sections()` + `_generate_excel()` pair and follows the same `cached_excel_bytes("<prefix>", (id(df),), ...)` / `clear_excel_cache("<prefix>")` pattern as the PDF cache. The exported tables: Persistence → overall rates + counts per campus/term; 1st Time Applied to Enrolled → per-student-type rows plus the computed Overall rows; Dual Enrollment → count by academic year × campus.
+The KPI tabs build their Excel from the underlying chart data via the generic `ExcelSection` / `sections_to_excel_bytes` / `EXCEL_MIME` building blocks in `bot_excel_helpers.py` (these are not BOT-specific — only `generate_bot_excel` and `standard_bot_excel_sections` are). Each KPI tab has a small `_build_excel_sections()` + `_generate_excel()` pair and follows the same `cached_excel_bytes("<prefix>", (id(df),), ...)` / `clear_excel_cache("<prefix>")` pattern as the PDF cache. The exported tables: Persistence → overall rates + counts per campus/term; 1st Time Applied to Enrolled → per-student-type rows plus the computed Overall rows; Dual Enrollment → count by academic year × campus; Student Headcount by Type → the credit types plus a credit total, then the NOCE row, by Fall.
 
 For BOT-specific PDF/Excel generator details (paper coordinates, layout gotchas, font sizes), see `docs/bot-tabs.md`.
 

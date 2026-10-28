@@ -109,6 +109,12 @@ DATASETS = {
         "param_name": "acyr_code",
         "db_section": "dwhdb",
     },
+    "kpi_styp_headcount": {
+        "sql_file": "kpi_styp_headcount.sql",
+        "mis_term_id": ["227", "237", "247", "257", "267"],
+        "param_name": "mis_term_id",
+        "db_section": "rept",
+    },
     "enrollment_dashboard": {
         # Used by the Tableau hyper pipeline only (no Streamlit tab). Excluded
         # from the bulk/scheduled refresh; run manually when needed:
