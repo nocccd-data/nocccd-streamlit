@@ -9,8 +9,8 @@ when no credit term is selected at all.
 
 from typing import cast
 
-import fitz
 import pandas as pd
+import pymupdf
 import pytest
 
 from src.scripts.tabs.fast_facts import (
@@ -116,7 +116,7 @@ def test_characteristics_percent_with_a_credit_term():
     assert out["202610 Student Characteristics"]["pct"].tolist() == ["100.00", "0.00"]
 
 
-@pytest.mark.filterwarnings("error::pandas.errors.SettingWithCopyWarning")
+@pytest.mark.filterwarnings("error::pandas.errors.ChainedAssignmentError")
 def test_process_does_not_write_through_a_filtered_slice():
     """_process now reruns on every term change; a chained write would warn each time."""
     emp = pd.concat([_EMP, _EMP.assign(pidm=901, ecls_desc="Other")], ignore_index=True)
@@ -128,12 +128,12 @@ def test_pdf_keeps_a_five_term_title_on_the_page():
     """Five ticked terms made the longest title run past both page edges."""
     label = "202530 + 202605 + 202610 + 202615 + 202620"
     pdf = _generate_pdf(_process(_FALL_AND_SPRING, _EMP, "2026", label))
-    page = fitz.open(stream=pdf, filetype="pdf")[0]
+    page = pymupdf.open(stream=pdf, filetype="pdf")[0]
     assert f"{label} Districtwide Headcount (Unduplicated)" in page.get_text()
 
 
 def _title_sizes(pdf: bytes, needle: str) -> set[float]:
-    page = fitz.open(stream=pdf, filetype="pdf")[0]
+    page = pymupdf.open(stream=pdf, filetype="pdf")[0]
     # get_text() is typed str | list | dict across its modes; "dict" mode returns a dict.
     text = cast(dict, page.get_text("dict"))
     return {

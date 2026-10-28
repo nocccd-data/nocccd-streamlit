@@ -396,7 +396,7 @@ The Streamlit Cloud app caches data for 10 minutes (`ttl=600`), so changes appea
 
 ## Theme
 
-The app supports light/dark mode via Streamlit 1.55's built-in theme toggle (visible in the app menu).
+The app supports light/dark mode via Streamlit's built-in theme toggle (visible in the app menu).
 
 - **`.streamlit/config.toml`** defines the color palette — backgrounds, text, sidebar, and dataframe styling for both light and dark modes
 - **`src/scripts/theme.py`** injects CSS overrides using the `light-dark()` CSS function, plus a JS `MutationObserver` that syncs the color scheme to portaled elements (e.g., selectbox dropdowns rendered outside the main app container)

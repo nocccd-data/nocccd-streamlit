@@ -64,7 +64,7 @@ THEME_CSS = """\
 [data-testid="stProgress"] > div {
     background-color: light-dark(transparent, #000000) !important;
 }
-[data-testid="stProgress"] [role="progressbar"] > div > div > div {
+[data-testid="stProgress"] [data-testid="stProgressBarTrack"] > div {
     background-color: light-dark(#003056, #3D9DF3) !important;
 }
 
@@ -84,16 +84,28 @@ THEME_CSS = """\
     color: #FFFFFF;
     border-color: rgba(255,255,255,0.3);
 }
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"],
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    background-color: light-dark(rgba(255,255,255,0.15), rgba(255,255,255,0.1)) !important;
+/* Selectbox (React Aria): a div[role="group"] holding the combobox input */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="group"] {
+    background-color: rgba(255,255,255,0.1) !important;
     border-color: rgba(255,255,255,0.3) !important;
 }
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] span,
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] div,
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] svg {
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="group"] input,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="group"] svg {
     color: #FFFFFF !important;
     fill: #FFFFFF !important;
+}
+/* Sidebar multiselect in light mode: the box is white, but its typed text,
+   placeholder and "Clear all" / "Open" icons take the sidebar's white text.
+   (Chip remove buttons sit deeper, inside stMultiSelectTagsContainer.) */
+html[data-app-scheme="light"] [data-testid="stSidebar"] [data-testid="stMultiSelect"] div[role="group"] input {
+    color: #000000 !important;
+}
+html[data-app-scheme="light"] [data-testid="stSidebar"] [data-testid="stMultiSelect"] div[role="group"] input::placeholder {
+    color: rgba(0,0,0,0.6) !important;
+}
+html[data-app-scheme="light"] [data-testid="stSidebar"] [data-testid="stMultiSelect"] div[role="group"] > button svg {
+    color: rgba(0,0,0,0.6) !important;
+    fill: rgba(0,0,0,0.6) !important;
 }
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.2);
@@ -116,10 +128,15 @@ THEME_CSS = """\
 }
 
 /* Selectbox dropdown menu (portaled outside sidebar — no ancestor scope) */
-[data-testid="stSelectboxVirtualDropdown"] li[role="option"],
-[data-testid="stSelectboxVirtualDropdown"] li[role="option"] div,
-[data-testid="stSelectboxVirtualDropdown"] li[role="option"] span {
+[data-testid="stSelectboxVirtualDropdown"] [role="option"],
+[data-testid="stSelectboxVirtualDropdown"] [role="option"] div,
+[data-testid="stSelectboxVirtualDropdown"] [role="option"] span {
     color: light-dark(#000000, #FFFFFF) !important;
+}
+/* Hovered/keyboard-focused option: a sidebar dropdown takes the sidebar's
+   white tint, invisible on the white list. Use the main-area highlight. */
+[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-focused] [data-item-hl] {
+    background-color: light-dark(rgba(166,166,166,0.15), rgba(158,158,158,0.15)) !important;
 }
 /* Separator after "Home" in project dropdown (applied via JS) */
 .project-dropdown-sep {
@@ -177,7 +194,12 @@ _COLOR_SCHEME_SYNC = """\
     var app = document.querySelector('[data-testid="stApp"]');
     if (app) {
       var cs = getComputedStyle(app).colorScheme;
-      if (cs && cs !== 'normal') document.documentElement.style.colorScheme = cs;
+      if (cs && cs !== 'normal') {
+        document.documentElement.style.colorScheme = cs;
+        // The sidebar is always color-scheme: dark, so light-dark() inside it
+        // can't see the app theme; CSS keys on this attribute instead.
+        document.documentElement.dataset.appScheme = cs;
+      }
     }
   }
   sync();
@@ -190,7 +212,7 @@ _COLOR_SCHEME_SYNC = """\
   // Add separator only to the project dropdown (first option = "Home")
   new MutationObserver(function() {
     document.querySelectorAll('[data-testid="stSelectboxVirtualDropdown"]').forEach(function(dd) {
-      var first = dd.querySelector('li[role="option"]:first-child');
+      var first = dd.querySelector('[role="option"]:first-child');
       if (first && first.textContent.trim() === 'Home') {
         first.classList.add('project-dropdown-sep');
       }

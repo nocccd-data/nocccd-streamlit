@@ -19,7 +19,7 @@ Shared engineering guidance lives in `docs/` and is loaded on demand only when r
 | `src/scripts/tabs/bot_*`: BOT goal/metric tabs, base population rules, `_TITLES` flags, BOT PDF generator + paper coordinates, Excel helpers | `docs/bot-tabs.md` |
 | `src/pipeline/seat_count_export.py`, `bot_export.py`, `bot_excel_export.py`, `equity_export.py` (Equity Analysis PPG-1 workbook): bulk PDF/Excel exports | `docs/exports.md` |
 | `src/pipeline/mail/`: mass mailing, `REPORT_REGISTRY`, `CAMPAIGNS`, sender, GitHub Actions | `docs/mail.md` |
-| `src/scripts/theme.py`, CSS, color palettes, Streamlit 1.55 gotchas, NOCCCD brand colors | `docs/theme.md` |
+| `src/scripts/theme.py`, CSS, color palettes, Streamlit 1.66 gotchas, NOCCCD brand colors | `docs/theme.md` |
 | Known issues deliberately left unfixed, and the decision each one is waiting on | `docs/deferred.md` |
 
 ## Quick Defaults
