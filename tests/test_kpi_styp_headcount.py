@@ -42,8 +42,8 @@ _COUNTS = {
     ("credit", "first_time"): (5750, 6528),
     ("credit", "first_time_trans"): (1414, 1590),
     ("credit", "returning"): (3277, 2549),
-    ("credit", "special_admit_dual"): (1986, 3723),
-    ("noce", "adult"): (9409, 10679),
+    ("credit", "special_admit_dual"): (1987, 3723),
+    ("noce", "adult"): (9410, 10680),
 }
 
 
@@ -111,6 +111,11 @@ def test_highlight_never_picks_a_decline():
     a, b, c = CREDIT_CARDS[:3]
     assert _highlighted({a: -0.1, b: -0.3, c: float("nan")}) == set()
     assert _highlighted({a: 0.05, b: -0.3, c: 0.0}) == {a}
+
+
+def test_a_gain_that_shows_as_zero_is_not_highlighted():
+    a, b = CREDIT_CARDS[:2]
+    assert _highlighted({a: 0.0002, b: 0.3}) == {b}
 
 
 def test_highlight_tie_goes_to_the_earlier_card():

@@ -74,7 +74,7 @@ ALL_CARDS = (*CREDIT_CARDS, NOCE_CARD)
 HIGHLIGHT_COUNT = 2
 
 # Sum of the six credit cards. Not "credit headcount": the few credit students
-# with no usable type (12 in Fall 2025) are in no card.
+# with no usable type are in no card (1 each in Fall 2025 and 2026, as of 2026-10-28).
 CREDIT_TOTAL_LABEL = "Total (six types)"
 
 CREDIT_SECTION = "Credit colleges: Cypress and Fullerton combined"
@@ -146,13 +146,35 @@ def _pct_change(series: pd.Series) -> float:
 
 
 def _highlighted(changes: dict[_CardSpec, float]) -> set[_CardSpec]:
-    """The HIGHLIGHT_COUNT cards with the largest gains; declines never qualify.
+    """The HIGHLIGHT_COUNT cards with the largest gains; declines never qualify,
+    nor does a gain that displays as 0.0%.
 
     ``sorted`` is stable, so a tie goes to the card that comes first.
     """
-    gains = [spec for spec, c in changes.items() if pd.notna(c) and c > 0]
+    gains = [spec for spec, c in changes.items()
+             if pd.notna(c) and c > 0 and not _is_flat(c)]
     gains = sorted(gains, key=lambda spec: -changes[spec])
     return set(gains[:HIGHLIGHT_COUNT])
+
+
+@dataclass(frozen=True)
+class _CardState:
+    """What every card needs beyond its own series; shared by screen and PDF."""
+    years: list[int]
+    baseline_label: str | None
+    changes: dict[_CardSpec, float]
+    highlighted: set[_CardSpec]
+
+
+def _card_state(df: pd.DataFrame) -> _CardState:
+    years = _years(df)
+    changes = {spec: _pct_change(_card_series(df, spec)) for spec in ALL_CARDS}
+    return _CardState(
+        years=years,
+        baseline_label=f"Fall {years[0]}" if len(years) >= 2 else None,
+        changes=changes,
+        highlighted=_highlighted({s: changes[s] for s in CREDIT_CARDS}),
+    )
 
 
 def _is_flat(change: float) -> bool:
@@ -393,10 +415,8 @@ def _generate_pdf(df: pd.DataFrame) -> bytes:
         "savefig.facecolor": "white",
     })
 
-    years = _years(df)
-    baseline_label = f"Fall {years[0]}" if len(years) >= 2 else None
-    changes = {spec: _pct_change(_card_series(df, spec)) for spec in ALL_CARDS}
-    highlighted = _highlighted({s: changes[s] for s in CREDIT_CARDS})
+    state = _card_state(df)
+    years = state.years
 
     PAGE_W, PAGE_H = 11.0, 8.5
     card_w = (_PDF_RIGHT - _PDF_LEFT - 2 * _PDF_COL_GAP) / 3
@@ -424,8 +444,8 @@ def _generate_pdf(df: pd.DataFrame) -> bytes:
             for i, spec in enumerate(specs):
                 card_x = _PDF_LEFT + i * (card_w + _PDF_COL_GAP)
                 _mpl_card(fig, card_x, card_y, card_w, _PDF_CARD_H, spec,
-                          _card_series(df, spec), changes[spec],
-                          spec in highlighted, baseline_label)
+                          _card_series(df, spec), state.changes[spec],
+                          spec in state.highlighted, state.baseline_label)
             top = card_y - _PDF_ROW_GAP
 
         _add_pdf_footer(fig)
@@ -465,17 +485,16 @@ def _render_card(df: pd.DataFrame, spec: _CardSpec, change: float,
         )
 
 
-def _render_grid(df: pd.DataFrame, specs: tuple[_CardSpec, ...],
-                 changes: dict[_CardSpec, float], highlighted: set[_CardSpec],
-                 baseline_label: str | None, dark: bool, key: str) -> None:
+def _render_grid(df: pd.DataFrame, specs: tuple[_CardSpec, ...], state: _CardState,
+                 dark: bool, key: str) -> None:
     # Keyed so theme.py can clear the grey Home-card fill from empty slots
     # (the NOCE row fills one of three columns).
     with st.container(key=key):
         for start in range(0, len(specs), 3):
             for col, spec in zip(st.columns(3), specs[start:start + 3]):
                 with col:
-                    _render_card(df, spec, changes[spec], spec in highlighted,
-                                 baseline_label, dark)
+                    _render_card(df, spec, state.changes[spec],
+                                 spec in state.highlighted, state.baseline_label, dark)
 
 
 def render():
@@ -497,6 +516,9 @@ def render():
         fetch_kpi_styp_headcount.clear()
         df = fetch_kpi_styp_headcount(tuple(sorted(selected_terms)))
         if df.empty:
+            # Drop the previous result so the next rerun can't show it (and
+            # offer its downloads) under a selection it doesn't match.
+            st.session_state.pop("ksh_df", None)
             st.warning("No data returned for the selected terms.")
             return
         st.session_state["ksh_df"] = _prepare_data(df)
@@ -536,10 +558,8 @@ def render():
         return
 
     df = st.session_state["ksh_df"]
-    years = _years(df)
-    baseline_label = f"Fall {years[0]}" if len(years) >= 2 else None
-    changes = {spec: _pct_change(_card_series(df, spec)) for spec in ALL_CARDS}
-    highlighted = _highlighted({s: changes[s] for s in CREDIT_CARDS})
+    state = _card_state(df)
+    years = state.years
     dark = _is_dark_theme()
 
     st.subheader("Who is driving enrollment?")
@@ -550,20 +570,20 @@ def render():
     highlight_note = {
         0: "",
         1: " The fastest-growing type is highlighted.",
-    }.get(len(highlighted), f" The {len(highlighted)} fastest-growing types are highlighted.")
+    }.get(len(state.highlighted),
+          f" The {len(state.highlighted)} fastest-growing types are highlighted.")
     st.markdown(f"#### {CREDIT_SECTION}")
     st.caption(
         "Each student is counted once, even if enrolled at both colleges, and in "
         f"only one type, so the six cards add up to {latest_total:,.0f} students "
         f"in Fall {years[-1]}.{highlight_note}"
     )
-    _render_grid(df, CREDIT_CARDS, changes, highlighted, baseline_label, dark,
-                 key="ksh_grid_credit")
+    _render_grid(df, CREDIT_CARDS, state, dark, key="ksh_grid_credit")
 
     st.markdown(f"#### {NOCE_SECTION}")
     st.caption("Noncredit has no student-type split, so NOCE is one headcount.")
-    _render_grid(df, (NOCE_CARD,), changes, set(), baseline_label, dark,
-                 key="ksh_grid_noce")
+    # state.highlighted only ever holds credit cards, so NOCE is never orange.
+    _render_grid(df, (NOCE_CARD,), state, dark, key="ksh_grid_noce")
 
     with st.expander("Headcount table"):
         change_col = _change_col(df)

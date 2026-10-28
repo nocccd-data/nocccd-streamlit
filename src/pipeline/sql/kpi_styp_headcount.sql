@@ -22,12 +22,14 @@
 --   returning         -- styp '3' / '4'
 --   continuing        -- styp '5'
 --   adult             -- styp '1' / '2', 25 or older
--- Anything else (no usable SGBSTDN record, no birth date) has no type and is dropped.
+-- Anything else -- another styp code ('X', '0', ...), no SGBSTDN record, or a
+-- styp '1'/'2' student with no birth date -- has no type and is dropped.
 --
 -- CCAP is recorded per college, so one credit student can be dual enrollment at one
 -- college and not the other. cte_student takes the flag from EITHER college, keeping
 -- every credit student in at most one type, so the six credit counts add up without
--- double-counting anyone (credit students with no type, 12 in Fall 2025, are in none).
+-- double-counting anyone. Credit students with no type are in none: 1 each in Fall 2025
+-- and Fall 2026, 0 in 2022-2024 (checked 2026-10-28 against distinct credit enrollment).
 -- A student in both credit and NOCE is in both groups.
 --
 -- Enrollment: credit = stvrsts_voice_type IN ('R','W'); NOCE = stvrsts_apport_ind = 'Y'.
@@ -87,7 +89,9 @@ WITH
             )
         )
         -- SGBSTDN is unique on (pidm, term_code_eff), so the windows are disjoint.
-        WHERE sgbstdn_styp_code NOT IN ('X', '0')
+        -- No styp filter here (dual_enrl_count.sql drops 'X'/'0'): special_admit.sql
+        -- reads the special-admit flags off the effective record whatever its styp,
+        -- and an 'X'/'0' record still gets no base type below.
     ),
     cte_sfrstcr AS (
         SELECT
@@ -151,7 +155,9 @@ WITH
                 ON (b.sfrstcr_pidm = m.svbmchs_pidm
                 AND b.sfrstcr_term_code = m.svbmchs_term_code
                 AND SUBSTR(b.sfrstcr_camp_code, 1, 1) = m.camp_code)
-            INNER JOIN spbpers g
+            -- LEFT: only the credit age tests need a birth date; an inner join would
+            -- also drop NOCE students with no SPBPERS row (about one per Fall).
+            LEFT JOIN spbpers g
                 ON (b.sfrstcr_pidm = g.spbpers_pidm)
         WHERE (
             c.stvrsts_voice_type IN ('R', 'W')
