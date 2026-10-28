@@ -34,3 +34,12 @@ def test_two_college_completer_counts_at_both_campuses():
 
 def test_campus_averages_do_not_depend_on_row_order():
     assert _campus_avgs(_df().iloc[::-1]) == _campus_avgs(_df())
+
+
+def test_district_line_counts_a_two_college_completer_once():
+    # Which college's units the student contributes is deferred #9, so either is
+    # allowed; counting them twice ((160 + 180 + 60) / 3 = 133.3) is not.
+    for df in (_df(), _df().iloc[::-1]):
+        out = _aggregate_campus(df)
+        district = out.loc[out["camp_desc"] == "NOCCCD (Unduplicated)", "avg_units"].tolist()
+        assert district in ([110.0], [120.0])
