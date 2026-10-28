@@ -226,6 +226,13 @@ html[data-app-scheme="light"] [data-testid="stSidebar"] [data-testid="stMultiSel
 [data-testid="stColumn"] [class*="st-key-ksh_flat_"] [data-testid="stMarkdownContainer"] strong {
     color: light-dark(#555555, #AAAAAA) !important;
 }
+/* Its sidebar "Highlight fastest-growing" toggle: the "on" track defaults to
+   primaryColor navy, invisible on the navy light-mode sidebar. Orange matches
+   the highlighted cards and shows on both sidebars. The track is the div right
+   after the visually-hidden input's span (Streamlit 1.66 DOM). */
+.st-key-ksh_highlight [data-testid="stCheckbox"][data-selected="true"] label > span + div {
+    background-color: #E0892B !important;
+}
 </style>"""
 
 

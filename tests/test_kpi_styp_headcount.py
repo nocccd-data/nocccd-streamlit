@@ -22,6 +22,7 @@ from src.scripts.tabs.kpi_styp_headcount import (
     _build_excel_sections,
     _build_table,
     _card_series,
+    _card_state,
     _change_text,
     _fall_range,
     _fall_year,
@@ -118,6 +119,15 @@ def test_a_gain_that_shows_as_zero_is_not_highlighted():
     assert _highlighted({a: 0.0002, b: 0.3}) == {b}
 
 
+def test_highlight_toggle_off_leaves_every_card_plain():
+    df = _prepare_data(_raw())
+    assert _card_state(df).highlighted
+    off = _card_state(df, highlight=False)
+    assert off.highlighted == set()
+    # Series.equals treats NaN == NaN; a plain dict compare would not.
+    assert pd.Series(off.changes).equals(pd.Series(_card_state(df).changes))
+
+
 def test_highlight_tie_goes_to_the_earlier_card():
     a, b, c = CREDIT_CARDS[:3]
     assert _highlighted({a: 0.2, b: 0.1, c: 0.1}) == {a, b}
@@ -166,10 +176,25 @@ def test_excel_has_a_credit_and_a_noce_section():
     assert "Special Admit / Dual Enrollment" in sheet[0].tolist()
 
 
-def test_pdf_is_one_page():
+def _has_highlight_orange(page) -> bool:
+    """Any drawn line or fill in the highlight orange (#E0892B)."""
+    orange = (224 / 255, 137 / 255, 43 / 255)
+    return any(
+        rgb and all(abs(a - b) < 0.01 for a, b in zip(rgb, orange))
+        for d in page.get_drawings()
+        for rgb in (d.get("fill"), d.get("color"))
+    )
+
+
+def test_pdf_is_one_page_and_follows_the_highlight_toggle():
     fitz = pytest.importorskip("fitz")
     doc = fitz.open(stream=_generate_pdf(_prepare_data(_raw())), filetype="pdf")
     assert len(doc) == 1
+    assert _has_highlight_orange(doc[0])
+    plain = fitz.open(stream=_generate_pdf(_prepare_data(_raw()), highlight=False),
+                      filetype="pdf")
+    assert len(plain) == 1
+    assert not _has_highlight_orange(plain[0])
     text = doc[0].get_text()
     assert "Special Admit / Dual" in text and "NOCE (Noncredit)" in text
 

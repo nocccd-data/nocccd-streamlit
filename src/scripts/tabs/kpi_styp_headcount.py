@@ -166,14 +166,16 @@ class _CardState:
     highlighted: set[_CardSpec]
 
 
-def _card_state(df: pd.DataFrame) -> _CardState:
+def _card_state(df: pd.DataFrame, highlight: bool = True) -> _CardState:
+    """``highlight=False`` (the sidebar toggle) leaves every card plain."""
     years = _years(df)
     changes = {spec: _pct_change(_card_series(df, spec)) for spec in ALL_CARDS}
     return _CardState(
         years=years,
         baseline_label=f"Fall {years[0]}" if len(years) >= 2 else None,
         changes=changes,
-        highlighted=_highlighted({s: changes[s] for s in CREDIT_CARDS}),
+        highlighted=(_highlighted({s: changes[s] for s in CREDIT_CARDS})
+                     if highlight else set()),
     )
 
 
@@ -407,7 +409,7 @@ def _mpl_card(fig, x: float, y: float, w: float, h: float, spec: _CardSpec,
     ax.set_facecolor("none")
 
 
-def _generate_pdf(df: pd.DataFrame) -> bytes:
+def _generate_pdf(df: pd.DataFrame, highlight: bool = True) -> bytes:
     matplotlib.rcParams.update({
         "figure.facecolor": "white",
         "axes.facecolor": "white",
@@ -415,7 +417,7 @@ def _generate_pdf(df: pd.DataFrame) -> bytes:
         "savefig.facecolor": "white",
     })
 
-    state = _card_state(df)
+    state = _card_state(df, highlight)
     years = state.years
 
     PAGE_W, PAGE_H = 11.0, 8.5
@@ -508,6 +510,14 @@ def render():
         key="ksh_term_ids",
     )
     query_btn = st.sidebar.button("Query", key="ksh_query_btn")
+    # Display only, so it needs no re-query; the PDF follows it too.
+    highlight = st.sidebar.toggle(
+        "Highlight fastest-growing",
+        value=True,
+        key="ksh_highlight",
+        help=f"Give the {HIGHLIGHT_COUNT} credit types with the largest gains "
+             "the orange card style.",
+    )
 
     if query_btn:
         if not selected_terms:
@@ -530,8 +540,8 @@ def render():
         cache_key = (id(st.session_state["ksh_df"]),)
         pdf_bytes = cached_pdf_bytes(
             "ksh",
-            cache_key,
-            lambda: _generate_pdf(st.session_state["ksh_df"]),
+            (*cache_key, highlight),
+            lambda: _generate_pdf(st.session_state["ksh_df"], highlight),
         )
         st.sidebar.download_button(
             "Download PDF",
@@ -558,7 +568,7 @@ def render():
         return
 
     df = st.session_state["ksh_df"]
-    state = _card_state(df)
+    state = _card_state(df, highlight)
     years = state.years
     dark = _is_dark_theme()
 
